@@ -1,0 +1,39 @@
+# 基础环境配置
+env:
+  vehicle: "XZB600014"
+  target_date: "20251227"
+  soc: "soc1"
+  debug: false
+  mode: "local"
+
+remote:
+  user: "nvidia"
+  ip: "192.168.10.2"
+  data_root: "/mdrive_data/bag"
+
+# 宿主机路径管理
+host:
+  nas_root: "/media/nas/04.mdrive3/01.road_test"
+  dest_root: "/media/road_test"
+  vmc_sh_path: "/home/mini/project/vmc.sh"
+  mdrive_root: "/home/mini/project"
+  local_path: "/media/data"
+  log: ""
+
+# Docker 内部路径管理
+docker:
+  container_name: "mdrive_dev_vmc_minieye"
+  workspace: "/mdrive"
+  setup_bash: "/mdrive/mdrive/setup.sh"
+  host_mount: "/media"
+  docker_mount: "/media"
+
+# 业务逻辑配置
+logic:
+  lookback: 20
+  lookfront: 10
+  blacklist:
+    # - "/mdrive/sensor/at128p_front/PointCloud2"
+
+paths:
+  scripts_dir: "./scripts"

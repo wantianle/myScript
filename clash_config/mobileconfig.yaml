@@ -1,0 +1,149 @@
+# 机场订阅
+proxy-providers:
+  zsh:
+    url: "https://zhs.futbol/link/whYbmVLDYRUzadUW?is_ss=5&dns=1&tj=1&disney&y2b&ai&nf"
+    type: http
+    interval: 86400
+    path: ./providers/zhs.tw.yaml
+    proxy: DIRECT
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+      timeout: 5000
+      lazy: true
+      expected-status: 204
+    
+# 全局配置 
+mode: rule
+mixed-port: 7890
+redir-port: 7891
+tproxy-port: 7892
+allow-lan: true
+bind-address: "*"
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+log-level: info
+find-process-mode: 'off'
+global-client-fingerprint: chrome
+keep-alive-idle: 600
+keep-alive-interval: 15
+disable-keep-alive: false
+profile:
+  store-selected: true
+  store-fake-ip: true
+geodata-mode: false
+# memconservative/standard
+geodata-loader: standard
+geo-auto-update: true
+geo-update-interval: 24
+geox-url:
+  geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+  metadb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb"
+  asn: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb"
+# 裸核控制面板
+# external-controller: 127.0.0.1:4012
+# secret: ab192bba-47be-4f6f-b7ec-3c75ea74a7e0
+# # external-ui: ui
+# external-ui-name: zashboard
+# external-ui-url: "https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip"
+
+
+# 入站  
+tun:
+  enable: true
+  # system/gvisor/mixed
+  stack: mixed
+  dns-hijack: ["any:53", "tcp://any:53"]
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+# DNS模块
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  ipv6: false
+  respect-rules: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  fake-ip-filter:
+    - "GEOSITE:private"
+    - "GEOSITE:cn"
+  default-nameserver:
+    - 119.29.29.29
+  proxy-server-nameserver:
+    - 211.136.192.6
+    - 120.196.165.24
+    - 119.29.29.29
+  nameserver:
+    - 211.136.192.6
+    - 120.196.165.24
+    - 119.29.29.29
+ 
+# 出站策略
+pr: &pr {type: select, proxies: [默认代理, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 推荐节点, 🇸🇬 新加节点, 🇬🇧 英国节点, 买游戏节点, DIRECT]}
+proxy-groups:
+  - {name: 默认代理, type: select, proxies: [ 推荐节点, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇸🇬 新加节点, DIRECT], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Available_1.png}
+  - {name: 推荐节点, type: select, include-all: true, filter: "(?i)荐", use: [zsh], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Auto.png}
+  - {name: 漏网之鱼, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Final.png}
+  - {name: 🇺🇸 美国自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)US", use: [zsh]}
+  - {name: 🇨🇳 台湾自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)TW", use: [zsh]}
+  - {name: 🇭🇰 香港自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)HK", use: [zsh]}
+  - {name: 🇯🇵 日本自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)JP", use: [zsh]}
+  - {name: YouTube, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png}
+  - {name: ChatGPT, <<: *pr, icon: https://fastly.jsdelivr.net/gh/shindgewongxj/WHATSINStash@master/icon/openai.png}
+  - {name: TikTok, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/TikTok.png}
+  - {name: Apple, type: select, proxies: [DIRECT,  默认代理], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Apple.png}
+  - {name: GitHub, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/GitHub.png}
+  - {name: Google, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Google_Search.png}
+  - {name: Telegram, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Telegram.png}
+  - {name: NETFLIX, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Netflix.png}
+  - {name: Speedtest, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Speedtest.png}
+  - {name: PayPal, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/PayPal.png}
+  - {name: 全部节点, type: select, use: [zsh], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Global.png}
+  - {name: 买游戏节点, type: select, filter: "(?i)RU|BR|TR", use: [zsh], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png}
+  - {name: 🇸🇬 新加节点, type: select, filter: "(?i)SG", use: [zsh]}
+  - {name: 🇬🇧 英国节点, type: select, filter: "(?i)UK", use: [zsh]}
+
+
+# 规则匹配
+rules:
+  # GEOSITE 规则
+  # - GEOSITE,category-ads-all,REJECT
+  - GEOSITE,private, DIRECT
+  - GEOSITE,category-scholar-!cn, 默认代理
+  - GEOSITE,biliintl, 默认代理
+  - GEOSITE,steam@cn, DIRECT
+  - GEOSITE,category-games@cn, DIRECT
+  - GEOSITE,pixiv, 默认代理
+  - GEOSITE,apple-cn, DIRECT
+  - GEOSITE,apple, Apple
+  - GEOSITE,category-ai-!cn, ChatGPT
+  - GEOSITE,github, GitHub
+  - GEOSITE,youtube, YouTube
+  - GEOSITE,google, Google
+  - GEOSITE,twitter, 默认代理
+  - GEOSITE,microsoft@cn, DIRECT
+  - GEOSITE,onedrive, DIRECT
+  - GEOSITE,tiktok, TikTok
+  - GEOSITE,speedtest, Speedtest
+  - GEOSITE,telegram, Telegram
+  - GEOSITE,netflix, NETFLIX
+  - GEOSITE,paypal, PayPal
+  - GEOSITE,gfw, 默认代理
+  - GEOSITE,geolocation-!cn, 默认代理
+  - GEOSITE,cn, DIRECT
+
+  # GEOIP 规则
+  - GEOIP,private, DIRECT,no-resolve
+  - GEOIP,google, Google,no-resolve
+  - GEOIP,netflix, NETFLIX,no-resolve
+  - GEOIP,telegram, Telegram,no-resolve
+  - GEOIP,cn, DIRECT
+  # - DST-PORT,80/8080/443/8443,默认代理
+  - MATCH, 漏网之鱼
