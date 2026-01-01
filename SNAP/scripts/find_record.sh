@@ -4,74 +4,53 @@ set -Eeuo pipefail
 LOG_SHOW_TIME=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../utils/logger.sh"
-# ================= 配置部分 =================
-# 初始化变量
-nas_root=$NAS_ROOT
-dest_root=$DEST_ROOT
-lookback=$LOOKBACK
-lookfront=$LOOKFRONT
-target_soc=$SOC
-vehicle=$VEHICLE
-target_date=$DATATIME
-local_path=$LOCAL_PATH
-mode=$MODE
-# 远程模式变量
-remote_user=$REMOTE_USER
-remote_ip=$REMOTE_IP
-remote_data_root=$REMOTE_DATA_ROOT
 
-# while getopts "v:t:p:b:f:s:d" opt; do
-#     case $opt in
-#         v) vehicle="$OPTARG" ;;
-#         t) target_date="$OPTARG" ;;
-#         p) local_path="$OPTARG" ;;
-#         b) lookback="$OPTARG" ;;
-#         f) lookfront="$OPTARG" ;;
-#         s) target_soc="$OPTARG" ;;
-#         d) dest_root="$OPTARG" ;;
-#         *) exit 0 ;;
-#     esac
-# done
+while getopts "v:t:s:b:f:m" opt; do
+    case $opt in
+        v) vehicle="$OPTARG" ;;
+        t) target_date="$OPTARG" ;;
+        s) soc="$OPTARG" ;;
+        b) lookback="$OPTARG" ;;
+        f) lookfront="$OPTARG" ;;
+        m) mode="$OPTARG" ;;
+        *) exit 0 ;;
+    esac
+done
 
 if [[ -z "$target_date" ]]; then
     log_error "缺少日期参数！"
     exit 1
 fi
-record_output_file="${dest_root}/${vehicle}/${target_date}/${target_date}_${vehicle:-test}_record.txt"
-tag_output_file="${dest_root}/${vehicle}/${target_date}/${target_date}_${vehicle:-test}_tag.txt"
-> "$record_output_file"
-> "$tag_output_file"
 # ================= 确定查询模式 =================
 if [[ mode == "remote" ]]; then
-    base_dir="$remote_data_root"
-    log_info "远程模式: $remote_user@$remote_ip:$base_dir"
+    base_dir="$REMOTE_DATA_ROOT"
+    log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$base_dir"
     ssh_cmd() {
         LC_ALL=C LANG=C ssh -o ConnectTimeout=3 \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR \
-            "$remote_user@$remote_ip" "LC_ALL=C $@"
+            "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
     }
 elif [[ mode == "nas" ]]; then
-    [[ -z "$vehicle" ]] && { log_error "NAS 模式缺少车辆 ID (-v)"; exit 1; }
-    base_dir="${nas_root}/${vehicle}/${target_date:0:4}/${target_date}"
+    [[ -z $vehicle ]] && { log_error "NAS 模式缺少车辆 ID (-v)"; exit 1; }
+    base_dir="${NAS_ROOT}/${vehicle}/${target_date:0:4}/${target_date}"
     log_info "NAS 模式: $base_dir"
 else
-    if [ ! -d "$local_path" ]; then
-        log_error "错误: $local_path 不是一个目录或不存在: sudo mkdir $local_path"
+    if [ ! -d $LOCAL_PATH ]; then
+        log_error "错误: $LOCAL_PATH 不是一个目录或不存在: sudo mkdir $LOCAL_PATH"
         exit 1
-    elif [ ! -w "$local_path" ] || [ ! -x "$local_path"]; then
-        log_error "你没有足够的权限访问 $local_path, 请执行 sudo chown -R $USER:$USER $local_path"
+    elif [ ! -w $LOCAL_PATH ] || [ ! -x $LOCAL_PATH]; then
+        log_error "你没有足够的权限访问 $LOCAL_PATH, 请执行 sudo chown -R $USER:$USER $LOCAL_PATH"
         exit 1
     fi
-    base_dir="${local_path%/}"
+    base_dir="${LOCAL_PATH%/}"
     log_info "本地路径模式: $base_dir"
 fi
-
 # ================= 建立 Record 索引 =================
 declare -A records
 shopt -s nullglob
-find_cmd="find \"$base_dir\" -type f \( \( -path '*${target_soc}*' -name '${target_date}*record*' \) -o -name 'tag_${target_date}*.pb.txt' \) 2>/dev/null"
+find_cmd="find \"$base_dir\" -type f \( \( -path '*${soc}*' -name '${target_date}*record*' \) -o -name 'tag_${target_date}*.pb.txt' \) 2>/dev/null"
 
 if [[ mode == "remote" ]]; then
     raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
@@ -147,13 +126,11 @@ for tag_file in $tag_list; do
 
             matched_files_raw=""
             for (( m=start_min; m<=end_min; m++ )); do
-                if [[ $m -ge 0 && -n "${records[$m]:-}" ]]; then
+                if [[ -n "${records[$m]:-}" ]]; then
                     matched_files_raw="${matched_files_raw} ${records[$m]}"
                 fi
             done
-            # 注意：Record 文件通常是整分钟一个
-            # 我们需要找的是：开始时间落在 [start_sec, end_sec] 之间的文件
-            # 以及“覆盖”了 start_sec 的那个前序文件
+            # 我们需要找的是：开始时间落在 [start_sec, end_sec] 之间的文件，以及“覆盖”了 start_sec 的那个前序文件
             matched_files=""
             for item in $matched_files_raw; do
                 f_sec="${item%%|*}"
@@ -164,7 +141,7 @@ for tag_file in $tag_list; do
             done
             # 精确过滤
             if [[ -n "$matched_files" ]]; then
-                sorted_files=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
+                # sorted_files=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
                 # 过滤：保留所有 f_sec >= start_sec 的文件
                 # 加上“最后一个 f_sec < start_sec”的文件（因为它覆盖了起始时刻）
                 final_list=""
@@ -183,11 +160,6 @@ for tag_file in $tag_list; do
                 result_raw="${last_before_start} ${final_list}"
                 result=$(echo "$result_raw" | tr ' ' '\n' | cut -d'|' -f2 | tr '\n' ' ')
             else
-                is_error=1
-            fi
-
-            # 输出部分
-            if (( "$is_error" == 1 )); then
                 log_warn "$msg ==> 找不到对应 record 文件，请检查是否存在或改变筛选范围！"
             else
                 tag_counter=$((tag_counter + 1))
@@ -204,14 +176,10 @@ for tag_file in $tag_list; do
                 echo "[回播命令]:"
                 echo "cyber_recorder play -l -f $result"
 
-                all_tasks+=("${msg}|${result}|${formatted_time}")
             fi
 
             echo ""
-            { echo "$msg"; echo "$result"; echo ""; } >> "$record_output_file"
-            echo "$msg" >> "$tag_output_file"
+            { echo "${formatted_time}|${tag}|${result}"; echo; } >> "$record_output_file"
         fi
     done <<< "$content"
 done
-log_info "保存 record 路径文件: $record_output_file"
-log_info "保存 tag 文件: $tag_output_file"

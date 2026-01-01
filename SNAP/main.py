@@ -43,12 +43,12 @@ def extract_tag_time(readme_path: Path) -> datetime | None:
         return None
 
 
-def find_soc_dir(tag_path: Path, soc_id: str) -> Path | None:
-    """在 tag 目录下定位以 _{soc_id} 结尾的子目录"""
+def find_soc_dir(tag_path: Path, soc: str) -> Path | None:
+    """在 tag 目录下定位以 _{soc} 结尾的子目录"""
     if not tag_path.exists():
         return None
     for item in tag_path.iterdir():
-        if item.is_dir() and item.name.endswith(f"_{soc_id}"):
+        if item.is_dir() and item.name.endswith(f"_{soc}"):
             return item
     return None
 
@@ -139,6 +139,36 @@ def task_query(executor, ui):
         str(ui["lf"]),
     ]
     executor.run_find_record(find_args)
+
+
+def task_download(session, ui):
+    """
+    读取清单 -> 用户选择 -> 执行下载
+    """
+    task_query(session.executor, ui)
+
+    manifest = session.ctx.manifest_path
+    if not manifest.exists() or manifest.stat().st_size == 0:
+        logging.error("未发现匹配的录制数据。")
+        return
+
+    print(f"\n{' 待下载任务清单 ':=^50}")
+    print(f"{'ID':<4} | {'Tag':<20} | {'Time'}")
+    print("-" * 50)
+
+    with open(manifest, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        for line in lines:
+            # 假设清单格式: ID|Time|Msg|Files
+            parts = line.strip().split("|")
+            if len(parts) >= 3:
+                print(f"{parts[0]:<4} | {parts[1]:<20} | {parts[2]}")
+
+    selection = input("\n请输入下载序号 (多个逗号分隔, 0全选, 回车跳过): ").strip()
+    if not selection:
+        return
+
+    session.executor.run_download_record(selection)
 
 
 def task_compress(record_mgr, host_path: Path):

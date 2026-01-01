@@ -18,7 +18,7 @@ host:
   vmc_sh_path: "/home/mini/project/vmc.sh"
   mdrive_root: "/home/mini/project"
   local_path: "/media/data"
-  log: ""
+  # log: ""
 
 # Docker 内部路径管理
 docker:

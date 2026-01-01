@@ -14,7 +14,7 @@ class TaskExecutor:
 
         logging.debug(f"TaskExecutor initialized with scripts_dir: {self.scripts_dir}")
 
-    def _run_script(self, script_name: str, args: List[Union[str, int, float]]):
+    def _run_script(self, script_name: str, args: List[str]):
         """
         执行 Shell 脚本
         """
@@ -38,19 +38,35 @@ class TaskExecutor:
             logging.error(f"脚本 {script_name} 执行失败，退出码: {e.returncode}")
             raise
 
-    def run_find_record(self, local_data: List[str]):
+    def run_find_record(self, mode_args: List[str]):
         """
         执行 record 检索任务
         参数由 main.py 编排传入，此处负责标准化注入基础参数
         """
-        base_args = [
+        args = [
             "-t",
             self.ctx.target_date,
             "-v",
             self.ctx.vehicle,
+            "-l",
+            self.ctx.manifest_path,
         ]
-        full_args = base_args + local_data
-        return self._run_script("find_record.sh", full_args)
+        args.extend(mode_args)
+        return self._run_script("find_record.sh", args)
+
+    def run_download_record(self, ids: str):
+        """
+        下载脚本要下哪几个ID，以及清单在哪
+        """
+        args = [
+            "-i",
+            ids,
+            "-l",
+            self.ctx.manifest_path,
+            "-d",
+            self.ctx.work_dir,
+        ]
+        return self._run_script("download_record.sh", args)
 
     def find_version_json(self, search_path: Union[str, Path]) -> Optional[str]:
         """
@@ -70,5 +86,5 @@ class TaskExecutor:
         """
         执行环境同步还原
         """
-        args = ["-v", self.ctx.vehicle, "-p", version_json]
+        args = ["-t", self.ctx.target_date, "-v", self.ctx.vehicle, "-p", version_json]
         return self._run_script("restore_env.sh", args)

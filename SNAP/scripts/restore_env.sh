@@ -1,45 +1,32 @@
 #!/bin/bash
 
-# ================= 默认配置 =================
 set -Eeuo pipefail
 LOG_SHOW_TIME=0
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/../utils/logger.sh"
-
-nas_root="$NAS_ROOT"
-vmc_sh="$VMC_SH"
-container="$CONTAINER"
-mdrive_root="$MDRIVE_ROOT"
-# ===========================================
-# 参数解析
-# vehicle=""
-# targer_date=""
-# version_path=""
+source "${BASH_SOURCE[0]%/*}/../utils/logger.sh"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         -t|--target_date) targer_date="$2"; shift 2 ;;
         -v|--vehicle) vehicle="$2"; shift 2 ;;
         -p|--path) version_path="$2"; shift 2 ;;
-        *) log_error "未知参数: $1"; usage; exit 1 ;;
+        *) log_error "未知参数: $1"; exit 1 ;;
     esac
 done
 
 # 检查环境依赖
-if [ ! -d "$nas_root" ] && [ -z $version_path ] ; then
-    log_error "NAS 目录不存在: $nas_root"
-    echo "请先挂载 NAS: sudo mount -t cifs //hfs.minieye.tech/ad-data /media/nas -o username=工号,password=密码,uid=$(id -u)"
+if ! command -v jq >/dev/null 2>&1; then
+    log_info "jq 未安装，尝试安装..."
+    sudo apt-get update && sudo apt-get install -y jq
+fi
+
+if [ ! -f "$VMC_SH" ]; then
+    log_error "本地 mdrive 配置文件未找到: $VMC_SH"
     exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-    log_info "jq 未安装，尝试安装..."
-    sudo apt update && sudo apt install -y jq
-fi
-
-if [ ! -f "$vmc_sh" ]; then
-    log_error "本地配置文件未找到: $vmc_sh"
-    echo "请修改脚本头部的 vmc_sh 变量指向正确的文件。"
+if [ ! -d "$NAS_ROOT" ] && [ -z $version_path ] ; then
+    log_error "NAS 目录不存在: $NAS_ROOT"
+    echo "请先挂载 NAS: sudo mount -t cifs //hfs.minieye.tech/ad-data /media/nas -o username=工号,password=密码,uid=$(id -u)"
     exit 1
 fi
 
@@ -64,7 +51,7 @@ find_version_path() {
     local yyyy=${targer_date:0:4}
     local yyyymmdd=${targer_date:0:8}
     local HHMM=${targer_date:9:4}
-    local search_dir="$nas_root/$vehicle/$yyyy"
+    local search_dir="$NAS_ROOT/$vehicle/$yyyy"
 
     # 兼容 soc1 后缀目录
     local day_dir_soc1=$(ls -d "${search_dir}/${yyyymmdd}"*_soc1 2>/dev/null | head -n 1)
@@ -119,7 +106,6 @@ find_version_path() {
 # ================= 2: 解析显示 Git 版本 =================
 mdrive_ver=$(jq -r .mdrive "$version_path")
 conf_ver=$(jq -r .mdrive_conf "$version_path")
-# dep_ver=$(jq -r .mdrive_dep "$version_path")
 model_ver=$(jq -r .mdrive_model "$version_path")
 map_ver=$(jq -r .mdrive_map "$version_path")
 vehicle_model_code=$(echo "$conf_ver" | cut -d'.' -f1)
@@ -165,7 +151,6 @@ show_git_info() {
         log_info "Git 详细版本信息"
         show_info mdrive $mdrive_ver
         show_info mdrive_conf $conf_ver
-        # show_info mdrive_dep $dep_ver
         show_info mdrive_map $map_ver
         show_info mdrive_model $model_ver
     else
@@ -175,14 +160,14 @@ show_git_info() {
 
 # ================= 3: 同步本地环境配置文件 =================
 sync_local_env() {
-    log_step "===== 2. 同步本地环境 ($vmc_sh) ====="
+    log_step "===== 2. 同步本地环境 ($VMC_SH) ====="
 
-    local cur_vehicle_model=$(grep '^MDRIVE_vehicle_MODEL=' "$vmc_sh" | cut -d '"' -f2)
-    local cur_vehicle=$(grep '^MDRIVE_vehicle=' "$vmc_sh" | cut -d '"' -f2)
-    local cur_mdrive_ver=$(grep '^MDRIVE_VERSION=' "$vmc_sh" | cut -d '=' -f2)
-    local cur_conf_ver=$(grep '^MDRIVE_CONF_VERSION=' "$vmc_sh" | cut -d '=' -f2)
-    local cur_model_ver=$(grep '^MDRIVE_MODEL_VERSION=' "$vmc_sh" | cut -d '=' -f2)
-    local cur_map_ver=$(grep '^MDRIVE_MAP_VERSION=' "$vmc_sh" | cut -d '=' -f2)
+    local cur_vehicle_model=$(grep '^MDRIVE_vehicle_MODEL=' "$VMC_SH" | cut -d '"' -f2)
+    local cur_vehicle=$(grep '^MDRIVE_vehicle=' "$VMC_SH" | cut -d '"' -f2)
+    local cur_mdrive_ver=$(grep '^MDRIVE_VERSION=' "$VMC_SH" | cut -d '=' -f2)
+    local cur_conf_ver=$(grep '^MDRIVE_CONF_VERSION=' "$VMC_SH" | cut -d '=' -f2)
+    local cur_model_ver=$(grep '^MDRIVE_MODEL_VERSION=' "$VMC_SH" | cut -d '=' -f2)
+    local cur_map_ver=$(grep '^MDRIVE_MAP_VERSION=' "$VMC_SH" | cut -d '=' -f2)
 
     # 判断是否全部一致
     if [ "$cur_vehicle_model" = "$vehicle_model_code" ] &&
@@ -201,9 +186,9 @@ sync_local_env() {
         -e "/^MDRIVE_VERSION/c\MDRIVE_VERSION=$mdrive_ver" \
         -e "/^MDRIVE_CONF_VERSION/c\MDRIVE_CONF_VERSION=$conf_ver" \
         -e "/^MDRIVE_MODEL_VERSION/c\MDRIVE_MODEL_VERSION=$model_ver" \
-        -e "/^MDRIVE_MAP_VERSION/c\MDRIVE_MAP_VERSION=$map_ver" "$vmc_sh"
+        -e "/^MDRIVE_MAP_VERSION/c\MDRIVE_MAP_VERSION=$map_ver" "$VMC_SH"
 
-    source "$vmc_sh"
+    source "$VMC_SH"
     log_info "vmc.sh 已更新"
 }
 
@@ -212,17 +197,17 @@ sync_local_env() {
 enter_docker() {
 
     # 判断容器是否正在运行
-    if [ -n "$(docker ps -q -f "name=^/${container}$")" ]; then
-        log_warn "容器 [${container}] 已存在且正在运行，跳过启动"
+    if [ -n "$(docker ps -q -f "name=^/${CONTAINER}$")" ]; then
+        log_warn "容器 [${CONTAINER}] 已存在且正在运行，跳过启动"
     else
-        log_warn "容器 [${container}] 不存在或未运行，准备启动"
+        log_warn "容器 [${CONTAINER}] 不存在或未运行，准备启动"
 
-        START_SCRIPT="${mdrive_root}/mdrive/docker/dev_start.sh"
+        START_SCRIPT="${MDRIVE_ROOT}/mdrive/docker/dev_start.sh"
 
         if [ ! -f "$START_SCRIPT" ]; then
             log_warn "启动脚本不存在: $START_SCRIPT, 尝试重新配置环境..."
 
-            source "$vmc_sh"
+            source "$VMC_SH"
 
             if [ ! -f "$START_SCRIPT" ]; then
                 log_error "重新配置后仍未找到启动脚本"
@@ -233,10 +218,10 @@ enter_docker() {
     fi
 
 
-    docker exec -d "$container" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview'
+    docker exec -d "$CONTAINER" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview'
     log_info "Supervisor status 和 Dreamview 已启动..."
 
-    docker exec -d "$container" bash -c "/mdrive/mdrive/bin/mdrive_multiviz >/dev/null 2>&1"
+    docker exec -d "$CONTAINER" bash -c "/mdrive/mdrive/bin/mdrive_multiviz >/dev/null 2>&1"
 
     log_info "mdrive_multiviz 已启动..."
 
@@ -245,8 +230,8 @@ enter_docker() {
     sleep 1
     nohup xdg-open http://localhost:8888 >/dev/null 2>&1 &
 
-    log_info "进入 Docker 容器: ${container}"
-    bash ${mdrive_root}/mdrive/docker/dev_into.sh
+    log_info "进入 Docker 容器: ${CONTAINER}"
+    bash ${MDRIVE_ROOT}/mdrive/docker/dev_into.sh
 }
 
 # ================= 主流程 =================

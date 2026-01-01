@@ -1,5 +1,8 @@
 import os
 import logging
+import tempfile
+import shutil
+import atexit
 from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,7 +15,8 @@ class TaskContext:
     vehicle: str
     target_date: str
     work_dir: Path = field(init=False)
-    version_json_path: str = ""
+    temp_dir: Path = field(init=False)
+    manifest_path: Path = field(init=False)
 
     def __post_init__(self):
         """构建标准工作目录结构"""
@@ -20,6 +24,17 @@ class TaskContext:
         self.work_dir = base_output / self.vehicle / self.target_date
         self.log_dir = self.work_dir / "log"
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="frs_session_"))
+        self.manifest_path = self.temp_dir / "tasks.list"
+        atexit.register(self._cleanup_temp)
+        logging.debug(f"Temporary manifest created at: {self.manifest_path}")
+
+    def _cleanup_temp(self):
+        """退出时的清理动作"""
+        if self.temp_dir.exists():
+            shutil.rmtree(self.temp_dir)
+            # 注意：此处不能用 logging，因为退出时 logging 往往已关闭
+            print(f"\n[System] Volatile session data at {self.temp_dir} cleaned.")
 
     def setup_logger(self):
         """配置日志系统：支持控制台与文件双向输出"""
@@ -60,9 +75,6 @@ class TaskContext:
             "VMC_SH": c["host"]["vmc_sh_path"],
             "MDRIVE_ROOT": c["host"]["mdrive_root"],
             "CONTAINER": c["docker"]["container_name"],
-            # "VEHICLE": self.vehicle,
-            # "DATATIME": self.target_date,
-            # "SOC": c["env"]["soc"],
             "LOOKBACK": c["logic"]["lookback"],
             "LOOKFRONT": c["logic"]["lookfront"],
             "MODE": c["env"]["mode"],
