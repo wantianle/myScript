@@ -4,12 +4,12 @@ set -Eeuo pipefail
 LOG_SHOW_TIME=0
 source "${BASH_SOURCE[0]%/*}/../utils/logger.sh"
 
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -t|--target_date) targer_date="$2"; shift 2 ;;
-        -v|--vehicle) vehicle="$2"; shift 2 ;;
-        -p|--path) version_path="$2"; shift 2 ;;
-        *) log_error "未知参数: $1"; exit 1 ;;
+while getopts "v:t:p:h" opt; do
+    case $opt in
+        v) vehicle="$OPTARG" ;;
+        t) target_date="$OPTARG" ;;
+        p) version_path="$OPTARG" ;;
+        *) exit 0 ;;
     esac
 done
 

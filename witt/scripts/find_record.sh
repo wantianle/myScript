@@ -2,18 +2,17 @@
 
 set -Eeuo pipefail
 LOG_SHOW_TIME=0
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/../utils/logger.sh"
-
-while getopts "v:t:s:b:f:m" opt; do
+source "${BASH_SOURCE[0]%/*}/../utils/logger.sh"
+while getopts "v:t:l:s:b:f:h" opt; do
     case $opt in
         v) vehicle="$OPTARG" ;;
         t) target_date="$OPTARG" ;;
+        l) manifest_file="$OPTARG" ;;
         s) soc="$OPTARG" ;;
         b) lookback="$OPTARG" ;;
         f) lookfront="$OPTARG" ;;
-        m) mode="$OPTARG" ;;
-        *) exit 0 ;;
+        # h) echo "" ;;
+        *) exit 1 ;;
     esac
 done
 
@@ -21,10 +20,11 @@ if [[ -z "$target_date" ]]; then
     log_error "缺少日期参数！"
     exit 1
 fi
+
 # ================= 确定查询模式 =================
-if [[ mode == "remote" ]]; then
-    base_dir="$REMOTE_DATA_ROOT"
-    log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$base_dir"
+if [[ MODE == "3" ]]; then
+    data_dir="$REMOTE_DATA_ROOT"
+    log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$data_dir"
     ssh_cmd() {
         LC_ALL=C LANG=C ssh -o ConnectTimeout=3 \
             -o StrictHostKeyChecking=no \
@@ -32,27 +32,27 @@ if [[ mode == "remote" ]]; then
             -o LogLevel=ERROR \
             "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
     }
-elif [[ mode == "nas" ]]; then
+elif [[ MODE == "2" ]]; then
     [[ -z $vehicle ]] && { log_error "NAS 模式缺少车辆 ID (-v)"; exit 1; }
-    base_dir="${NAS_ROOT}/${vehicle}/${target_date:0:4}/${target_date}"
-    log_info "NAS 模式: $base_dir"
+    data_dir="${NAS_ROOT}/${vehicle}/${target_date:0:4}/${target_date}"
+    log_info "NAS 模式: $data_dir"
 else
     if [ ! -d $LOCAL_PATH ]; then
         log_error "错误: $LOCAL_PATH 不是一个目录或不存在: sudo mkdir $LOCAL_PATH"
         exit 1
-    elif [ ! -w $LOCAL_PATH ] || [ ! -x $LOCAL_PATH]; then
+    elif [ ! -w $LOCAL_PATH ] || [ ! -x $LOCAL_PATH ]; then
         log_error "你没有足够的权限访问 $LOCAL_PATH, 请执行 sudo chown -R $USER:$USER $LOCAL_PATH"
         exit 1
     fi
-    base_dir="${LOCAL_PATH%/}"
-    log_info "本地路径模式: $base_dir"
+    data_dir="${LOCAL_PATH%/}"
+    log_info "本地路径模式: $data_dir"
 fi
 # ================= 建立 Record 索引 =================
 declare -A records
 shopt -s nullglob
-find_cmd="find \"$base_dir\" -type f \( \( -path '*${soc}*' -name '${target_date}*record*' \) -o -name 'tag_${target_date}*.pb.txt' \) 2>/dev/null"
+find_cmd="find \"$data_dir\" -type f \( \( -path '*${soc}*' -name '${target_date}*record*' \) -o -name 'tag_${target_date}*.pb.txt' \) 2>/dev/null"
 
-if [[ mode == "remote" ]]; then
+if [[ MODE == "3" ]]; then
     raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
 else
     raw_files=$(eval "$find_cmd")
@@ -61,7 +61,7 @@ record_list=$(echo "$raw_files" | grep "record")
 tag_list=$(echo "$raw_files" | grep "tag")
 
 # ${bash_dir}/20251220-112907.record.00000.112907
-[[ -z "$record_list" ]] && { log_error "$base_dir 目录下找不到 record 文件！"; exit 1; }
+[[ -z "$record_list" ]] && { log_error "$data_dir 目录下找不到 record 文件！"; exit 1; }
 while read -r record_path; do
     record_time="${record_path##*.}"
     if [[ "$record_time" =~ ^[0-9]{6}$ ]]; then
@@ -83,9 +83,9 @@ done <<< "$record_list"
 # ================= 处理 Tag 文件 =================
 all_tasks=()
 tag_counter=0
-[[ -z "$tag_list" ]] && { log_error "$base_dir 找不到对应的 tag 文件！"; exit 1; }
+[[ -z "$tag_list" ]] && { log_error "$data_dir 找不到对应的 tag 文件！"; exit 1; }
 for tag_file in $tag_list; do
-    if [[ mode == "remote" ]]; then
+    if [[ MODE == "3" ]]; then
         content=$(ssh_cmd "cat $tag_file")
     else
         content=$(cat "$tag_file")
@@ -119,6 +119,7 @@ for tag_file in $tag_list; do
 
             # 秒级筛选
             matched_files_raw=""
+            echo "$lookback $lookfront"
             start_sec=$((msg_seconds - lookback))
             end_sec=$((msg_seconds + lookfront))
             start_min=$((start_sec / 60))
@@ -141,7 +142,7 @@ for tag_file in $tag_list; do
             done
             # 精确过滤
             if [[ -n "$matched_files" ]]; then
-                # sorted_files=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
+                sorted_files=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
                 # 过滤：保留所有 f_sec >= start_sec 的文件
                 # 加上“最后一个 f_sec < start_sec”的文件（因为它覆盖了起始时刻）
                 final_list=""
@@ -157,29 +158,51 @@ for tag_file in $tag_list; do
                 done <<< "$sorted_files"
 
                 # 最终结果 = 覆盖起始的文件 + 范围内的文件
-                result_raw="${last_before_start} ${final_list}"
+                result_raw="${last_before_start}${final_list}"
                 result=$(echo "$result_raw" | tr ' ' '\n' | cut -d'|' -f2 | tr '\n' ' ')
             else
-                log_warn "$msg ==> 找不到对应 record 文件，请检查是否存在或改变筛选范围！"
-            else
-                tag_counter=$((tag_counter + 1))
-                log_info "[$tag_counter] $msg"
-                read -r -a file_array <<< "$result"
-                dir_path="${file_array[0]%/*}"
-                file_names=""
-                for f in "${file_array[@]}"; do
-                    name="${f##*/}"
-                    file_names+=" $name"
-                done
-                echo "[目录]: $dir_path"
-                echo "[文件]: ${file_names# }"
-                echo "[回播命令]:"
-                echo "cyber_recorder play -l -f $result"
-
+                log_warn "${formatted_time} ${tag} ==> 找不到对应 record 文件，请检查是否存在或改变筛选范围！"
+                continue
             fi
-
-            echo ""
-            { echo "${formatted_time}|${tag}|${result}"; echo; } >> "$record_output_file"
+            tag_counter=$((tag_counter + 1))
+            echo -e "${GREEN}[$tag_counter]$msg${NC}"
+            read -r -a file_array <<< "${result}"
+            dir="${file_array[0]%/*}"
+            files=""
+            for f in "${file_array[@]}"; do
+                name="${f##*/}"
+                files+=" $name"
+            done
+            echo "[目录]: $dir"
+            echo "[文件]: ${files# }"
+            echo "[回播命令]:"
+            echo "cyber_recorder play -l -f ${result% }"
+            all_tasks+=("${formatted_time}|${tag}|${result% }")
         fi
     done <<< "$content"
 done
+
+# ================= 序号选择逻辑 =================
+(( ${#all_tasks[@]} == 0 )) && { log_info "没有查找到符合条件的 record 文件！"; exit 1; }
+read -p "找到 $tag_counter 个 Tag，请输入要处理的序号 (例如 1,2,5 或输入 0 导出全部): " selection
+
+copy_tasks=()
+if [[ "$selection" == "0" ]]; then
+    copy_tasks=("${all_tasks[@]}")
+else
+    IFS=',' read -ra selected_tasks <<< "$selection"
+    for i in "${selected_tasks[@]}"; do
+        idx=$(( $(echo "$i" | xargs) - 1 ))
+        if (( idx >= 0 && idx < ${#all_tasks[@]} )); then
+            copy_tasks+=("${all_tasks[$idx]}")
+        else
+            log_warn "无效序号: $((idx+1))，已忽略。"
+        fi
+    done
+fi
+
+if (( ${#copy_tasks[@]} == 0 )); then
+    log_warn "未选择任何有效序号！"
+    exit 0
+fi
+printf "%s\n" "${copy_tasks[@]}" > "$manifest_file"

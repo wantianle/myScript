@@ -44,8 +44,7 @@ class RecordManager:
 
     def _parse_cyber_time(self, t_str: str) -> Optional[datetime]:
         """
-        统一解析 Cyber 时间字符串为 target_date 对象
-        处理情况：2025-12-27-16:28:10 -> 2025-12-27 16:28:10
+        统一解析 Cyber 时间字符串为 datetime 对象
         """
         if not t_str:
             return None

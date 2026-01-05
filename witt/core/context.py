@@ -24,7 +24,7 @@ class TaskContext:
         self.work_dir = base_output / self.vehicle / self.target_date
         self.log_dir = self.work_dir / "log"
         self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.temp_dir = Path(tempfile.mkdtemp(prefix="frs_session_"))
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
         self.manifest_path = self.temp_dir / "tasks.list"
         atexit.register(self._cleanup_temp)
         logging.debug(f"Temporary manifest created at: {self.manifest_path}")
@@ -65,22 +65,22 @@ class TaskContext:
 
     def get_env_vars(self) -> Dict[str, str]:
         """构建注入 Shell 脚本的环境变量字典"""
-        c = self.config
+        cfg = self.config
 
         # 透传给 Shell 脚本的业务变量映射
         vars = {
-            "NAS_ROOT": c["host"]["nas_root"],
-            "DEST_ROOT": c["host"]["dest_root"],
-            "LOCAL_PATH": c["host"]["local_path"],
-            "VMC_SH": c["host"]["vmc_sh_path"],
-            "MDRIVE_ROOT": c["host"]["mdrive_root"],
-            "CONTAINER": c["docker"]["container_name"],
-            "LOOKBACK": c["logic"]["lookback"],
-            "LOOKFRONT": c["logic"]["lookfront"],
-            "MODE": c["env"]["mode"],
-            "REMOTE_USER": c["remote"]["user"],
-            "REMOTE_IP": c["remote"]["ip"],
-            "REMOTE_DATA_ROOT": c["remote"]["data_root"],
+            "NAS_ROOT": cfg["host"]["nas_root"],
+            "DEST_ROOT": cfg["host"]["dest_root"],
+            "LOCAL_PATH": cfg["host"]["local_path"],
+            "VMC_SH": cfg["host"]["vmc_sh_path"],
+            "MDRIVE_ROOT": cfg["host"]["mdrive_root"],
+            "CONTAINER": cfg["docker"]["container_name"],
+            "LOOKBACK": cfg["logic"]["lookback"],
+            "LOOKFRONT": cfg["logic"]["lookfront"],
+            "MODE": cfg["env"]["mode"],
+            "REMOTE_USER": cfg["remote"]["user"],
+            "REMOTE_IP": cfg["remote"]["ip"],
+            "REMOTE_DATA_ROOT": cfg["remote"]["data_root"],
         }
 
         # 所有环境变量的值必须显式转为 string，否则 subprocess 会报错

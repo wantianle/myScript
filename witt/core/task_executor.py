@@ -38,7 +38,7 @@ class TaskExecutor:
             logging.error(f"脚本 {script_name} 执行失败，退出码: {e.returncode}")
             raise
 
-    def run_find_record(self, mode_args: List[str]):
+    def run_find_record(self, find_args: List[str]):
         """
         执行 record 检索任务
         参数由 main.py 编排传入，此处负责标准化注入基础参数
@@ -51,7 +51,7 @@ class TaskExecutor:
             "-l",
             self.ctx.manifest_path,
         ]
-        args.extend(mode_args)
+        args.extend(find_args)
         return self._run_script("find_record.sh", args)
 
     def run_download_record(self, ids: str):

@@ -1,10 +1,10 @@
 # 基础环境配置
 env:
-  vehicle: "XZB600014"
-  target_date: "20251227"
+  vehicle: "XZB600014" # 临时测试
+  target_date: "20251227" # 临时测试
   soc: "soc1"
   debug: false
-  mode: "local"
+  mode: "1"
 
 remote:
   user: "nvidia"
@@ -18,7 +18,6 @@ host:
   vmc_sh_path: "/home/mini/project/vmc.sh"
   mdrive_root: "/home/mini/project"
   local_path: "/media/data"
-  # log: ""
 
 # Docker 内部路径管理
 docker:
@@ -33,7 +32,6 @@ logic:
   lookback: 20
   lookfront: 10
   blacklist:
-    # - "/mdrive/sensor/at128p_front/PointCloud2"
 
 paths:
   scripts_dir: "./scripts"
