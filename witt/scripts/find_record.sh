@@ -22,7 +22,7 @@ if [[ -z "$target_date" ]]; then
 fi
 
 # ================= 确定查询模式 =================
-if [[ MODE == "3" ]]; then
+if [[ $MODE == "3" ]]; then
     data_dir="$REMOTE_DATA_ROOT"
     log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$data_dir"
     ssh_cmd() {
@@ -32,7 +32,7 @@ if [[ MODE == "3" ]]; then
             -o LogLevel=ERROR \
             "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
     }
-elif [[ MODE == "2" ]]; then
+elif [[ $MODE == "2" ]]; then
     [[ -z $vehicle ]] && { log_error "NAS 模式缺少车辆 ID (-v)"; exit 1; }
     data_dir="${NAS_ROOT}/${vehicle}/${target_date:0:4}/${target_date}"
     log_info "NAS 模式: $data_dir"
@@ -52,7 +52,7 @@ declare -A records
 shopt -s nullglob
 find_cmd="find \"$data_dir\" -type f \( \( -path '*${soc}*' -name '${target_date}*record*' \) -o -name 'tag_${target_date}*.pb.txt' \) 2>/dev/null"
 
-if [[ MODE == "3" ]]; then
+if [[ $MODE == "3" ]]; then
     raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
 else
     raw_files=$(eval "$find_cmd")
@@ -85,7 +85,7 @@ all_tasks=()
 tag_counter=0
 [[ -z "$tag_list" ]] && { log_error "$data_dir 找不到对应的 tag 文件！"; exit 1; }
 for tag_file in $tag_list; do
-    if [[ MODE == "3" ]]; then
+    if [[ $MODE == "3" ]]; then
         content=$(ssh_cmd "cat $tag_file")
     else
         content=$(cat "$tag_file")

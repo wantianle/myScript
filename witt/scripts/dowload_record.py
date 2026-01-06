@@ -13,7 +13,7 @@ class RecordDownloader:
         self.ctx = ctx
         self.config = ctx.config
         self.dest_root = Path(self.config["host"]["dest_root"])
-        self.mode = self.config["env"].get("mode", 0)
+        self.mode = self.config["env"].get("mode", 1)
         self.remote_user = self.config["remote"]["user"]
         self.remote_ip = self.config["remote"]["ip"]
 
@@ -78,6 +78,7 @@ class RecordDownloader:
         print(">>> 正在预检磁盘空间...")
         total_bytes = 0
         task_details = []
+        files_to_cleanup = set()
         for task in self.parse_manifest():
             task_size = 0
             file_infos = []
@@ -122,31 +123,30 @@ class RecordDownloader:
                         continue
 
                     # 启动拷贝进程
-                    if self.mode == 3:
-                        cmd = ["scp", "-q", f"{self.remote_user}@{self.remote_ip}:{src_path}", str(dest_file)]
-                    else:
-                        cmd = ["cp", src_path, str(dest_file)]
 
-                    proc = subprocess.Popen(cmd)
+                    cmd = ["scp", "-q", f"{self.remote_user}@{self.remote_ip}:{src_path}", str(dest_file)] if self.mode == 3 else ["cp", src_path, str(dest_file)]
 
+                    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
                     # 监控进度
                     while proc.poll() is None:
                         current_f = dest_file.stat().st_size if dest_file.exists() else 0
-
                         overall_ratio = (processed_bytes + current_f) / total_bytes
-
-                        # 更新进度条
                         bar(min(overall_ratio, 1.0))
-
-                        # 在侧边显示更详细的信息
                         bar.text = f"-> Copying: {dest_file.name} ({(current_f/(1024*1024)):.1f}MB)"
                         time.sleep(0.1)
-
                     processed_bytes += f_size
                     bar(min(processed_bytes / total_bytes, 1.0))
-                    if Path(src_path).name.endswith((".lean", ".sliced")):
-                        self._cleanup_source_file(src_path)
+                    exit_code = proc.wait()
+                    if exit_code != 0:
+                        _, stderr = proc.communicate()
+                        logging.error(f"拷贝失败: {src_path} 错误 >>> {stderr}")
+                    else:
+                        if Path(src_path).name.endswith((".lean", ".sliced")):
+                            files_to_cleanup.add(src_path)
                 self._post_process_task(task, save_dir, files)
+        if files_to_cleanup:
+            for f in files_to_cleanup:
+                self._cleanup_source_file(f)
 
     def _post_process_task(self, task, save_dir, files):
         """生成 README 和 version.json"""

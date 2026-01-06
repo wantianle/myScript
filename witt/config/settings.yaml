@@ -1,10 +1,10 @@
 # 基础环境配置
 env:
-  vehicle: "XZB600014" # 临时测试
-  target_date: "20251227" # 临时测试
+  vehicle: "XZB600015" # 临时测试
+  target_date: "20260106" # 临时测试
   soc: "soc1"
   debug: false
-  mode: "1"
+  mode: 1
 
 remote:
   user: "nvidia"

@@ -58,19 +58,20 @@ def bootstrap():
 import yaml
 import logging
 import copy
+import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
-import traceback
 from core.context import TaskContext
 from core.docker_adapter import DockerExecutor
 from core.record_manager import RecordManager
+from core.ssh_adapter import SSHExecutor
 from core.task_executor import TaskExecutor
 from scripts.dowload_record import RecordDownloader
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = BASE_DIR / "config" / "settings.yaml"
 # ==================== 辅助函数  ====================
-
 
 def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> dict:
     """标准配置加载函数，带异常处理"""
@@ -98,7 +99,6 @@ def extract_manifest(manifest: Path) -> list[str]:
 
 
 # ==================== 交互处理 ====================
-
 
 class CLIHandler:
     """负责所有与用户的交互输入"""
@@ -136,7 +136,7 @@ class CLIHandler:
                 input("输入本地数据根路径(仅/media，默认/media/data): ").strip()
                 or config["host"]["local_path"]
             )
-        config["env"]["mode"] = choice
+        config["env"]["mode"] = int(choice)
         lb = (
             input(f"回溯秒数 (默认 {config['logic']['lookback']}): ").strip()
             or config["logic"]["lookback"]
@@ -158,7 +158,6 @@ class CLIHandler:
 
 
 # ==================== 核心功能 ====================
-
 
 def task_query(executor, ui):
     logging.info(">>> 执行数据检索与同步 (find_record)...")
@@ -238,7 +237,6 @@ def task_download(session):
     读取清单 -> 用户选择 -> 执行下载
     """
     downloader = RecordDownloader(session.ctx)
-    # tasks = downloader.parse_manifest()
     downloader.download_tasks()
 
 
@@ -264,8 +262,14 @@ class AppSession:
         self.ctx = TaskContext(self.config, vehicle, target_date)
         self.ctx.setup_logger()
 
-        self.docker_adapter = DockerExecutor(self.config)
-        self.record_mgr = RecordManager(self.docker_adapter)
+        if self.config["env"].get("mode") == 3:
+            from core.ssh_adapter import SSHExecutor
+            self.backend = SSHExecutor(self.config)
+            logging.info(">>> 启用【远程后端】: 直接在车机执行处理指令")
+        else:
+            self.backend = DockerExecutor(self.config)
+            logging.info(">>> 启用【本地后端】: 在本地 Docker 执行处理指令")
+        self.record_mgr = RecordManager(self.backend)
         self.executor = TaskExecutor(self.ctx)
 
 
@@ -277,6 +281,7 @@ def run_full_pipeline():
     target_date, vehicle = CLIHandler.get_basic_info(config)
     ui = CLIHandler.get_workflow_params(config, target_date, vehicle)
     session = AppSession(config, target_date, vehicle, ui)
+    print("DEBUG=> ")
     task_query(session.executor, ui)
     parts = extract_manifest(session.ctx.manifest_path)
     if input("是否压缩 Record? [y/N]: ").lower() == "y":
