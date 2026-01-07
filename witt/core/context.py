@@ -95,7 +95,7 @@ class TaskContext:
         if not self.work_dir.exists():
             return "none"
         mtime_sum = self.work_dir.stat().st_mtime + self.log_dir.stat().st_mtime
-        return f"{self.vehicle}_{self.target_date}_{mtime_sum}"
+        return f"{datetime.now().day}_{mtime_sum}"
 
     def get_env_vars(self) -> Dict[str, str]:
         """构建注入 Shell 脚本的环境变量字典"""

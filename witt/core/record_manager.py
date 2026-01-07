@@ -1,4 +1,5 @@
 import re
+import sys
 import math
 import logging
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Dict, List, Optional, Any
 
 class RecordManager:
     RE_TIME = re.compile(r"(\d{4}[-\s]\d{2}[-\s]\d{2}[-\s]\d{2}:\d{2}:\d{2})")
-    RE_DURATION = re.compile(r"(\d{2,}\.\d{6})\s+Seconds")
+    RE_DURATION = re.compile(r"(\d+\.+\d+)\s+Seconds")
     RE_CHANNEL = re.compile(r"(\/mdrive\/[\/\w]+)\s+(\d+)\s+messages")
 
     def __init__(self, docker_executor):
@@ -45,8 +46,11 @@ class RecordManager:
             if "No such container" in str(e):
                 logging.error(f"Docker 容器未运行，请先用任意版本进行 5.[环境同步]...")
                 raise e
+            elif "open record file error" in str(e):
+                logging.error(f"Record 文件不存在或无权限访问, 请查看文件路径及权限: ls -l {docker_path}\n如果存在权限问题，请确保 Docker 容器对该文件有读取权限: \nsudo chown -R $USER:$USER /your_data_root && sudo chmod 775 -R /your_data_path")
+                raise e
             logging.error(f"解析 Record 元数据失败 [Path: {docker_path}]: {e}")
-            return {"begin": None, "end": None, "duration": None, "channels": []}
+            sys.exit(1)
 
     def _extract_channels(self, stdout: str) -> List[Dict[str, Any]]:
         """解析并排序频道列表"""

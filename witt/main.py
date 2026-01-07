@@ -1,15 +1,19 @@
 from utils.env import EnvironmentManager
+
 EnvironmentManager.bootstrap()
 
+import os
+import re
 import sys
 import yaml
-import os
+import time
 import json
-import logging
 import copy
+import logging
 import subprocess
 import traceback
 from pathlib import Path
+from typing import List
 from datetime import datetime, timedelta
 from core.context import TaskContext
 from core.docker_adapter import DockerExecutor
@@ -24,6 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = BASE_DIR / "config" / "settings.yaml"
 # ==================== 辅助函数  ====================
 
+
 def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> dict:
     """标准配置加载函数，带异常处理"""
     if not config_path.exists():
@@ -36,7 +41,7 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> dict:
         sys.exit(1)
 
 
-def extract_manifest(manifest: Path) -> list[str]:
+def extract_manifest(manifest: Path) -> List[str]:
     """
     解析路径
     """
@@ -71,6 +76,7 @@ def get_json_input():
 
 # ==================== 交互处理 ====================
 
+
 class CLIHandler:
     """负责所有与用户的交互输入"""
 
@@ -83,10 +89,12 @@ class CLIHandler:
             ).strip()
             or config["env"]["target_date"]
         )
+        config["env"]["target_date"] = target_date
         vehicle = (
             input(f"请输入车辆名 (默认 {config['env']['vehicle']}): ").strip()
             or config["env"]["vehicle"]
         )
+        config["env"]["vehicle"] = vehicle
         return target_date, vehicle
 
     @staticmethod
@@ -97,29 +105,43 @@ class CLIHandler:
         )
         config["env"]["soc"] = soc
         config["host"]["dest_root"] = (
-            input(f"本地导出路径 (默认 {config['host']['dest_root']}): ").strip()
+            input(f"本地导出路径 (仅限/media下 默认 {config['host']['dest_root']}): ").strip()
             or config["host"]["dest_root"]
         )
 
         print("\n查询模式: [1]本地(默认) [2]NAS [3]远程")
         choice = input("选择: ").strip() or "1"
-        if choice != "2" and choice != "3":
+        if choice == "3":
+            print(
+                "远程模式需要注意:\n  1. 生成密钥一路回车即可: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test\n  2. 配置 SSH 免密登录: ssh-copy-id -i ~/.ssh/id_ed25519_test remote_user@remote_ip"
+            )
+            time.sleep(2)
+        elif choice == "2":
+            print(
+                "NAS模式需要注意:\n  1. 请确保本机已挂载NAS路径到/media/nas\n  2. 谨慎执行查询以外的操作，因为NAS路径可能是只读的"
+            )
+            time.sleep(2)
+        elif choice != "2" and choice != "3":
             config["host"]["local_path"] = (
-                input("输入本地数据根路径(仅/media，默认/media/data): ").strip()
+                input("输入本地数据根路径(仅限/media下，默认/media/data): ").strip()
                 or config["host"]["local_path"]
             )
         config["env"]["mode"] = int(choice)
         lb = (
-            input(f"回溯秒数 (默认 {config['logic']['lookback']}): ").strip()
+            input(
+                f"tag 时间点之前多少秒 (支持负数，默认 {config['logic']['lookback']}): "
+            ).strip()
             or config["logic"]["lookback"]
         )
         lf = (
-            input(f"前瞻秒数 (默认 {config['logic']['lookfront']}): ").strip()
+            input(
+                f"tag 时间点之后多少秒 (支持负数，默认 {config['logic']['lookfront']}): "
+            ).strip()
             or config["logic"]["lookfront"]
         )
-        config["env"]["debug"] = (
-            input("bash 调试模式 [y/N default: n]: ").strip().lower() == "y"
-        )
+        # config["env"]["debug"] = (
+        #     input("bash 调试模式 [y/N default: n]: ").strip().lower() == "y"
+        # )
         return {
             "target_date": target_date,
             "vehicle": vehicle,
@@ -130,6 +152,7 @@ class CLIHandler:
 
 
 # ==================== 核心功能 ====================
+
 
 def task_query(executor, ui):
     executor.ctx.setup_logger()
@@ -162,7 +185,9 @@ def task_compress(session, host_path: Path, config):
     for i, ch in enumerate(channels, 1):
         print(f"{i:<4} | {ch['name']:<55} | {ch['count']}")
 
-    user_in = input("\n[操作]: 回车跳过 | '0'全删 | 序号(如1,3,20-28)删除指定 channel: ").strip()
+    user_in = input(
+        "\n[操作]: 回车跳过 | '0'全删 | 序号(如1,3,20-28)删除指定 channel: "
+    ).strip()
     if not user_in:
         return
 
@@ -225,6 +250,7 @@ def task_sync(executor, input):
     """
     executor.run_restore_env(input)
 
+
 # ==================== 运行时会话 ====================
 
 
@@ -237,14 +263,11 @@ class AppSession:
             self.ui = ui
 
         self.ctx = TaskContext(self.config, vehicle, target_date)
-        self.ctx.setup_logger()
 
         if self.config["env"].get("mode") == 3:
             self.backend = SSHExecutor(self.config)
-            # logging.info(">>> 启用【远程后端】: 直接在车机执行处理指令")
         else:
             self.backend = DockerExecutor(self.config)
-            # logging.info(">>> 启用【本地后端】: 在本地 Docker 执行处理指令")
         self.record_mgr = RecordManager(self.backend)
         self.executor = TaskExecutor(self.ctx)
 
@@ -261,53 +284,49 @@ def run_full_pipeline():
         task_query(session.executor, ui)
         parts = extract_manifest(session.ctx.manifest_path)
         if input("是否压缩 Record? [y/N]: ").lower() == "y":
-            task_compress(
-                session, Path(parts[0].split("|")[3].split()[0]), config
-            )
+            task_compress(session, Path(parts[0].split("|")[3].split()[0]), config)
         for item in parts:
             _, tag_dt, tag, paths = item.split("|")
             tag_dt = datetime.strptime(tag_dt, "%Y-%m-%d %H:%M:%S")
             sub_paths = paths.split()
             print(f"\n>>> 正在处理: {tag} {tag_dt}")
             for p in sub_paths:
-                task_slice(
-                    session,
-                    Path(p),
-                    ui["lb"],
-                    ui["lf"],
-                    config,
-                    tag_dt)
+                task_slice(session, Path(p), ui["lb"], ui["lf"], config, tag_dt)
         task_download(session)
         if input("\n是否立即回播数据? [y/N]: ").lower() == "y":
-            task_player_workflow(session)
+            task_player_workflow(session, config)
     except Exception as e:
         logging.error(f"全流程执行失败: {e}")
         logging.debug(traceback.format_exc())
         sys.exit(1)
 
-def task_player_workflow(session: AppSession):
+
+def task_player_workflow(session: AppSession, config: dict):
     while True:
         player = RecordPlayer(session)
-        print("正在扫描本地库...")
         library = player.get_library()
 
         if not library:
             print("本地没有任何 Record 数据。")
             return
 
-        # 1. 第一级选择：Tag
-        print(
-            f"\n{' ID ':<4} | {' Vehicle ':<10} | {' Time ':<20} | {' Tag Message '}"
-        )
+        print(f"\n{' ID ':<4} | {' Vehicle ':<10} | {' Time ':<20} | {' Tag Message '}")
         print("-" * 65)
-        for i, entry in enumerate(library, 1):
-            print(f" {i:<4} | {entry['vehicle']:<10} | {entry['time']:<20} | {entry['tag']}")
+        count = 1
+        for entry in library:
+            if (
+                entry["date"] == config["env"]["target_date"]
+                and entry["vehicle"] == config["env"]["vehicle"]
+            ):
+                print(
+                    f" {count:<4} | {entry['vehicle']:<10} | {entry['time']:<20} | {entry['tag']}"
+                )
+                count += 1
         tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
         if not tag_idx:
             return
         selected_tag = library[int(tag_idx) - 1]
 
-        # 2. 第二级选择：SOC
         available_socs = list(selected_tag["socs"].keys())
         print(f"\n当前 Tag 发现以下 SOC 数据:")
         for i, s in enumerate(available_socs, 1):
@@ -317,15 +336,18 @@ def task_player_workflow(session: AppSession):
         soc_key = available_socs[int(soc_idx) - 1]
         target_records = selected_tag["socs"][soc_key]
 
-        # 3. 时间窗口选择
         print(f"\n即将播放 {soc_key} 数据...")
-        print("输入播放范围 (例如 '20-50' 代表播放该段第20秒到第50秒的内容)")
+        print("输入播放范围 (例如 '10-30' '5' '0')")
         range_in = input("输入秒数范围 (0 代表全量播放): ").strip() or "0"
 
         start_s, end_s = 0, 0
-        if range_in != "0" and "," in range_in:
+        if range_in:
             try:
-                start_s, end_s = map(int, range_in.split("-"))
+                nums = re.findall(r"\d+", range_in)
+                if len(nums) >= 2:
+                    start_s, end_s = int(nums[0]), int(nums[1])
+                elif len(nums) == 1:
+                    start_s = int(nums[0])
             except ValueError:
                 print("输入格式错误，将全量播放。")
 
@@ -366,7 +388,7 @@ def main_menu():
                 session = AppSession(config, target_date, vehicle, ui)
                 task_query(session.executor, ui)
             elif choice == "3":
-                target_path=Path(input("需要压缩的 record 文件路径: ").strip())
+                target_path = Path(input("需要压缩的 record 文件路径: ").strip())
                 info = session.record_mgr.get_info(str(target_path))
                 task_compress(
                     session,
@@ -384,11 +406,13 @@ def main_menu():
                 )
             elif choice == "4":
                 lb = (
-                    input(f"回溯秒数 (默认 {config['logic']['lookback']}): ").strip()
+                    input(f"tag 时间点之前多少秒 (默认 {config['logic']['lookback']}): ").strip()
                     or config["logic"]["lookback"]
                 )
                 lf = (
-                    input(f"前瞻秒数 (默认 {config['logic']['lookfront']}): ").strip()
+                    input(
+                        f"tag 时间点之前多少秒 (默认 {config['logic']['lookfront']}): "
+                    ).strip()
                     or config["logic"]["lookfront"]
                 )
                 target = Path(input("需要切片的 record 文件所在目录: ").strip())
@@ -410,7 +434,11 @@ def main_menu():
                 )
             elif choice == "6":
                 print("\n>>> 进入数据回放菜单...")
-                task_player_workflow(session)
+                print(
+                    "注意：若另有数据路径, 路径结构应为 '<data_root>/<vehicle>/<date>/<tag>/<soc>'\n例如: '/media/road_data/XZB600011/20260101/急刹/soc1/xxxx.record.xxxx'\n"
+                )
+                config["host"]["dest_root"] = input("请输入本地数据根目录(仅限/media下 默认 /media/road_data): ").strip() or config["host"]["dest_root"]
+                task_player_workflow(session,config)
         elif choice == "q":
             sys.exit(0)
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 from alive_progress import alive_bar
 
+
 class RecordDownloader:
     def __init__(self, ctx):
         self.ctx = ctx
@@ -43,13 +44,16 @@ class RecordDownloader:
             if item.is_file() and item.name not in whitelist:
                 # print(f"[Cleanup] 清理多余文件: {item.name}")
                 item.unlink()
+
     def _cleanup_source_file(self, source_path: str):
         """
         删除源端的中间文件
         """
         try:
             if self.mode == 3:
-                rm_cmd = f"ssh {self.remote_user}@{self.remote_ip} 'rm -f {source_path}'"
+                rm_cmd = (
+                    f"ssh {self.remote_user}@{self.remote_ip} 'rm -f {source_path}'"
+                )
                 subprocess.run(rm_cmd, shell=True, capture_output=True)
                 # logging.info(f"[Remote Cleanup] 已删除源端中间文件: {Path(source_path).name}")
             else:
@@ -59,12 +63,13 @@ class RecordDownloader:
                     # logging.info(f"[Local Cleanup] 已删除源端中间文件: {p.name}")
         except Exception as e:
             logging.warning(f"清理源端文件失败: {source_path}, 错误: {e}")
+
     def parse_manifest(self) -> List[Dict[str, Any]]:
         """解析 find_record.sh 生成的 manifest.list"""
         tasks = []
         for line in self.ctx.manifest_path.read_text(encoding="utf-8").splitlines():
             # 格式: ID|Time|Msg|Files
-            parts = line.strip().split('|')
+            parts = line.strip().split("|")
             tasks.append(
                 {
                     "id": parts[0],
@@ -85,7 +90,7 @@ class RecordDownloader:
         for task in self.parse_manifest():
             task_size = 0
             file_infos = []
-            for f in task['files']:
+            for f in task["files"]:
                 lean_file = f"{f}.lean"
                 size = self._get_file_size(lean_file)
                 task_size += size
@@ -95,8 +100,10 @@ class RecordDownloader:
 
         # 检查本地空间
         usage = shutil.disk_usage(self.dest_root)
-        if total_bytes > (usage.free - 1024*1024*100):
-            print(f"错误: 磁盘空间不足！需要 {total_bytes/1e9:.2f}GB, 剩余 {usage.free/1e9:.2f}GB")
+        if total_bytes > (usage.free - 1024 * 1024 * 100):
+            print(
+                f"错误: 磁盘空间不足！需要 {total_bytes/1e9:.2f}GB, 剩余 {usage.free/1e9:.2f}GB"
+            )
             return
 
         print(f"计划同步数据量: {total_bytes/1e6:.2f} MB")
@@ -108,7 +115,9 @@ class RecordDownloader:
             processed_bytes = 0
 
             for task, task_size, files in task_details:
-                folder_name = f"{int(task['id']):02d}_{self._sanitize_name(task['name'])}"
+                folder_name = (
+                    f"{int(task['id']):02d}_{self._sanitize_name(task['name'])}"
+                )
                 save_dir = (
                     self.dest_root
                     / self.ctx.vehicle
@@ -131,12 +140,23 @@ class RecordDownloader:
                         continue
 
                     # 启动拷贝进程
-                    cmd = ["scp", "-q", f"{self.remote_user}@{self.remote_ip}:{src_path}", str(dest_file)] if self.mode == 3 else ["cp", src_path, str(dest_file)]
+                    cmd = (
+                        [
+                            "scp",
+                            "-q",
+                            f"{self.remote_user}@{self.remote_ip}:{src_path}",
+                            str(dest_file),
+                        ]
+                        if self.mode == 3
+                        else ["cp", src_path, str(dest_file)]
+                    )
 
                     proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
                     # 监控进度
                     while proc.poll() is None:
-                        current_f = dest_file.stat().st_size if dest_file.exists() else 0
+                        current_f = (
+                            dest_file.stat().st_size if dest_file.exists() else 0
+                        )
                         overall_ratio = (processed_bytes + current_f) / total_bytes
                         bar(min(overall_ratio, 1.0))
                         bar.text = f"-> Copying: {folder_name[:15]}.. | {dest_file.name[-15:]} ({(current_f/(1024*1024)):.1f}MB)"
@@ -164,9 +184,18 @@ class RecordDownloader:
 
         try:
             if self.mode == 3:
-                subprocess.run(["rsync", "-a", f"{self.remote_user}@{self.remote_ip}:{v_src}", str(v_dest)], capture_output=True)
+                subprocess.run(
+                    [
+                        "rsync",
+                        "-a",
+                        f"{self.remote_user}@{self.remote_ip}:{v_src}",
+                        str(v_dest),
+                    ],
+                    capture_output=True,
+                )
             else:
-                if os.path.exists(v_src): shutil.copy2(v_src, v_dest)
+                if os.path.exists(v_src):
+                    shutil.copy2(v_src, v_dest)
         except:
             pass
 
