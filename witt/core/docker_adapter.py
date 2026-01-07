@@ -49,7 +49,19 @@ class DockerExecutor:
             return result.stdout
         except subprocess.CalledProcessError as e:
             error_detail = e.stderr.strip() or e.stdout.strip()
-            logging.error(
-                f"\n[Docker Exec Error]\nCommand: {cmd}\nDetail: {error_detail}"
-            )
-            raise RuntimeError(f"Docker command failed: {error_detail}")
+            # logging.error(
+            #     f"\n[Docker Exec Error]\nCommand: {cmd}\nDetail: {error_detail}"
+            # )
+            raise RuntimeError(error_detail)
+
+
+    def execute_interactive(self, cmd: str):
+        """
+        使用 subprocess.run 且不捕获输出，直接对接当前终端
+        用于 cyber_recorder play 等需要交互和实时刷新的命令
+        """
+        env_setup = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
+        full_cmd = f"docker exec -it {self.container} /bin/bash -c '{env_setup} && source {self.setup_bash} && {cmd}'"
+
+        # 关键：不使用 capture_output，直接让 stderr/stdout 流向控制台
+        subprocess.run(full_cmd, shell=True, check=True)

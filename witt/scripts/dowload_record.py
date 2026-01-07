@@ -132,7 +132,7 @@ class RecordDownloader:
                         overall_ratio = (processed_bytes + current_f) / total_bytes
                         bar(min(overall_ratio, 1.0))
                         bar.text = f"-> Copying: {dest_file.name} ({(current_f/(1024*1024)):.1f}MB)"
-                        time.sleep(0.1)
+                        time.sleep(0.2)
                     processed_bytes += f_size
                     bar(min(processed_bytes / total_bytes, 1.0))
                     exit_code = proc.wait()

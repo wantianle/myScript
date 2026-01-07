@@ -56,8 +56,8 @@ if [[ $MODE == "3" ]]; then
 else
     raw_files=$(eval "$find_cmd")
 fi
-record_list=$(echo "$raw_files" | grep "record")
-tag_list=$(echo "$raw_files" | grep "tag")
+record_list=$(echo "$raw_files" | grep record)
+tag_list=$(echo "$raw_files" | grep tag)
 
 # ${bash_dir}/20251220-112907.record.00000.112907
 [[ -z "$record_list" ]] && { log_error "$data_dir 目录下找不到 record 文件！"; exit 1; }
@@ -118,7 +118,6 @@ for tag_file in $tag_list; do
 
             # 秒级筛选
             matched_files_raw=""
-            echo "$lookback $lookfront"
             start_sec=$((msg_seconds - lookback))
             end_sec=$((msg_seconds + lookfront))
             start_min=$((start_sec / 60))

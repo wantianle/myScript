@@ -68,6 +68,7 @@ from core.docker_adapter import DockerExecutor
 from core.record_manager import RecordManager
 from core.ssh_adapter import SSHExecutor
 from core.task_executor import TaskExecutor
+from core.player import RecordPlayer
 from scripts.dowload_record import RecordDownloader
 
 
@@ -183,6 +184,7 @@ class CLIHandler:
 # ==================== 核心功能 ====================
 
 def task_query(executor, ui):
+    executor.ctx.setup_logger()
     logging.info(">>> 执行数据检索与同步 (find_record)...")
     find_args = [
         "-s",
@@ -195,16 +197,17 @@ def task_query(executor, ui):
     executor.run_find_record(find_args)
 
 
-def task_compress(record_mgr, host_path: Path, config):
+def task_compress(session, host_path: Path, config):
     """Channel 过滤压缩"""
-    print(f"\n[分析文件]: {host_path.name}")
-    info = record_mgr.get_info(str(host_path))
+    session.ctx.setup_logger()
+    info = session.record_mgr.get_info(str(host_path))
     channels = info.get("channels", [])
 
     if not channels:
         logging.warning("未发现有效 Channel，跳过压缩")
         return
-
+    print(f"\n>>> 分析文件: {host_path.name}")
+    print(f"bgin: {info.get('begin')}   end: {info.get('end')}")
     print("-" * 72)
     print(f"{'ID':<4} | {'Channel Name':<55} | {'Messages'}")
     print("-" * 72)
@@ -233,26 +236,31 @@ def task_compress(record_mgr, host_path: Path, config):
         to_delete = [channels[i]["name"] for i in indices if 0 <= i < len(channels)]
     new_blacklist = list(set(config["logic"].get("blacklist") or [] + to_delete))
     config["logic"]["blacklist"] = new_blacklist
+    logging.info(f">>> 执行数据压缩: {new_blacklist}...")
 
 
-def task_slice(record_mgr, input_path: Path, lb, lf, config, tag_dt):
+def task_slice(session, input_path: Path, lb, lf, config, tag_dt):
     """时间截取切片"""
+    session.ctx.setup_logger()
     tag_start = tag_dt - timedelta(seconds=lb)
     tag_end = tag_dt + timedelta(seconds=lf)
 
     output_path = f"{input_path}.lean"
-    info = record_mgr.get_info(str(input_path))
+    info = session.record_mgr.get_info(str(input_path))
     if info["begin"]:
         # 计算重叠时间窗口
         start, end = max(info["begin"], tag_start), min(info["end"], tag_end)
         if start < end:
-            record_mgr.split(
+            success = session.record_mgr.split(
                 str(input_path),
                 str(output_path),
                 start,
                 end,
                 config["logic"]["blacklist"],
             )
+            if not success:
+                # 如果是因为损坏跳过的，可以在这里记录到 summary 报告中
+                print(f">>> [Skip] 文件 {input_path} 已损坏，自动跳过。")
 
 
 def task_download(session):
@@ -284,7 +292,6 @@ class AppSession:
         self.ctx.setup_logger()
 
         if self.config["env"].get("mode") == 3:
-            from core.ssh_adapter import SSHExecutor
             self.backend = SSHExecutor(self.config)
             # logging.info(">>> 启用【远程后端】: 直接在车机执行处理指令")
         else:
@@ -306,7 +313,7 @@ def run_full_pipeline():
     parts = extract_manifest(session.ctx.manifest_path)
     if input("是否压缩 Record? [y/N]: ").lower() == "y":
         task_compress(
-            session.record_mgr, Path(parts[0].split("|")[2].split()[0]), config
+            session, Path(parts[0].split("|")[2].split()[0]), config
         )
     for item in parts:
         tag_dt, tag, paths = item.split("|")
@@ -315,13 +322,62 @@ def run_full_pipeline():
         print(f"\n>>> 正在处理: {tag} {tag_dt}")
         for p in sub_paths:
             task_slice(
-                session.record_mgr,
+                session,
                 Path(p),
                 ui["lb"],
                 ui["lf"],
                 config,
                 tag_dt)
     task_download(session)
+    if input("\n是否立即回播数据? [y/N]: ").lower() == "y":
+        task_player_workflow(session)
+
+
+def task_player_workflow(session: AppSession):
+    while True:
+        player = RecordPlayer(session)
+        print("正在扫描本地库...")
+        library = player.get_library()
+
+        if not library:
+            print("本地没有任何 Record 数据。")
+            return
+
+        # 1. 第一级选择：Tag
+        print(f"\n{' ID ':<4} | {' Vehicle ':<12} | {' Tag Message '}")
+        print("-" * 65)
+        for i, entry in enumerate(library, 1):
+            print(f" {i:<4} | {entry['vehicle']:<12} | {entry['tag']}")
+
+        tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
+        if not tag_idx:
+            return
+        selected_tag = library[int(tag_idx) - 1]
+
+        # 2. 第二级选择：SOC
+        available_socs = list(selected_tag["socs"].keys())
+        print(f"\n当前 Tag 发现以下 SOC 数据:")
+        for i, s in enumerate(available_socs, 1):
+            print(f"  [{i}] {s}")
+
+        soc_idx = input("请选择 SOC 序号 (默认 1): ").strip() or "1"
+        soc_key = available_socs[int(soc_idx) - 1]
+        target_records = selected_tag["socs"][soc_key]
+
+        # 3. 时间窗口选择
+        print(f"\n即将播放 {soc_key} 数据...")
+        print("输入播放范围 (例如 '20-50' 代表播放该段第20秒到第50秒的内容)")
+        range_in = input("输入秒数范围 (0 代表全量播放): ").strip() or "0"
+
+        start_s, end_s = 0, 0
+        if range_in != "0" and "," in range_in:
+            try:
+                start_s, end_s = map(int, range_in.split("-"))
+            except ValueError:
+                print("输入格式错误，将全量播放。")
+
+        # 4. 执行播放
+        player.play(target_records, start_s, end_s)
 
 
 # ==================== 主菜单  ====================
@@ -332,14 +388,15 @@ def main_menu():
 
     while True:
         print("\n" + "=" * 50)
-        print("               witt  v0.7")
+        print("               witt  v0.9")
         print("            What Is That Tag?")
         print("=" * 50)
-        print("  1. [全流程] 查询 -> 压缩 -> 切片 -> 打包")
-        print("  2. [仅查询] 数据检索")
-        print("  3. [仅压缩] 指定文件 Channel 过滤")
+        print("  1. [全流程] 查询 -> 压缩 -> 切片 -> 下载 -> 回放")
+        print("  2. [仅查询] 查询 tag 对应 record 文件")
+        print("  3. [仅压缩] 指定文件过滤 Channel")
         print("  4. [仅切片] 指定目录对时间切片")
-        print("  5. [数据回灌] 本地环境数据回灌 ")
+        print("  5. [环境同步] 同步本地 docker 环境")
+        print("  6. [数据回播] 查询并回播已处理数据")
         print("  q. 退出")
         print("=" * 50)
 
@@ -348,7 +405,7 @@ def main_menu():
 
         if choice == "1":
             run_full_pipeline()
-        elif choice in ("2", "3", "4", "5"):
+        elif choice in ("2", "3", "4", "5", "6"):
             target_date, vehicle = CLIHandler.get_basic_info(config)
             session = AppSession(config, target_date, vehicle)
             if choice == "2":
@@ -359,13 +416,13 @@ def main_menu():
                 target_path=Path(input("需要压缩的 record 文件路径: ").strip())
                 info = session.record_mgr.get_info(str(target_path))
                 task_compress(
-                    session.record_mgr,
+                    session,
                     target_path,
                     config,
                 )
-                tag_dt = datetime.strptime(f"{info.get('begin')}", "%Y-%m-%d-%H:%M:%S}")
+                tag_dt = datetime.strptime(f"{info.get('begin')}", "%Y-%m-%d %H:%M:%S")
                 task_slice(
-                    session.record_mgr,
+                    session,
                     target_path,
                     0,
                     120,
@@ -386,7 +443,7 @@ def main_menu():
                 tag_dt = datetime.strptime(f"{target_date}{time_raw}", "%Y%m%d%H%M%S")
                 for f in target.glob("*.record*"):
                     task_slice(
-                        session.record_mgr,
+                        session,
                         f,
                         lb,
                         lf,
@@ -398,6 +455,9 @@ def main_menu():
                     session.executor,
                     get_json_input(),
                 )
+            elif choice == "6":
+                print("\n>>> 进入数据回放菜单...")
+                task_player_workflow(session)
         elif choice == "q":
             sys.exit(0)
 

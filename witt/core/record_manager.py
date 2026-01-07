@@ -1,11 +1,14 @@
 import re
+import math
 import logging
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 
 class RecordManager:
     RE_TIME = re.compile(r"(\d{4}[-\s]\d{2}[-\s]\d{2}[-\s]\d{2}:\d{2}:\d{2})")
+    RE_DURATION = re.compile(r"(\d{2,}\.\d{6})\s+Seconds")
     RE_CHANNEL = re.compile(r"(\/mdrive\/[\/\w]+)\s+(\d+)\s+messages")
 
     def __init__(self, docker_executor):
@@ -27,14 +30,20 @@ class RecordManager:
                 if (m := re.search(rf"end_time:\s+{self.RE_TIME.pattern}", stdout))
                 else None
             )
+            duration = (
+                math.floor(float(m.group(1)))
+                if (m := re.search(rf"duration:\s+{self.RE_DURATION.pattern}", stdout))
+                else None
+            )
             return {
                 "begin": begin_time,
                 "end": end_time,
+                "duration": duration,
                 "channels": self._extract_channels(stdout),
             }
         except Exception as e:
             logging.error(f"解析 Record 元数据失败 [Path: {docker_path}]: {e}")
-            return {"begin": None, "end": None, "channels": []}
+            return {"begin": None, "end": None, "duration": None, "channels": []}
 
     def _extract_channels(self, stdout: str) -> List[Dict[str, Any]]:
         """解析并排序频道列表"""
@@ -95,4 +104,20 @@ class RecordManager:
         logging.info(
             f"Executing Split: [{start_str}] -> [{end_str}] | Output: {host_out}"
         )
-        return self.executor.execute(cmd)
+        CORRUPT_SIGNATURES = [
+            "Parse section message failed",
+            "read chunk body section fail",
+            "not a valid record file",
+            "header invalid"
+        ]
+        try:
+            self.executor.execute(cmd)
+            return True
+        except RuntimeError as e:
+            err_msg = str(e)
+            if any(sig in err_msg for sig in CORRUPT_SIGNATURES):
+                logging.warning(f"跳过损坏文件: {Path(host_in).name}")
+                logging.debug(f"损坏细节: {err_msg}")
+                return False
+            logging.error(f"切片过程中发生不可恢复的系统错误: {err_msg}")
+            raise e
