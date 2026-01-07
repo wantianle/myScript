@@ -175,15 +175,128 @@ for tag_file in $tag_list; do
             echo "[文件]: ${files# }"
             echo "[回播命令]:"
             echo "cyber_recorder play -l -f ${result% }"
+            all_tasks+=("${tag_counter}|${formatted_time}|${tag}|${result% }")
+        fi
+    done <<< "$content"
+done
+
+
+all_tasks=()
+# 移除这里的 tag_counter=0，因为我们要排序后重新排号
+
+[[ -z "$tag_list" ]] && { log_error "$data_dir 找不到对应的 tag 文件！"; exit 1; }
+
+for tag_file in $tag_list; do
+    if [[ $MODE == "3" ]]; then
+        content=$(ssh_cmd "cat $tag_file")
+    else
+        content=$(cat "$tag_file")
+    fi
+
+    while IFS= read -r line; do
+        if [[ $line =~ msg:\ \"([^\"]+)\" ]]; then
+            msg="${BASH_REMATCH[1]//\\n/}"
+            tag="${msg%% :*}"
+
+            # --- 时间解析部分保持不变 ---
+            yyyy="" month="" dd="" hh="" mm="" ss=""
+            if [[ $msg =~ ([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})\ ([0-9]{1,2}):([0-9]{2}):([0-9]{2}) ]]; then
+                yyyy=${BASH_REMATCH[1]}; month=${BASH_REMATCH[2]}; dd=${BASH_REMATCH[3]}
+                hh=${BASH_REMATCH[4]}; mm=${BASH_REMATCH[5]}; ss=${BASH_REMATCH[6]}
+            elif [[ $msg =~ ([0-9]{1,2})/([0-9]{1,2})/([0-9]{4}),\ ([0-9]{1,2}):([0-9]{2}):([0-9]{2})\ (AM|PM) ]]; then
+                month=${BASH_REMATCH[1]}; dd=${BASH_REMATCH[2]}; yyyy=${BASH_REMATCH[3]}
+                hh=${BASH_REMATCH[4]}; mm=${BASH_REMATCH[5]}; ss=${BASH_REMATCH[6]}; ampm=${BASH_REMATCH[7]}
+                [[ "$ampm" == "PM" ]] && (( 10#$hh < 12 )) && hh=$(( 10#$hh + 12 ))
+                [[ "$ampm" == "AM" ]] && (( 10#$hh == 12 )) && hh="00"
+            fi
+            formatted_time=$(printf '%04d-%02d-%02d %02d:%02d:%02d' \
+                    $((10#$yyyy)) $((10#$month)) $((10#$dd)) \
+                    $((10#$hh)) $((10#$mm)) $((10#$ss)))
+
+             msg_seconds=$(( 10#$hh * 3600 + 10#$mm * 60 + 10#$ss ))
+            msg_minutes=$(( 10#$hh * 60 + 10#$mm ))
+
+            # 秒级筛选
+            matched_files_raw=""
+            start_sec=$((msg_seconds - lookback))
+            end_sec=$((msg_seconds + lookfront))
+            start_min=$((start_sec / 60))
+            end_min=$((end_sec / 60))
+
+            matched_files_raw=""
+            for (( m=start_min; m<=end_min; m++ )); do
+                if [[ -n "${records[$m]:-}" ]]; then
+                    matched_files_raw="${matched_files_raw} ${records[$m]}"
+                fi
+            done
+            # 我们需要找的是：开始时间落在 [start_sec, end_sec] 之间的文件，以及“覆盖”了 start_sec 的那个前序文件
+            matched_files=""
+            for item in $matched_files_raw; do
+                f_sec="${item%%|*}"
+                f_path="${item#*|}"
+                if (( f_sec <= end_sec )); then
+                    matched_files="${matched_files} ${f_sec}|${f_path}"
+                fi
+            done
+            # 精确过滤
+            if [[ -n "$matched_files" ]]; then
+                sorted_files=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
+                # 过滤：保留所有 f_sec >= start_sec 的文件
+                # 加上“最后一个 f_sec < start_sec”的文件（因为它覆盖了起始时刻）
+                final_list=""
+                last_before_start=""
+                while read -r line; do
+                    [[ -z "$line" ]] && continue
+                    this_f_sec="${line%%|*}"
+                    if (( this_f_sec < start_sec )); then
+                        last_before_start="$line"
+                    else
+                        final_list="${final_list} ${line}"
+                    fi
+                done <<< "$sorted_files"
+
+                # 最终结果 = 覆盖起始的文件 + 范围内的文件
+                result_raw="${last_before_start}${final_list}"
+                result=$(echo "$result_raw" | tr ' ' '\n' | cut -d'|' -f2 | tr '\n' ' ')
+            else
+                log_warn "${formatted_time} ${tag} ==> 找不到对应 record 文件，跳过"
+                continue
+            fi
             all_tasks+=("${formatted_time}|${tag}|${result% }")
         fi
     done <<< "$content"
 done
 
-# ================= 序号选择逻辑 =================
-(( ${#all_tasks[@]} == 0 )) && { log_info "没有查找到符合条件的 record 文件！"; exit 1; }
-read -p "找到 $tag_counter 个 Tag，请输入要处理的序号 (例如 1,2,5 或输入 0 导出全部): " selection
+if [[ ${#all_tasks[@]} -gt 0 ]]; then
+    mapfile -t sorted_tasks < <(printf "%s\n" "${all_tasks[@]}" | sort -t'|' -k1,1)
+    all_tasks=()
+    final_counter=1
 
+    for task_line in "${sorted_tasks[@]}"; do
+        this_time="${task_line%%|*}"
+        tmp="${task_line#*|}"
+        this_tag="${tmp%%|*}"
+        this_result="${tmp#*|}"
+        all_tasks+=("${final_counter}|${this_time}|${this_tag}|${this_result}")
+        echo -e "${GREEN}[$final_counter] $this_tag : $this_time${NC}"
+        read -r -a f_arr <<< "${this_result}"
+        if [[ ${#f_arr[@]} -gt 0 ]]; then
+            t_dir="${f_arr[0]%/*}"
+            t_files=""
+            for f in "${f_arr[@]}"; do t_files+=" ${f##*/}"; done
+            echo "[目录]: $t_dir"
+            echo "[文件]: ${t_files# }"
+            echo "cyber_recorder play -l -f ${this_result}"
+            echo "------------------------------------------------"
+        fi
+        final_counter=$((final_counter + 1))
+    done
+else
+    log_error "未收集到任何有效任务！"
+fi
+
+# ================= 序号选择逻辑 =================
+read -p "找到 $tag_counter 个 Tag，请输入要处理的序号 (例如 1,2,5 或输入 0 导出全部): " selection
 copy_tasks=()
 if [[ "$selection" == "0" ]]; then
     copy_tasks=("${all_tasks[@]}")

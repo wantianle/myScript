@@ -1,65 +1,13 @@
-import subprocess
+from utils.env import EnvironmentManager
+EnvironmentManager.bootstrap()
+
 import sys
-import importlib.util
-
-def bootstrap():
-    if importlib.util.find_spec("pip") is None:
-        print("未检测到 pip，正在尝试紧急引导(ensurepip)...")
-        try:
-            # 尝试通过内置模块安装 pip
-            subprocess.check_call(
-                [sys.executable, "-m", "ensurepip", "--default-pip"],
-                stdout=subprocess.DEVNULL,
-            )
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
-                stdout=subprocess.DEVNULL,
-            )
-            print("pip 安装成功！")
-        except Exception:
-            print("错误: 系统缺少 pip 且自动修复失败。")
-            print("请执行以下命令安装 pip 后重试:")
-            print(
-                "   sudo apt update && sudo apt install python3-pip"
-            )
-            sys.exit(1)
-    dependencies = [
-        ("pyyaml", "yaml"),
-        ("alive-progress", "alive_progress"),
-    ]
-    missing = []
-    for pkg, imp in dependencies:
-        try:
-            __import__(imp)
-        except ImportError:
-            missing.append(pkg)
-
-    if missing:
-        print(f"检测到环境缺失，正在为你自动准备: {', '.join(missing)}")
-        try:
-            subprocess.check_call(
-                [
-                    sys.executable,
-                    "-m",
-                    "pip",
-                    "install",
-                    *missing,
-                    "-i",
-                    "https://pypi.tuna.tsinghua.edu.cn/simple",
-                ]
-            )
-            print("环境就绪！继续启动...\n")
-        except Exception as e:
-            print(f"❌ 自动安装失败，请手动执行: pip install {' '.join(missing)}")
-            print(f"错误详情: {e}")
-            sys.exit(1)
-
-
 import yaml
 import os
 import json
 import logging
 import copy
+import subprocess
 import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -214,7 +162,7 @@ def task_compress(session, host_path: Path, config):
     for i, ch in enumerate(channels, 1):
         print(f"{i:<4} | {ch['name']:<55} | {ch['count']}")
 
-    user_in = input("\n[操作]: 回车跳过 | '0'全删 | 序号(如1,3)删除指定: ").strip()
+    user_in = input("\n[操作]: 回车跳过 | '0'全删 | 序号(如1,3,20-28)删除指定 channel: ").strip()
     if not user_in:
         return
 
@@ -236,7 +184,7 @@ def task_compress(session, host_path: Path, config):
         to_delete = [channels[i]["name"] for i in indices if 0 <= i < len(channels)]
     new_blacklist = list(set(config["logic"].get("blacklist") or [] + to_delete))
     config["logic"]["blacklist"] = new_blacklist
-    logging.info(f">>> 执行数据压缩: {new_blacklist}...")
+    logging.info(f">>> 执行数据压缩: {new_blacklist}")
 
 
 def task_slice(session, input_path: Path, lb, lf, config, tag_dt):
@@ -309,29 +257,33 @@ def run_full_pipeline():
     target_date, vehicle = CLIHandler.get_basic_info(config)
     ui = CLIHandler.get_workflow_params(config, target_date, vehicle)
     session = AppSession(config, target_date, vehicle, ui)
-    task_query(session.executor, ui)
-    parts = extract_manifest(session.ctx.manifest_path)
-    if input("是否压缩 Record? [y/N]: ").lower() == "y":
-        task_compress(
-            session, Path(parts[0].split("|")[2].split()[0]), config
-        )
-    for item in parts:
-        tag_dt, tag, paths = item.split("|")
-        tag_dt = datetime.strptime(tag_dt, "%Y-%m-%d %H:%M:%S")
-        sub_paths = paths.split()
-        print(f"\n>>> 正在处理: {tag} {tag_dt}")
-        for p in sub_paths:
-            task_slice(
-                session,
-                Path(p),
-                ui["lb"],
-                ui["lf"],
-                config,
-                tag_dt)
-    task_download(session)
-    if input("\n是否立即回播数据? [y/N]: ").lower() == "y":
-        task_player_workflow(session)
-
+    try:
+        task_query(session.executor, ui)
+        parts = extract_manifest(session.ctx.manifest_path)
+        if input("是否压缩 Record? [y/N]: ").lower() == "y":
+            task_compress(
+                session, Path(parts[0].split("|")[3].split()[0]), config
+            )
+        for item in parts:
+            _, tag_dt, tag, paths = item.split("|")
+            tag_dt = datetime.strptime(tag_dt, "%Y-%m-%d %H:%M:%S")
+            sub_paths = paths.split()
+            print(f"\n>>> 正在处理: {tag} {tag_dt}")
+            for p in sub_paths:
+                task_slice(
+                    session,
+                    Path(p),
+                    ui["lb"],
+                    ui["lf"],
+                    config,
+                    tag_dt)
+        task_download(session)
+        if input("\n是否立即回播数据? [y/N]: ").lower() == "y":
+            task_player_workflow(session)
+    except Exception as e:
+        logging.error(f"全流程执行失败: {e}")
+        logging.debug(traceback.format_exc())
+        sys.exit(1)
 
 def task_player_workflow(session: AppSession):
     while True:
@@ -344,11 +296,12 @@ def task_player_workflow(session: AppSession):
             return
 
         # 1. 第一级选择：Tag
-        print(f"\n{' ID ':<4} | {' Vehicle ':<12} | {' Tag Message '}")
+        print(
+            f"\n{' ID ':<4} | {' Vehicle ':<10} | {' Time ':<20} | {' Tag Message '}"
+        )
         print("-" * 65)
         for i, entry in enumerate(library, 1):
-            print(f" {i:<4} | {entry['vehicle']:<12} | {entry['tag']}")
-
+            print(f" {i:<4} | {entry['vehicle']:<10} | {entry['time']:<20} | {entry['tag']}")
         tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
         if not tag_idx:
             return
@@ -467,14 +420,13 @@ if __name__ == "__main__":
         main_menu()
     except KeyboardInterrupt:
         sys.exit(0)
-    # except subprocess.CalledProcessError as e:
-    #     logging.error(
-    #         f"命令执行失败: {' '.join(e.cmd if isinstance(e.cmd, list) else [e.cmd])}"
-    #     )
-    #     sys.exit(1)
-    # except Exception as e:
-    #     print(f"\n\033[1;31m[CRITICAL] 发生内部程序错误: {e}\033[0m")
-    #     print(f"详情请查看日志文件。")
-    #     logging.error("--- 捕获到未处理的 Python 异常堆栈 ---")
-    #     logging.exception(e)
-    #     sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        logging.error(
+            f"命令执行失败: {' '.join(e.cmd if isinstance(e.cmd, list) else [e.cmd])}"
+        )
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n\033[1;31m[CRITICAL] 发生内部程序错误: {e}\033[0m")
+        logging.debug("--- 捕获到未处理的 Python 异常堆栈 ---")
+        logging.debug(e)
+        sys.exit(1)

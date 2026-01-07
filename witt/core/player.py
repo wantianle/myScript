@@ -1,3 +1,4 @@
+import re
 import json
 import logging
 from pathlib import Path
@@ -36,13 +37,17 @@ class RecordPlayer:
         扫描下载目录结构，构建结构化本地库
         """
         library_map = {}
-        if not self.dest_root.exists():
-            return []
 
         for soc_dir in self.dest_root.rglob("*soc*"):
-            if not soc_dir.is_dir():
-                continue
+            if not soc_dir.is_dir(): continue
             tag_dir = soc_dir.parent
+            readme_path = tag_dir / "README.md"
+            tag_time = "Unknown Time"
+            if readme_path.exists():
+                content = readme_path.read_text(encoding="utf-8")
+                match = re.search(r"- \*\*tag：\*\* ([\d-]+\s[\d:]+)", content)
+                if match:
+                    tag_time = match.group(1)
             date_dir = tag_dir.parent
             vehicle_dir = date_dir.parent
             records = [
@@ -54,12 +59,14 @@ class RecordPlayer:
             if tag_name not in library_map:
                 library_map[tag_name] = {
                     "tag": tag_name,
+                    "time": tag_time,
                     "vehicle": vehicle_dir.name,
                     "date": date_dir.name,
                     "socs": {},
                 }
             library_map[tag_name]["socs"][soc_dir.name] = sorted(records)
         library_list = list(library_map.values())
+        library_list.sort(key=lambda x: x["time"])
         self.library_file.write_text(
             json.dumps(library_list, indent=4, ensure_ascii=False)
         )

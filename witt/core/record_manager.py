@@ -42,6 +42,9 @@ class RecordManager:
                 "channels": self._extract_channels(stdout),
             }
         except Exception as e:
+            if "No such container" in str(e):
+                logging.error(f"Docker 容器未运行，请先用任意版本进行 5.[环境同步]...")
+                raise e
             logging.error(f"解析 Record 元数据失败 [Path: {docker_path}]: {e}")
             return {"begin": None, "end": None, "duration": None, "channels": []}
 
@@ -108,7 +111,7 @@ class RecordManager:
             "Parse section message failed",
             "read chunk body section fail",
             "not a valid record file",
-            "header invalid"
+            "header invalid",
         ]
         try:
             self.executor.execute(cmd)
@@ -116,8 +119,7 @@ class RecordManager:
         except RuntimeError as e:
             err_msg = str(e)
             if any(sig in err_msg for sig in CORRUPT_SIGNATURES):
-                logging.warning(f"跳过损坏文件: {Path(host_in).name}")
-                logging.debug(f"损坏细节: {err_msg}")
+                logging.warning(f"文件损坏(已跳过): {Path(host_in).name}")
                 return False
-            logging.error(f"切片过程中发生不可恢复的系统错误: {err_msg}")
+            logging.error(f"发生未知错误: {err_msg}")
             raise e

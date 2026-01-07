@@ -63,13 +63,16 @@ class RecordDownloader:
         """解析 find_record.sh 生成的 manifest.list"""
         tasks = []
         for line in self.ctx.manifest_path.read_text(encoding="utf-8").splitlines():
-            # 格式: Time|Msg|Files
+            # 格式: ID|Time|Msg|Files
             parts = line.strip().split('|')
-            tasks.append({
-                "time": parts[0],
-                "name": parts[1],
-                "files": parts[2].split()
-            })
+            tasks.append(
+                {
+                    "id": parts[0],
+                    "time": parts[1],
+                    "name": parts[2],
+                    "files": parts[3].split(),
+                }
+            )
         return tasks
 
     def download_tasks(self):
@@ -105,9 +108,14 @@ class RecordDownloader:
             processed_bytes = 0
 
             for task, task_size, files in task_details:
-                safe_name = self._sanitize_name(task['name'])
-                soc_name = self.config["env"]["soc"]
-                save_dir = self.dest_root / self.ctx.vehicle / self.ctx.target_date / safe_name / soc_name
+                folder_name = f"{int(task['id']):02d}_{self._sanitize_name(task['name'])}"
+                save_dir = (
+                    self.dest_root
+                    / self.ctx.vehicle
+                    / self.ctx.target_date
+                    / folder_name
+                    / self.config["env"]["soc"]
+                )
                 save_dir.mkdir(parents=True, exist_ok=True)
 
                 current_task_filenames = [Path(f[0]).name for f in files]
@@ -131,7 +139,7 @@ class RecordDownloader:
                         current_f = dest_file.stat().st_size if dest_file.exists() else 0
                         overall_ratio = (processed_bytes + current_f) / total_bytes
                         bar(min(overall_ratio, 1.0))
-                        bar.text = f"-> Copying: {dest_file.name} ({(current_f/(1024*1024)):.1f}MB)"
+                        bar.text = f"-> Copying: {folder_name[:15]}.. | {dest_file.name[-15:]} ({(current_f/(1024*1024)):.1f}MB)"
                         time.sleep(0.2)
                     processed_bytes += f_size
                     bar(min(processed_bytes / total_bytes, 1.0))
