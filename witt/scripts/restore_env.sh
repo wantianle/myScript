@@ -2,116 +2,60 @@
 
 set -Eeuo pipefail
 LOG_SHOW_TIME=0
-source "${BASH_SOURCE[0]%/*}/../utils/logger.sh"
+UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
+source "$UTILS_DIR/logger.sh"
 
-while getopts "v:t:p:h" opt; do
+while getopts "v:t:p:" opt; do
     case $opt in
         v) vehicle="$OPTARG" ;;
         t) target_date="$OPTARG" ;;
-        p) version_path="$OPTARG" ;;
+        p) version="$OPTARG" ;;
         *) exit 0 ;;
     esac
 done
 
-# 检查环境依赖
 if ! command -v jq >/dev/null 2>&1; then
     log_info "jq 未安装，尝试安装..."
     sudo apt-get update && sudo apt-get install -y jq
 fi
 
+if ! command -v vmc >/dev/null 2>&1; then
+    log_info "本地未安装 'vmc' 工具，现在尝试安装..."
+    bash "${BASH_SOURCE[0]%/*}/vmc_deploy.sh"
+    source ~/.bashrc
+fi
+
 if [ ! -f "$VMC_SH" ]; then
-    log_error "本地 mdrive 配置文件未找到: $VMC_SH"
-    exit 1
+    log_error "配置文件未找到: $VMC_SH, 现在尝试创建..."
+    mkdir -p "$MDRIVE_ROOT"
+    cp "$UTILS_DIR/vmc.sh_for_tester" "$MDRIVE_ROOT/vmc.sh"
+    chmod +x "$MDRIVE_ROOT/vmc.sh"
 fi
 
-if [ ! -d "$NAS_ROOT" ] && [ -z $version_path ] ; then
-    log_error "NAS 目录不存在: $NAS_ROOT"
-    echo "请先挂载 NAS: sudo mount -t cifs //hfs.minieye.tech/ad-data /media/nas -o username=工号,password=密码,uid=$(id -u)"
-    exit 1
-fi
-
-# ================= 1: 寻找 version.json =================
-find_version_path() {
-    if [ -n "$version_path" ]; then
-        if [ -f "$version_path" ]; then
-            log_info "使用指定的 version.json 路径: $version_path"
-            return 0
-        else
-            log_error "指定的 version.json 文件不存在: $version_path"
-            exit 1
-        fi
-    fi
-
-    if [ -z "$targer_date" ]; then
-        log_error "必须提供时间戳 (-t) 或 version.json 直接路径 (-p)"
-        usage
-        exit 1
-    fi
-
-    local yyyy=${targer_date:0:4}
-    local yyyymmdd=${targer_date:0:8}
-    local HHMM=${targer_date:9:4}
-    local search_dir="$NAS_ROOT/$vehicle/$yyyy"
-
-    # 兼容 soc1 后缀目录
-    local day_dir_soc1=$(ls -d "${search_dir}/${yyyymmdd}"*_soc1 2>/dev/null | head -n 1)
-    local day_dir_normal="${search_dir}/${yyyymmdd}"
-    local target_day_dir=""
-
-    if [ -d "$day_dir_soc1" ]; then
-        target_day_dir="$day_dir_soc1"
-    elif [ -d "$day_dir_normal" ]; then
-        target_day_dir="$day_dir_normal"
+find_version() {
+    json_content=""
+    local input_data="$version"
+    if [[ "$input_data" =~ ^\{.*\}$ ]]; then
+        log_info "使用指定的 JSON 数据..."
+        json_content="$input_data"
     else
-        log_error "未找到日期目录: $search_dir 下没有 ${yyyymmdd} 或 ${yyyymmdd}_soc1"
+        log_info "使用指定的 version.json 文件: $input_data"
+        json_content=$(cat "$input_data/version.json")
+    fi
+    if [ -n "$json_content" ]; then
+        mdrive_ver=$(echo "$json_content" | jq -r .mdrive)
+        conf_ver=$(echo "$json_content" | jq -r .mdrive_conf)
+        model_ver=$(echo "$json_content" | jq -r .mdrive_model)
+        map_ver=$(echo "$json_content" | jq -r .mdrive_map)
+        vehicle_model_code=$(echo "$conf_ver" | cut -d'.' -f1)
+    else
+        log_error "未能获取有效的 JSON 内容"
         exit 1
     fi
-
-    # 寻找 bag 目录
-    local bag_root_dir=""
-    if [ -d "$target_day_dir/bag" ]; then
-        bag_root_dir="$target_day_dir/bag"
-    elif [ -d "$target_day_dir/*/bag" ]; then
-        # 处理可能的中间层级
-        bag_root_dir=$(ls -d $target_day_dir/*/bag | head -n 1)
-    fi
-
-    if [ -z "$bag_root_dir" ]; then
-        log_error "在 $target_day_dir 下未找到 bag 目录"
-        exit 1
-    fi
-
-    # 精确查找 soc1 且包含时间点的 record 文件
-    log_info "正在搜索 $bag_root_dir ..."
-    # 查找文件名包含 HHMM 的 .record 文件
-    local record_file=$(find "$bag_root_dir" -type f -path "*soc1*" -name "*.record.*${HHMM}*" | head -n 1)
-
-    if [ -z "$record_file" ]; then
-        log_error "未找到时间点 $HHMM 附近的 Record 文件"
-        exit 1
-    fi
-
-    local record_dir=$(dirname "$record_file")
-    version_path="$record_dir/version.json"
-
-    if [ ! -f "$version_path" ]; then
-        log_error "找到录制目录，但缺少 version.json: $version_path"
-        exit 1
-    fi
-
-    log_info "定位成功: $version_path"
-    log_info "对应 Record: $record_file"
 }
 
-# ================= 2: 解析显示 Git 版本 =================
-mdrive_ver=$(jq -r .mdrive "$version_path")
-conf_ver=$(jq -r .mdrive_conf "$version_path")
-model_ver=$(jq -r .mdrive_model "$version_path")
-map_ver=$(jq -r .mdrive_map "$version_path")
-vehicle_model_code=$(echo "$conf_ver" | cut -d'.' -f1)
-
 show_git_info() {
-    log_step "===== 1. 解析版本信息 ====="
+    log_info "===== 1. 解析版本信息 ====="
     show_info() {
         vmc search --name "$1" --version "$2" --verbose 2>/dev/null \
         | awk '
@@ -143,33 +87,22 @@ show_git_info() {
             }
         '
     }
-
-    jq . "$version_path"
-
-    # 使用 vmc 反查 Git 信息
-    if command -v vmc >/dev/null 2>&1; then
-        log_info "Git 详细版本信息"
-        show_info mdrive $mdrive_ver
-        show_info mdrive_conf $conf_ver
-        show_info mdrive_map $map_ver
-        show_info mdrive_model $model_ver
-    else
-        log_info "本地未安装 'vmc' 工具!"
-    fi
+    echo "$json_content" | jq .
+    log_info "Git 详细版本信息"
+    show_info mdrive $mdrive_ver
+    show_info mdrive_conf $conf_ver
+    show_info mdrive_map $map_ver
+    show_info mdrive_model $model_ver
 }
 
-# ================= 3: 同步本地环境配置文件 =================
 sync_local_env() {
-    log_step "===== 2. 同步本地环境 ($VMC_SH) ====="
-
-    local cur_vehicle_model=$(grep '^MDRIVE_vehicle_MODEL=' "$VMC_SH" | cut -d '"' -f2)
-    local cur_vehicle=$(grep '^MDRIVE_vehicle=' "$VMC_SH" | cut -d '"' -f2)
+    log_info "===== 2. 同步本地环境 ($VMC_SH) ====="
+    local cur_vehicle_model=$(grep '^MDRIVE_VEHICLE_MODEL=' "$VMC_SH" | cut -d '"' -f2)
+    local cur_vehicle=$(grep '^MDRIVE_VEHICLE_NAME=' "$VMC_SH" | cut -d '"' -f2)
     local cur_mdrive_ver=$(grep '^MDRIVE_VERSION=' "$VMC_SH" | cut -d '=' -f2)
     local cur_conf_ver=$(grep '^MDRIVE_CONF_VERSION=' "$VMC_SH" | cut -d '=' -f2)
     local cur_model_ver=$(grep '^MDRIVE_MODEL_VERSION=' "$VMC_SH" | cut -d '=' -f2)
     local cur_map_ver=$(grep '^MDRIVE_MAP_VERSION=' "$VMC_SH" | cut -d '=' -f2)
-
-    # 判断是否全部一致
     if [ "$cur_vehicle_model" = "$vehicle_model_code" ] &&
        [ "$cur_vehicle" = "$vehicle" ] &&
        [ "$cur_mdrive_ver" = "$mdrive_ver" ] &&
@@ -179,40 +112,26 @@ sync_local_env() {
         log_info "vmc.sh 已是最新状态，无需更新"
         return
     fi
-
-    # 只有不相等时才更新
-    sed -i -e "/^MDRIVE_vehicle_MODEL/c\MDRIVE_vehicle_MODEL=\"$vehicle_model_code\"" \
-        -e "/^MDRIVE_vehicle/c\MDRIVE_vehicle=\"$vehicle\"" \
+    sed -i -e "/^MDRIVE_VEHICLE_MODEL/c\MDRIVE_VEHICLE_MODEL=\"$vehicle_model_code\"" \
+        -e "/^MDRIVE_VEHICLE_NAME/c\MDRIVE_VEHICLE_NAME=\"$vehicle\"" \
         -e "/^MDRIVE_VERSION/c\MDRIVE_VERSION=$mdrive_ver" \
         -e "/^MDRIVE_CONF_VERSION/c\MDRIVE_CONF_VERSION=$conf_ver" \
         -e "/^MDRIVE_MODEL_VERSION/c\MDRIVE_MODEL_VERSION=$model_ver" \
         -e "/^MDRIVE_MAP_VERSION/c\MDRIVE_MAP_VERSION=$map_ver" "$VMC_SH"
-
     source "$VMC_SH"
     log_info "vmc.sh 已更新"
 }
 
-
-# ================= 4: 进 Docker =================
 enter_docker() {
 
-    # 判断容器是否正在运行
     if [ -n "$(docker ps -q -f "name=^/${CONTAINER}$")" ]; then
-        log_warn "容器 [${CONTAINER}] 已存在且正在运行，跳过启动"
+        log_info "容器 [${CONTAINER}] 已存在且正在运行，跳过启动..."
     else
-        log_warn "容器 [${CONTAINER}] 不存在或未运行，准备启动"
-
+        log_warn "容器 [${CONTAINER}] 不存在或未运行，尝试启动..."
         START_SCRIPT="${MDRIVE_ROOT}/mdrive/docker/dev_start.sh"
-
         if [ ! -f "$START_SCRIPT" ]; then
-            log_warn "启动脚本不存在: $START_SCRIPT, 尝试重新配置环境..."
-
+            log_warn "启动脚本不存在: $START_SCRIPT, 请检查${MDRIVE_ROOT}是否有 mdrive, 尝试重新配置环境..."
             source "$VMC_SH"
-
-            if [ ! -f "$START_SCRIPT" ]; then
-                log_error "重新配置后仍未找到启动脚本"
-                return 1
-            fi
         fi
         bash "$START_SCRIPT" --remove
     fi
@@ -235,7 +154,7 @@ enter_docker() {
 }
 
 # ================= 主流程 =================
-find_version_path
+find_version
 show_git_info
 sync_local_env
 enter_docker

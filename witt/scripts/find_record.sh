@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 LOG_SHOW_TIME=0
 source "${BASH_SOURCE[0]%/*}/../utils/logger.sh"
-while getopts "v:t:l:s:b:f:h" opt; do
+while getopts "v:t:l:s:b:f:" opt; do
     case $opt in
         v) vehicle="$OPTARG" ;;
         t) target_date="$OPTARG" ;;
@@ -11,7 +11,6 @@ while getopts "v:t:l:s:b:f:h" opt; do
         s) soc="$OPTARG" ;;
         b) lookback="$OPTARG" ;;
         f) lookfront="$OPTARG" ;;
-        # h) echo "" ;;
         *) exit 1 ;;
     esac
 done
@@ -99,11 +98,11 @@ for tag_file in $tag_list; do
             is_error=0
 
             yyyy="" month="" dd="" hh="" mm="" ss=""
-            # 模式 1: 2025/12/23 14:27:27
+            # 2025/12/23 14:27:27
             if [[ $msg =~ ([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})\ ([0-9]{1,2}):([0-9]{2}):([0-9]{2}) ]]; then
                 yyyy=${BASH_REMATCH[1]}; month=${BASH_REMATCH[2]}; dd=${BASH_REMATCH[3]}
                 hh=${BASH_REMATCH[4]}; mm=${BASH_REMATCH[5]}; ss=${BASH_REMATCH[6]}
-            # 模式 2: 12/23/2025, 2:27:27 PM
+            # 12/23/2025, 2:27:27 PM
             elif [[ $msg =~ ([0-9]{1,2})/([0-9]{1,2})/([0-9]{4}),\ ([0-9]{1,2}):([0-9]{2}):([0-9]{2})\ (AM|PM) ]]; then
                 month=${BASH_REMATCH[1]}; dd=${BASH_REMATCH[2]}; yyyy=${BASH_REMATCH[3]}
                 hh=${BASH_REMATCH[4]}; mm=${BASH_REMATCH[5]}; ss=${BASH_REMATCH[6]}; ampm=${BASH_REMATCH[7]}
@@ -165,7 +164,7 @@ for tag_file in $tag_list; do
                 continue
             fi
             tag_counter=$((tag_counter + 1))
-            echo -e "${GREEN}[$tag_counter]$msg${NC}"
+            echo -e "${GREEN}[$tag_counter] $tag : $formatted_time${NC}"
             read -r -a file_array <<< "${result}"
             dir="${file_array[0]%/*}"
             files=""

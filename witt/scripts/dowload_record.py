@@ -123,7 +123,6 @@ class RecordDownloader:
                         continue
 
                     # 启动拷贝进程
-
                     cmd = ["scp", "-q", f"{self.remote_user}@{self.remote_ip}:{src_path}", str(dest_file)] if self.mode == 3 else ["cp", src_path, str(dest_file)]
 
                     proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)

@@ -11,8 +11,7 @@ class TaskExecutor:
         paths_cfg = self.ctx.config.get("paths", {})
         rel_scripts_path = paths_cfg.get("scripts_dir", "scripts")
         self.scripts_dir = (project_root / rel_scripts_path).resolve()
-
-        logging.debug(f"TaskExecutor initialized with scripts_dir: {self.scripts_dir}")
+        # logging.debug(f"TaskExecutor initialized with scripts_dir: {self.scripts_dir}")
 
     def _run_script(self, script_name: str, args: List[str]):
         """
@@ -31,7 +30,7 @@ class TaskExecutor:
 
         cmd = bash_base + [str(script_path)] + string_args
 
-        logging.info(f"Running script: {script_name} | Command: {' '.join(cmd)}")
+        # logging.info(f"Running script: {script_name} | Command: {' '.join(cmd)}")
         try:
             return subprocess.run(cmd, env=env_vars, check=True)
         except subprocess.CalledProcessError as e:
@@ -67,20 +66,6 @@ class TaskExecutor:
             self.ctx.work_dir,
         ]
         return self._run_script("download_record.sh", args)
-
-    def find_version_json(self, search_path: Union[str, Path]) -> Optional[str]:
-        """
-        在指定目录下递归寻找第一个出现的 version.json
-        """
-        search_root = Path(search_path)
-        logging.debug(f"正在搜索版本信息: {search_root}")
-        # rglob 返回一个生成器，next() 获取第一个匹配项，找不到返回 None
-        try:
-            match = next(search_root.rglob("version.json"))
-            return str(match.absolute())
-        except StopIteration:
-            logging.warning(f"目录中未发现 version.json: {search_path}")
-            return None
 
     def run_restore_env(self, version_json: str):
         """

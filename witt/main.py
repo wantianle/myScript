@@ -56,6 +56,8 @@ def bootstrap():
 
 
 import yaml
+import os
+import json
 import logging
 import copy
 import traceback
@@ -98,6 +100,26 @@ def extract_manifest(manifest: Path) -> list[str]:
     return parts
 
 
+def get_json_input():
+    print("请粘贴 JSON 数据或输入文件路径 (完成后按 Ctrl+D 结束):")
+    try:
+        raw_input = sys.stdin.read().strip()
+        if not raw_input:
+            print("错误: 输入内容为空")
+            return None
+        if os.path.isdir(raw_input):
+            return raw_input
+        data = json.dumps(json.loads(raw_input))
+        return data
+
+    except json.JSONDecodeError as e:
+        print(f"JSON 解析错误: 请检查粘贴的内容是否完整。具体错误: {e}")
+        return None
+    except Exception as e:
+        print(f"发生意外错误: {e}")
+        return None
+
+
 # ==================== 交互处理 ====================
 
 class CLIHandler:
@@ -124,6 +146,7 @@ class CLIHandler:
             input(f"目标 SOC 文件夹 (默认 {config['env']['soc']}): ").strip()
             or config["env"]["soc"]
         )
+        config["env"]["soc"] = soc
         config["host"]["dest_root"] = (
             input(f"本地导出路径 (默认 {config['host']['dest_root']}): ").strip()
             or config["host"]["dest_root"]
@@ -240,13 +263,11 @@ def task_download(session):
     downloader.download_tasks()
 
 
-def task_sync(executor, tag_dir: Path):
-    v_json = executor.find_version_json(str(tag_dir))
-    if v_json:
-        executor.run_restore_env(v_json)
-    else:
-        logging.warning(f"未发现版本信息: {tag_dir.name}")
-
+def task_sync(executor, input):
+    """
+    同步环境
+    """
+    executor.run_restore_env(input)
 
 # ==================== 运行时会话 ====================
 
@@ -265,10 +286,10 @@ class AppSession:
         if self.config["env"].get("mode") == 3:
             from core.ssh_adapter import SSHExecutor
             self.backend = SSHExecutor(self.config)
-            logging.info(">>> 启用【远程后端】: 直接在车机执行处理指令")
+            # logging.info(">>> 启用【远程后端】: 直接在车机执行处理指令")
         else:
             self.backend = DockerExecutor(self.config)
-            logging.info(">>> 启用【本地后端】: 在本地 Docker 执行处理指令")
+            # logging.info(">>> 启用【本地后端】: 在本地 Docker 执行处理指令")
         self.record_mgr = RecordManager(self.backend)
         self.executor = TaskExecutor(self.ctx)
 
@@ -281,7 +302,6 @@ def run_full_pipeline():
     target_date, vehicle = CLIHandler.get_basic_info(config)
     ui = CLIHandler.get_workflow_params(config, target_date, vehicle)
     session = AppSession(config, target_date, vehicle, ui)
-    print("DEBUG=> ")
     task_query(session.executor, ui)
     parts = extract_manifest(session.ctx.manifest_path)
     if input("是否压缩 Record? [y/N]: ").lower() == "y":
@@ -375,7 +395,8 @@ def main_menu():
                     )
             elif choice == "5":
                 task_sync(
-                    session.executor, Path(input("version.json 所在目录: ").strip())
+                    session.executor,
+                    get_json_input(),
                 )
         elif choice == "q":
             sys.exit(0)

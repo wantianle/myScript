@@ -33,12 +33,10 @@ class TaskContext:
         """退出时的清理动作"""
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
-            # 注意：此处不能用 logging，因为退出时 logging 往往已关闭
-            print(f"\n[System] Volatile session data at {self.temp_dir} cleaned.")
+            # print(f"\n[System] Volatile session data at {self.temp_dir} cleaned.")
 
     def setup_logger(self):
         """配置日志系统：支持控制台与文件双向输出"""
-        # 格式化时间戳，避免文件名出现空格或非法字符
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file = self.log_dir / f"SNAP_{timestamp}.log"
 
