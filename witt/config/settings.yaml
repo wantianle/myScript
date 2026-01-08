@@ -14,7 +14,7 @@ remote:
 
 # 宿主机路径管理
 host:
-  nas_root: "/media/nas/04.mdrive3/01.road_test"
+  nas_root: "/media/nas/00.raw"
   dest_root: "/media/road_test"
   vmc_sh_path: "/home/mini/project/vmc.sh"
   mdrive_root: "/home/mini/project"
@@ -30,8 +30,8 @@ docker:
 
 # 业务逻辑配置
 logic:
-  lookback: 20
-  lookfront: 10
+  before: 20
+  after: 10
   blacklist:
 
 paths:

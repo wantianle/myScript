@@ -71,5 +71,5 @@ class TaskExecutor:
         """
         执行环境同步还原
         """
-        args = ["-t", self.ctx.target_date, "-v", self.ctx.vehicle, "-p", version_json]
+        args = ["-v", self.ctx.vehicle, "-p", version_json]
         return self._run_script("restore_env.sh", args)

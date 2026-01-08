@@ -99,45 +99,47 @@ class CLIHandler:
 
     @staticmethod
     def get_workflow_params(config, target_date, vehicle):
-        soc = (
-            input(f"目标 SOC 文件夹 (默认 {config['env']['soc']}): ").strip()
-            or config["env"]["soc"]
-        )
+        inx = input("输入 1 或 2 选择 soc (默认 soc1): ").strip()
+        soc = (inx in ("1", "2") and f"soc{inx}") or config["env"]["soc"]
         config["env"]["soc"] = soc
         config["host"]["dest_root"] = (
-            input(f"本地导出路径 (仅限/media下 默认 {config['host']['dest_root']}): ").strip()
+            input(
+                f"本地导出路径 (仅限/media下 默认 {config['host']['dest_root']}): "
+            ).strip()
             or config["host"]["dest_root"]
         )
 
         print("\n查询模式: [1]本地(默认) [2]NAS [3]远程")
         choice = input("选择: ").strip() or "1"
         if choice == "3":
+            print("-" * 50)
             print(
-                "远程模式需要注意:\n  1. 生成密钥一路回车即可: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test\n  2. 配置 SSH 免密登录: ssh-copy-id -i ~/.ssh/id_ed25519_test remote_user@remote_ip"
+                "远程 ssh 模式需要注意:\n  1. 第一次使用需要生成密钥(一路回车即可)并且配置 SSH 免密登录:\n     ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test\n     ssh-copy-id -i ~/.ssh/id_ed25519_test.pub nvdia@192.168.10.2\n  2. 尽量使用有线连接以保证传输稳定，登录失败时需要重置指纹:\n     ssh-keygen -f ~/.ssh/known_hosts -R 192.168.10.2"
             )
-            time.sleep(2)
+            print("-" * 50)
         elif choice == "2":
+            print("-" * 50)
             print(
-                "NAS模式需要注意:\n  1. 请确保本机已挂载NAS路径到/media/nas\n  2. 谨慎执行查询以外的操作，因为NAS路径可能是只读的"
+                "NAS模式需要注意:\n  1. 请确保本机已挂载NAS路径到/media/nas\n  2. 谨慎执行查询以外的操作\n  3. NAS 路径仅支持 /media/nas/00.raw/<YYYYMMDD>/<vehicle>/"
             )
-            time.sleep(2)
+            print("-" * 50)
         elif choice != "2" and choice != "3":
             config["host"]["local_path"] = (
                 input("输入本地数据根路径(仅限/media下，默认/media/data): ").strip()
                 or config["host"]["local_path"]
             )
         config["env"]["mode"] = int(choice)
-        lb = (
+        bf = (
             input(
-                f"tag 时间点之前多少秒 (支持负数，默认 {config['logic']['lookback']}): "
+                f"查询/切片 tag 之前多少秒(before 支持负数 默认 {config['logic']['before']}): "
             ).strip()
-            or config["logic"]["lookback"]
+            or config["logic"]["before"]
         )
-        lf = (
+        af = (
             input(
-                f"tag 时间点之后多少秒 (支持负数，默认 {config['logic']['lookfront']}): "
+                f"查询/切片 tag 之后多少秒(after 支持负数且|after|>|before| 默认 {config['logic']['after']}): "
             ).strip()
-            or config["logic"]["lookfront"]
+            or config["logic"]["after"]
         )
         # config["env"]["debug"] = (
         #     input("bash 调试模式 [y/N default: n]: ").strip().lower() == "y"
@@ -146,8 +148,8 @@ class CLIHandler:
             "target_date": target_date,
             "vehicle": vehicle,
             "soc": soc,
-            "lb": int(lb),
-            "lf": int(lf),
+            "bf": int(bf),
+            "af": int(af),
         }
 
 
@@ -161,9 +163,9 @@ def task_query(executor, ui):
         "-s",
         ui["soc"],
         "-b",
-        str(ui["lb"]),
+        str(ui["bf"]),
         "-f",
-        str(ui["lf"]),
+        str(ui["af"]),
     ]
     executor.run_find_record(find_args)
 
@@ -212,11 +214,11 @@ def task_compress(session, host_path: Path, config):
     logging.info(f">>> 执行数据压缩: {new_blacklist}")
 
 
-def task_slice(session, input_path: Path, lb, lf, config, tag_dt):
+def task_slice(session, input_path: Path, bf, af, config, tag_dt):
     """时间截取切片"""
     session.ctx.setup_logger()
-    tag_start = tag_dt - timedelta(seconds=lb)
-    tag_end = tag_dt + timedelta(seconds=lf)
+    tag_start = tag_dt - timedelta(seconds=bf)
+    tag_end = tag_dt + timedelta(seconds=af)
 
     output_path = f"{input_path}.lean"
     info = session.record_mgr.get_info(str(input_path))
@@ -232,7 +234,6 @@ def task_slice(session, input_path: Path, lb, lf, config, tag_dt):
                 config["logic"]["blacklist"],
             )
             if not success:
-                # 如果是因为损坏跳过的，可以在这里记录到 summary 报告中
                 print(f">>> [Skip] 文件 {input_path} 已损坏，自动跳过。")
 
 
@@ -283,17 +284,17 @@ def run_full_pipeline():
     try:
         task_query(session.executor, ui)
         parts = extract_manifest(session.ctx.manifest_path)
-        if input("是否压缩 Record? [y/N]: ").lower() == "y":
+        if input("是否压缩 Record? [y/N] (回车跳过): ").lower() == "y":
             task_compress(session, Path(parts[0].split("|")[3].split()[0]), config)
         for item in parts:
-            _, tag_dt, tag, paths = item.split("|")
+            tag_dt, tag, paths = item.split("|")
             tag_dt = datetime.strptime(tag_dt, "%Y-%m-%d %H:%M:%S")
             sub_paths = paths.split()
             print(f"\n>>> 正在处理: {tag} {tag_dt}")
             for p in sub_paths:
-                task_slice(session, Path(p), ui["lb"], ui["lf"], config, tag_dt)
+                task_slice(session, Path(p), ui["bf"], ui["af"], config, tag_dt)
         task_download(session)
-        if input("\n是否立即回播数据? [y/N]: ").lower() == "y":
+        if input("\n是否立即回播数据? [y/N] (回车跳过): ").lower() == "y":
             task_player_workflow(session, config)
     except Exception as e:
         logging.error(f"全流程执行失败: {e}")
@@ -321,24 +322,24 @@ def task_player_workflow(session: AppSession, config: dict):
                 print(
                     f" {count:<4} | {entry['vehicle']:<10} | {entry['time']:<20} | {entry['tag']}"
                 )
-                count += 1
+            count += 1
         tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
         if not tag_idx:
             return
         selected_tag = library[int(tag_idx) - 1]
 
         available_socs = list(selected_tag["socs"].keys())
-        print(f"\n当前 Tag 发现以下 SOC 数据:")
+        print(f"\n当前 Tag 发现以下 soc 数据:")
         for i, s in enumerate(available_socs, 1):
             print(f"  [{i}] {s}")
 
-        soc_idx = input("请选择 SOC 序号 (默认 1): ").strip() or "1"
+        soc_idx = input("请选择 soc 序号 (默认 1): ").strip() or "1"
         soc_key = available_socs[int(soc_idx) - 1]
         target_records = selected_tag["socs"][soc_key]
 
         print(f"\n即将播放 {soc_key} 数据...")
         print("输入播放范围 (例如 '10-30' '5' '0')")
-        range_in = input("输入秒数范围 (0 代表全量播放): ").strip() or "0"
+        range_in = input("输入秒数范围 (‘0’全量播放 默认全量): ").strip() or "0"
 
         start_s, end_s = 0, 0
         if range_in:
@@ -388,7 +389,7 @@ def main_menu():
                 session = AppSession(config, target_date, vehicle, ui)
                 task_query(session.executor, ui)
             elif choice == "3":
-                target_path = Path(input("需要压缩的 record 文件路径: ").strip())
+                target_path = Path(input("需要压缩的 record 文件完整路径: ").strip())
                 info = session.record_mgr.get_info(str(target_path))
                 task_compress(
                     session,
@@ -405,25 +406,29 @@ def main_menu():
                     tag_dt,
                 )
             elif choice == "4":
-                lb = (
-                    input(f"tag 时间点之前多少秒 (默认 {config['logic']['lookback']}): ").strip()
-                    or config["logic"]["lookback"]
-                )
-                lf = (
+                bf = (
                     input(
-                        f"tag 时间点之前多少秒 (默认 {config['logic']['lookfront']}): "
+                        f"查询/切片 tag 之前多少秒 (before 支持负数 默认 {config['logic']['before']}): "
                     ).strip()
-                    or config["logic"]["lookfront"]
+                    or config["logic"]["before"]
                 )
-                target = Path(input("需要切片的 record 文件所在目录: ").strip())
+                af = (
+                    input(
+                        f"查询/切片 tag 之后多少秒 (after 支持负数且|after|>|before| 默认 {config['logic']['after']}): "
+                    ).strip()
+                    or config["logic"]["after"]
+                )
+                target = Path(input("需要切片的 record 文件的目录路径: ").strip())
                 time_raw = input("基准时间 (HHMMSS): ").strip()
-                tag_dt = datetime.strptime(f"{target_date}{time_raw}", "%Y%m%d%H%M%S")
+                tag_dt = datetime.strptime(
+                    f"{target_date[:8]}{time_raw}", "%Y%m%d%H%M%S"
+                )
                 for f in target.glob("*.record*"):
                     task_slice(
                         session,
                         f,
-                        lb,
-                        lf,
+                        int(bf),
+                        int(af),
                         config,
                         tag_dt,
                     )
@@ -435,10 +440,15 @@ def main_menu():
             elif choice == "6":
                 print("\n>>> 进入数据回放菜单...")
                 print(
-                    "注意：若另有数据路径, 路径结构应为 '<data_root>/<vehicle>/<date>/<tag>/<soc>'\n例如: '/media/road_data/XZB600011/20260101/急刹/soc1/xxxx.record.xxxx'\n"
+                    "注意：若另有本地数据路径, 路径结构应为 '<data_root>/<vehicle>/<date>/<tag>/<soc>'\n例如: '/media/road_data/XZB600011/20260101/急刹/soc1/xxxx.record.xxxx'\n"
                 )
-                config["host"]["dest_root"] = input("请输入本地数据根目录(仅限/media下 默认 /media/road_data): ").strip() or config["host"]["dest_root"]
-                task_player_workflow(session,config)
+                config["host"]["dest_root"] = (
+                    input(
+                        "请输入本地数据根目录(仅限/media下 默认 /media/road_data): "
+                    ).strip()
+                    or config["host"]["dest_root"]
+                )
+                task_player_workflow(session, config)
         elif choice == "q":
             sys.exit(0)
 

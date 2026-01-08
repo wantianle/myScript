@@ -41,15 +41,15 @@ class RecordPlayer:
         for soc_dir in self.dest_root.rglob("*soc*"):
             if not soc_dir.is_dir(): continue
             tag_dir = soc_dir.parent
-            readme_path = tag_dir / "README.md"
+            readme_path = soc_dir / "README.md"
             tag_time = "Unknown Time"
             if readme_path.exists():
                 content = readme_path.read_text(encoding="utf-8")
                 match = re.search(r"- \*\*tag：\*\* ([\d-]+\s[\d:]+)", content)
                 if match:
                     tag_time = match.group(1)
-            date_dir = tag_dir.parent
-            vehicle_dir = date_dir.parent
+            vehicle_dir = tag_dir.parent
+            date_dir = vehicle_dir.parent
             record_details = []
             for f in soc_dir.iterdir():
                 if ".record" in f.name:

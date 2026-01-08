@@ -47,7 +47,9 @@ class RecordManager:
                 logging.error(f"Docker 容器未运行，请先用任意版本进行 5.[环境同步]...")
                 raise e
             elif "open record file error" in str(e):
-                logging.error(f"Record 文件不存在或无权限访问, 请查看文件路径及权限: ls -l {docker_path}\n如果存在权限问题，请确保 Docker 容器对该文件有读取权限: \nsudo chown -R $USER:$USER /your_data_root && sudo chmod 775 -R /your_data_path")
+                logging.warning(
+                    f"Record 文件不存在或无权限访问, 请查看文件路径及权限: \n    ls -l {docker_path}\n如果存在权限问题，请确保 Docker 容器对该文件有读取权限: \n    sudo chown -R $USER:$USER /your_data_root && sudo chmod 775 -R /your_data_path\n"
+                )
                 raise e
             logging.error(f"解析 Record 元数据失败 [Path: {docker_path}]: {e}")
             sys.exit(1)

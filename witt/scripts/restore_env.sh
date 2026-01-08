@@ -5,10 +5,9 @@ LOG_SHOW_TIME=0
 UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
 source "$UTILS_DIR/logger.sh"
 
-while getopts "v:t:p:" opt; do
+while getopts "v:p:" opt; do
     case $opt in
         v) vehicle="$OPTARG" ;;
-        t) target_date="$OPTARG" ;;
         p) version="$OPTARG" ;;
         *) exit 0 ;;
     esac
@@ -57,6 +56,9 @@ find_version() {
 show_git_info() {
     log_info "===== 1. 解析版本信息 ====="
     show_info() {
+        if [ -z "${2:-}" ]; then
+            return 0
+        fi
         vmc search --name "$1" --version "$2" --verbose 2>/dev/null \
         | awk '
             function print_block() {
@@ -123,7 +125,6 @@ sync_local_env() {
 }
 
 enter_docker() {
-
     if [ -n "$(docker ps -q -f "name=^/${CONTAINER}$")" ]; then
         log_info "容器 [${CONTAINER}] 已存在且正在运行，跳过启动..."
     else

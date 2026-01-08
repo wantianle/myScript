@@ -9,8 +9,8 @@ while getopts "v:t:l:s:b:f:" opt; do
         t) target_date="$OPTARG" ;;
         l) manifest_file="$OPTARG" ;;
         s) soc="$OPTARG" ;;
-        b) lookback="$OPTARG" ;;
-        f) lookfront="$OPTARG" ;;
+        b) before="$OPTARG" ;;
+        f) after="$OPTARG" ;;
         *) exit 1 ;;
     esac
 done
@@ -33,7 +33,7 @@ if [[ $MODE == "3" ]]; then
     }
 elif [[ $MODE == "2" ]]; then
     [[ -z $vehicle ]] && { log_error "NAS 模式缺少车辆 ID (-v)"; exit 1; }
-    data_dir="${NAS_ROOT}/${vehicle}/${target_date:0:4}/${target_date}"
+    data_dir="${NAS_ROOT}/${target_date:0:8}/${vehicle}"
     log_info "NAS 模式: $data_dir"
 else
     if [ ! -d $LOCAL_PATH ]; then
@@ -81,7 +81,6 @@ done <<< "$record_list"
 
 # ================= 处理 Tag 文件 =================
 all_tasks=()
-tag_counter=0
 [[ -z "$tag_list" ]] && { log_error "$data_dir 找不到对应的 tag 文件！"; exit 1; }
 
 for tag_file in $tag_list; do
@@ -95,8 +94,6 @@ for tag_file in $tag_list; do
         if [[ $line =~ msg:\ \"([^\"]+)\" ]]; then
             msg="${BASH_REMATCH[1]//\\n/}"
             tag="${msg%% :*}"
-
-            # --- 时间解析部分保持不变 ---
             yyyy="" month="" dd="" hh="" mm="" ss=""
             if [[ $msg =~ ([0-9]{4})/([0-9]{1,2})/([0-9]{1,2})\ ([0-9]{1,2}):([0-9]{2}):([0-9]{2}) ]]; then
                 yyyy=${BASH_REMATCH[1]}; month=${BASH_REMATCH[2]}; dd=${BASH_REMATCH[3]}
@@ -111,57 +108,47 @@ for tag_file in $tag_list; do
                     $((10#$yyyy)) $((10#$month)) $((10#$dd)) \
                     $((10#$hh)) $((10#$mm)) $((10#$ss)))
 
-             msg_seconds=$(( 10#$hh * 3600 + 10#$mm * 60 + 10#$ss ))
+            msg_seconds=$(( 10#$hh * 3600 + 10#$mm * 60 + 10#$ss ))
             msg_minutes=$(( 10#$hh * 60 + 10#$mm ))
 
-            # 秒级筛选
-            matched_files_raw=""
-            start_sec=$((msg_seconds - lookback))
-            end_sec=$((msg_seconds + lookfront))
-            start_min=$((start_sec / 60))
+            start_sec=$((msg_seconds - before))
+            end_sec=$((msg_seconds + after))
+            start_min=$(((start_sec - 120) / 60))
+            [[ $start_min -lt 0 ]] && start_min=0
             end_min=$((end_sec / 60))
 
-            matched_files_raw=""
+            matched_files=""
             for (( m=start_min; m<=end_min; m++ )); do
                 if [[ -n "${records[$m]:-}" ]]; then
-                    matched_files_raw="${matched_files_raw} ${records[$m]}"
+                    matched_files="${matched_files} ${records[$m]}"
                 fi
             done
-            # 我们需要找的是：开始时间落在 [start_sec, end_sec] 之间的文件，以及“覆盖”了 start_sec 的那个前序文件
-            matched_files=""
-            for item in $matched_files_raw; do
-                f_sec="${item%%|*}"
-                f_path="${item#*|}"
-                if (( f_sec <= end_sec )); then
-                    matched_files="${matched_files} ${f_sec}|${f_path}"
-                fi
-            done
-            # 精确过滤
+           # 精确筛选
             if [[ -n "$matched_files" ]]; then
-                sorted_files=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
-                # 过滤：保留所有 f_sec >= start_sec 的文件
-                # 加上“最后一个 f_sec < start_sec”的文件（因为它覆盖了起始时刻）
+                sorted_candidates=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
                 final_list=""
-                last_before_start=""
+                last_file=""
+
                 while read -r line; do
                     [[ -z "$line" ]] && continue
-                    this_f_sec="${line%%|*}"
-                    if (( this_f_sec < start_sec )); then
-                        last_before_start="$line"
-                    else
-                        final_list="${final_list} ${line}"
-                    fi
-                done <<< "$sorted_files"
+                    f_sec="${line%%|*}"
+                    f_path="${line#*|}"
 
-                # 最终结果 = 覆盖起始的文件 + 范围内的文件
-                result_raw="${last_before_start}${final_list}"
-                result=$(echo "$result_raw" | tr ' ' '\n' | cut -d'|' -f2 | tr '\n' ' ')
+                    if (( f_sec <= end_sec )); then
+                        if (( f_sec >= start_sec )); then
+                            final_list="${final_list} ${f_path}"
+                        else
+                            last_file="$f_path"
+                        fi
+                    fi
+                done <<< "$sorted_candidates"
+                result="${last_file} ${final_list}"
+                result=$(echo "$result" | xargs)
             else
-                log_warn "${formatted_time} ${tag} ==> 找不到对应 record 文件，跳过"
+                log_warn "${formatted_time} ${tag} ==> 该 tag 无法找到对应 record 数据"
                 continue
             fi
-            tag_counter=$((tag_counter + 1))
-            all_tasks+=("${formatted_time}|${tag}|${result% }")
+            all_tasks+=("${formatted_time}|${tag}|${result}")
         fi
     done <<< "$content"
 done
@@ -169,14 +156,15 @@ done
 if [[ ${#all_tasks[@]} -gt 0 ]]; then
     mapfile -t sorted_tasks < <(printf "%s\n" "${all_tasks[@]}" | sort -t'|' -k1,1)
     all_tasks=()
-    final_counter=1
+    final_counter=0
 
     for task_line in "${sorted_tasks[@]}"; do
         this_time="${task_line%%|*}"
         tmp="${task_line#*|}"
         this_tag="${tmp%%|*}"
         this_result="${tmp#*|}"
-        all_tasks+=("${final_counter}|${this_time}|${this_tag}|${this_result}")
+        final_counter=$((final_counter + 1))
+        all_tasks+=("${this_time}|${this_tag}|${this_result}")
         echo -e "${GREEN}[$final_counter] $this_tag : $this_time${NC}"
         read -r -a f_arr <<< "${this_result}"
         if [[ ${#f_arr[@]} -gt 0 ]]; then
@@ -188,14 +176,13 @@ if [[ ${#all_tasks[@]} -gt 0 ]]; then
             echo "cyber_recorder play -l -f ${this_result}"
             echo "------------------------------------------------"
         fi
-        final_counter=$((final_counter + 1))
     done
 else
     log_error "未收集到任何有效任务！"
 fi
 
 # ================= 序号选择逻辑 =================
-read -p "找到 $tag_counter 个 Tag，请输入要处理的序号 (例如 1,2,5 或输入 0 导出全部): " selection
+read -p "找到 $final_counter 个 Tag，请输入要处理的序号 (例如 1,2,5 或输入 0 导出全部): " selection
 copy_tasks=()
 if [[ "$selection" == "0" ]]; then
     copy_tasks=("${all_tasks[@]}")

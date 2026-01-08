@@ -3,7 +3,7 @@ import logging
 import tempfile
 import shutil
 import atexit
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict
@@ -42,7 +42,7 @@ class TaskContext:
     def __post_init__(self):
         """构建目录结构，但不初始化日志文件"""
         base_output = Path(self.config["host"]["dest_root"])
-        self.work_dir = base_output / self.vehicle / self.target_date
+        self.work_dir = base_output / self.target_date / self.vehicle[:8]
         self.log_dir = self.work_dir / "log"
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -87,6 +87,23 @@ class TaskContext:
         self._logger_ready = True
         # logging.info(f"--- Log Session Active: {log_file.name} ---")
 
+    def get_task_metadata(self, tag_time, tag_name, files, bf, af):
+        """构造结构化的元数据对象"""
+        # 计算绝对时间
+        dt_tag = datetime.strptime(tag_time, "%Y-%m-%d %H:%M:%S")
+        return {
+            "tag_info": {
+                "name": tag_name,
+                "time": tag_time,
+                "offset_bf": bf,
+                "offset_af": af,
+                "abs_start": (dt_tag - timedelta(seconds=bf)).isoformat(),
+                "abs_end": (dt_tag + timedelta(seconds=af)).isoformat(),
+            },
+            "files": [Path(f).name for f in files], # 仅记录文件名，实现解耦
+            "vehicle": self.vehicle,
+            "date": self.target_date
+        }
     def get_library_fingerprint(self) -> str:
         """
         [性能优化] 只检查当前 Vehicle/Date 目录的状态
@@ -107,8 +124,8 @@ class TaskContext:
             "VMC_SH": cfg["host"]["vmc_sh_path"],
             "MDRIVE_ROOT": cfg["host"]["mdrive_root"],
             "CONTAINER": cfg["docker"]["container_name"],
-            "LOOKBACK": cfg["logic"]["lookback"],
-            "LOOKFRONT": cfg["logic"]["lookfront"],
+            "BEFORE": cfg["logic"]["before"],
+            "AFTER": cfg["logic"]["after"],
             "MODE": cfg["env"]["mode"],
             "REMOTE_USER": cfg["remote"]["user"],
             "REMOTE_IP": cfg["remote"]["ip"],
