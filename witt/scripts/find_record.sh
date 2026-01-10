@@ -102,7 +102,7 @@ for tag_file in $tag_list; do
 
             start_sec=$((msg_seconds - BEFORE))
             end_sec=$((msg_seconds + AFTER))
-            start_min=$(((start_sec - 120) / 60))
+            start_min=$(((start_sec - 60) / 60))
             [[ $start_min -lt 0 ]] && start_min=0
             end_min=$((end_sec / 60))
 
