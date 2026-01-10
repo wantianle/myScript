@@ -1,39 +1,28 @@
 #!/bin/bash
 
 set -Eeuo pipefail
-LOG_SHOW_TIME=0
-source "${BASH_SOURCE[0]%/*}/../utils/logger.sh"
-while getopts "v:t:l:s:b:f:" opt; do
-    case $opt in
-        v) vehicle="$OPTARG" ;;
-        t) target_date="$OPTARG" ;;
-        l) manifest_file="$OPTARG" ;;
-        s) soc="$OPTARG" ;;
-        b) before="$OPTARG" ;;
-        f) after="$OPTARG" ;;
-        *) exit 1 ;;
-    esac
-done
-
-if [[ -z "$target_date" ]]; then
-    log_error "缺少日期参数！"
-    exit 1
-fi
+UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
+source "$UTILS_DIR/utils.sh"
+trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
 
 # ================= 确定查询模式 =================
 if [[ $MODE == "3" ]]; then
     data_dir="$REMOTE_DATA_ROOT"
     log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$data_dir"
     ssh_cmd() {
+        # 确保 socket 目录存在（建议放在 /tmp 下，重启会自动清理）
+        mkdir -p /tmp/ssh_mux
         LC_ALL=C LANG=C ssh -o ConnectTimeout=3 \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o LogLevel=ERROR \
+            -o ControlMaster=auto \
+            -o ControlPath=/tmp/ssh_mux/%r@%h:%p \
+            -o ControlPersist=5m \
             "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
-    }
+}
 elif [[ $MODE == "2" ]]; then
-    [[ -z $vehicle ]] && { log_error "NAS 模式缺少车辆 ID (-v)"; exit 1; }
-    data_dir="${NAS_ROOT}/${target_date:0:8}/${vehicle}"
+    data_dir="${NAS_ROOT}/${TARGET_DATE:0:8}/${VEHICLE}"
     log_info "NAS 模式: $data_dir"
 else
     if [ ! -d $LOCAL_PATH ]; then
@@ -49,7 +38,7 @@ fi
 # ================= 建立 Record 索引 =================
 declare -A records
 shopt -s nullglob
-find_cmd="find \"$data_dir\" -type f \( \( -path '*${soc}*' -name '${target_date}*record*' \) -o -name 'tag_${target_date}*.pb.txt' \) 2>/dev/null"
+find_cmd="find \"$data_dir\" -type f \( \( -path '*${SOC}*' -name '${TARGET_DATE}*record*' \) -o -name 'tag_${TARGET_DATE}*.pb.txt' \) 2>/dev/null"
 
 if [[ $MODE == "3" ]]; then
     raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
@@ -111,8 +100,8 @@ for tag_file in $tag_list; do
             msg_seconds=$(( 10#$hh * 3600 + 10#$mm * 60 + 10#$ss ))
             msg_minutes=$(( 10#$hh * 60 + 10#$mm ))
 
-            start_sec=$((msg_seconds - before))
-            end_sec=$((msg_seconds + after))
+            start_sec=$((msg_seconds - BEFORE))
+            end_sec=$((msg_seconds + AFTER))
             start_min=$(((start_sec - 120) / 60))
             [[ $start_min -lt 0 ]] && start_min=0
             end_min=$((end_sec / 60))
@@ -145,7 +134,7 @@ for tag_file in $tag_list; do
                 result="${last_file} ${final_list}"
                 result=$(echo "$result" | xargs)
             else
-                log_warn "${formatted_time} ${tag} ==> 该 tag 无法找到对应 record 数据"
+                log_warnning "${formatted_time} ${tag} ==> 该 tag 无法找到对应 record 数据"
                 continue
             fi
             all_tasks+=("${formatted_time}|${tag}|${result}")
@@ -193,13 +182,13 @@ else
         if (( idx >= 0 && idx < ${#all_tasks[@]} )); then
             copy_tasks+=("${all_tasks[$idx]}")
         else
-            log_warn "无效序号: $((idx+1))，已忽略。"
+            log_warnning "无效序号: $((idx+1))，已忽略。"
         fi
     done
 fi
 
 if (( ${#copy_tasks[@]} == 0 )); then
-    log_warn "未选择任何有效序号！"
+    log_warnning "未选择任何有效序号！"
     exit 0
 fi
-printf "%s\n" "${copy_tasks[@]}" > "$manifest_file"
+printf "%s\n" "${copy_tasks[@]}" > "$MANIFEST_PATH"

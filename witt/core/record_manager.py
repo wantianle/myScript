@@ -1,118 +1,71 @@
-import re
-import sys
-import math
 import logging
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional, Any
-
+from utils import handles
 
 class RecordManager:
-    RE_TIME = re.compile(r"(\d{4}[-\s]\d{2}[-\s]\d{2}[-\s]\d{2}:\d{2}:\d{2})")
-    RE_DURATION = re.compile(r"(\d+\.+\d+)\s+Seconds")
-    RE_CHANNEL = re.compile(r"(\/mdrive\/[\/\w]+)\s+(\d+)\s+messages")
 
-    def __init__(self, docker_executor):
-        self.executor = docker_executor
+    def __init__(self, executor):
+        self.executor = executor
 
-    def get_info(self, docker_path: str) -> Dict[str, Any]:
+    def get_info(
+        self, docker_path: str, fast_meta: Optional[dict] = None
+    ) -> Dict[str, Any]:
         """
         获取 record 的时间、时长、排序后的频道列表
         """
+        if fast_meta:
+            return {
+                "begin": datetime.fromisoformat(fast_meta["tag_info"]["abs_start"]),
+                "end": datetime.fromisoformat(fast_meta["tag_info"]["abs_end"]),
+                "duration": fast_meta["tag_info"]["offset_bf"]
+                + fast_meta["tag_info"]["offset_af"],
+                "channels": [],
+            }
         try:
             stdout = self.executor.execute(f"cyber_recorder info {docker_path}")
-            begin_time = (
-                self._parse_cyber_time(m.group(1))
-                if (m := re.search(rf"begin_time:\s+{self.RE_TIME.pattern}", stdout))
-                else None
-            )
-            end_time = (
-                self._parse_cyber_time(m.group(1))
-                if (m := re.search(rf"end_time:\s+{self.RE_TIME.pattern}", stdout))
-                else None
-            )
-            duration = (
-                math.floor(float(m.group(1)))
-                if (m := re.search(rf"duration:\s+{self.RE_DURATION.pattern}", stdout))
-                else None
-            )
-            return {
-                "begin": begin_time,
-                "end": end_time,
-                "duration": duration,
-                "channels": self._extract_channels(stdout),
-            }
+            return handles.parse_record_info(stdout)
         except Exception as e:
-            if "No such container" in str(e):
-                logging.error(f"Docker 容器未运行，请先用任意版本进行 5.[环境同步]...")
-                raise e
-            elif "open record file error" in str(e):
-                logging.warning(
-                    f"Record 文件不存在或无权限访问, 请查看文件路径及权限: \n    ls -l {docker_path}\n如果存在权限问题，请确保 Docker 容器对该文件有读取权限: \n    sudo chown -R $USER:$USER /your_data_root && sudo chmod 775 -R /your_data_path\n"
-                )
+            if "open record file error" in str(e):
+                logging.warning(f"Record 文件不存在或无权限访问, 请查看文件路径及权限:")
+                print(f"    ls -l {docker_path}")
+                print("如果存在权限问题，请确保 Docker 容器对该文件有读取权限:")
+                print("    sudo chown -R $USER:$USER /your_data_root && sudo chmod 775 -R /your_data_path")
                 raise e
             logging.error(f"解析 Record 元数据失败 [Path: {docker_path}]: {e}")
             sys.exit(1)
 
-    def _extract_channels(self, stdout: str) -> List[Dict[str, Any]]:
-        """解析并排序频道列表"""
-        matches = self.RE_CHANNEL.findall(stdout)
-        raw_channels = [{"name": name, "count": int(count)} for name, count in matches]
-        return sorted(raw_channels, key=lambda x: x["name"])
-
-    def _parse_cyber_time(self, t_str: str) -> Optional[datetime]:
-        """
-        统一解析 Cyber 时间字符串为 datetime 对象
-        """
-        if not t_str:
-            return None
-        clean_t = t_str
-        if len(t_str) > 10 and t_str[10] == "-":
-            clean_t = f"{t_str[:10]} {t_str[11:]}"
-
-        try:
-            return datetime.strptime(clean_t, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            logging.error(f"无法识别的时间格式: {t_str}")
-            return None
-
-    def _format_for_cyber(self, dt: Any) -> str:
-        """转回 Cyber 要求的字符串"""
-        if isinstance(dt, datetime):
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        return str(dt)
-
     def split(
         self,
         host_in: str,
-        host_out: str,
-        start_dt: Any,
-        end_dt: Any,
+        host_out: Optional[str] = None,
+        start_dt: Optional[datetime] = None,
+        end_dt: Optional[datetime] = None,
         blacklist: Optional[List[str]] = None,
-    ):
+    ) -> bool:
         """
         执行 record 切片
         """
-        d_in = self.executor.to_docker_path(host_in)
-        d_out = self.executor.to_docker_path(host_out)
-        start_str = self._format_for_cyber(start_dt)
-        end_str = self._format_for_cyber(end_dt)
-        cmd_parts = [
-            "cyber_recorder split",
-            f"-f {d_in}",
-            f"-o {d_out}",
-            f'-b "{start_str}"',
-            f'-e "{end_str}"',
-        ]
-        # 动态添加黑名单频道
+        d_in = self.executor.map_path(host_in)
+        cmd_parts = ["cyber_recorder split", f"-f {d_in}"]
+        if host_out:
+            d_out = self.executor.map_path(host_out)
+            cmd_parts.append(f"-o {d_out}")
+        if start_dt:
+            start_str = handles.time_to_str(start_dt)
+            cmd_parts.append(f'-b "{start_str}"')
+        if end_dt:
+            end_str = handles.time_to_str(end_dt)
+            cmd_parts.append(f'-e "{end_str}"')
         if blacklist:
             for ch in blacklist:
                 cmd_parts.append(f"-k {ch}")
-
         cmd = " ".join(cmd_parts)
-        logging.info(
-            f"Executing Split: [{start_str}] -> [{end_str}] | Output: {host_out}"
-        )
+        log_msg = f"Executing Split => "
+        log_msg += f"{host_out}" if host_out else f"{host_in}.split"
+        logging.info(log_msg)
         CORRUPT_SIGNATURES = [
             "Parse section message failed",
             "read chunk body section fail",

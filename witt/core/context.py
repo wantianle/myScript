@@ -1,4 +1,5 @@
 import os
+import yaml
 import logging
 import tempfile
 import shutil
@@ -7,11 +8,10 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict
-
+from utils import handles
 
 class _WittFormatter(logging.Formatter):
     """私有格式化器：全自动处理颜色与格式"""
-
     COLORS = {
         "DEBUG": "\033[0;90m",
         "INFO": "\033[0;32m",
@@ -19,37 +19,44 @@ class _WittFormatter(logging.Formatter):
         "ERROR": "\033[0;31m",
         "RESET": "\033[0m",
     }
-
     def format(self, record):
-        # 自动根据级别染色的模板
         color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
         fmt = f"{color}%(asctime)s [%(levelname)s] %(message)s{self.COLORS['RESET']}"
-        # 动态创建格式化器（datefmt 设为简短格式）
         return logging.Formatter(fmt, datefmt="%H:%M:%S").format(record)
 
 
 @dataclass
 class TaskContext:
-    config: dict
-    vehicle: str
-    target_date: str
-    work_dir: Path = field(init=False)
-    log_dir: Path = field(init=False)
+    config_path: Path
+    config: dict = field(init=False)
     temp_dir: Path = field(init=False)
-    manifest_path: Path = field(init=False)
     _logger_ready: bool = field(default=False, init=False)
 
     def __post_init__(self):
-        """构建目录结构，但不初始化日志文件"""
-        base_output = Path(self.config["host"]["dest_root"])
-        self.work_dir = base_output / self.target_date / self.vehicle[:8]
-        self.log_dir = self.work_dir / "log"
-
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-
+        self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
         self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
-        self.manifest_path = self.temp_dir / "tasks.list"
         atexit.register(self._cleanup_temp)
+
+    @property
+    def vehicle(self):
+        return self.config["logic"]["vehicle"]
+
+    @property
+    def target_date(self):
+        return self.config["logic"]["target_date"]
+
+    @property
+    def work_dir(self) -> Path:
+        base = Path(self.config["host"]["dest_root"])
+        return base / self.target_date[:8] / self.vehicle
+
+    @property
+    def log_dir(self) -> Path:
+        return self.work_dir / ".witt" / "log"
+
+    @property
+    def manifest_path(self) -> Path:
+        return self.temp_dir / "tasks.list"
 
     def _cleanup_temp(self):
         if self.temp_dir.exists():
@@ -57,12 +64,11 @@ class TaskContext:
 
     def setup_logger(self):
         """
-        只有在真正写日志时才创建文件。
+        写日志时才创建文件。
         """
         if self._logger_ready:
             return
-        # level_name = self.config.get("env", {}).get("log_level", "INFO").upper()
-        # level = getattr(logging, level_name, logging.INFO)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file = self.log_dir / f"witt_{timestamp}.log"
 
@@ -85,12 +91,10 @@ class TaskContext:
         logger.addHandler(fh)
 
         self._logger_ready = True
-        # logging.info(f"--- Log Session Active: {log_file.name} ---")
 
     def get_task_metadata(self, tag_time, tag_name, files, bf, af):
         """构造结构化的元数据对象"""
-        # 计算绝对时间
-        dt_tag = datetime.strptime(tag_time, "%Y-%m-%d %H:%M:%S")
+        dt_tag = handles.str_to_time(tag_time)
         return {
             "tag_info": {
                 "name": tag_name,
@@ -100,13 +104,14 @@ class TaskContext:
                 "abs_start": (dt_tag - timedelta(seconds=bf)).isoformat(),
                 "abs_end": (dt_tag + timedelta(seconds=af)).isoformat(),
             },
-            "files": [Path(f).name for f in files], # 仅记录文件名，实现解耦
+            "files": [Path(f).name for f in files],
             "vehicle": self.vehicle,
-            "date": self.target_date
+            "date": self.target_date,
         }
+
     def get_library_fingerprint(self) -> str:
         """
-        [性能优化] 只检查当前 Vehicle/Date 目录的状态
+        [性能优化] 只检查当前 Vehicle 目录的状态
         原理：如果在这个目录下下载了新文件，work_dir 或 log_dir 的 mtime 必变
         """
         if not self.work_dir.exists():
@@ -118,15 +123,20 @@ class TaskContext:
         """构建注入 Shell 脚本的环境变量字典"""
         cfg = self.config
         vars = {
+            "MANIFEST_PATH": self.manifest_path,
+            "VEHICLE": self.vehicle,
+            "TARGET_DATE": self.target_date,
             "NAS_ROOT": cfg["host"]["nas_root"],
             "DEST_ROOT": cfg["host"]["dest_root"],
+            "MDRIVE_ROOT": cfg["host"]["mdrive_root"],
             "LOCAL_PATH": cfg["host"]["local_path"],
             "VMC_SH": cfg["host"]["vmc_sh_path"],
-            "MDRIVE_ROOT": cfg["host"]["mdrive_root"],
-            "CONTAINER": cfg["docker"]["container_name"],
+            "SOC": cfg["logic"]["soc"],
             "BEFORE": cfg["logic"]["before"],
             "AFTER": cfg["logic"]["after"],
             "MODE": cfg["env"]["mode"],
+            "VERSION_JSON": cfg["logic"]["version_json"],
+            "CONTAINER": cfg["docker"]["container"],
             "REMOTE_USER": cfg["remote"]["user"],
             "REMOTE_IP": cfg["remote"]["ip"],
             "REMOTE_DATA_ROOT": cfg["remote"]["data_root"],

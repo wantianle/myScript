@@ -1,12 +1,10 @@
 # 基础环境配置
 env:
   log_level: "INFO"
-  vehicle: "XZB600014" # 临时测试
-  target_date: "20251227" # 临时测试
-  soc: "soc1"
   debug: false
   mode: 1
 
+# 远程环境配置
 remote:
   user: "nvidia"
   ip: "192.168.10.2"
@@ -16,20 +14,28 @@ remote:
 host:
   nas_root: "/media/nas/00.raw"
   dest_root: "/media/road_test"
-  vmc_sh_path: "/home/mini/project/vmc.sh"
   mdrive_root: "/home/mini/project"
+  vmc_sh_path: "/home/mini/project/vmc.sh"
   local_path: "/media/data"
 
 # Docker 内部路径管理
 docker:
-  container_name: "mdrive_dev_vmc_minieye"
+  image: "gcr.minieye.tech/ad/package/mdrive"
+  container: "mdrive_dev_vmc_minieye"
   workspace: "/mdrive"
-  setup_bash: "/mdrive/mdrive/setup.sh"
   host_mount: "/media"
   docker_mount: "/media"
+  dev_into: "/home/mini/project/mdrive/docker/dev_into.sh"
+  dev_start: "/home/mini/project/mdrive/docker/dev_start.sh"
+  setup_env: "/mdrive/mdrive/setup.sh"
+
 
 # 业务逻辑配置
 logic:
+  vehicle: "XZB600014" # 临时测试
+  target_date: "20251227" # 临时测试
+  version_json: ""
+  soc: "soc1"
   before: 20
   after: 10
   blacklist:

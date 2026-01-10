@@ -128,7 +128,7 @@ elif [[ -n "$target_path" ]]; then
     log_info "本地路径模式: $base_dir"
 else
     [[ -z "$vehicle" ]] && { log_error "NAS 模式缺少车辆 ID (-v)"; exit 1; }
-    base_dir="${mount_root}/04.mdrive3/01.road_test/${vehicle}/${target_date:0:4}/${target_date}"
+    base_dir="${mount_root}/00.raw/${target_date:0:8}/${vehicle}"
     log_info "NAS 模式: $base_dir"
 fi
 

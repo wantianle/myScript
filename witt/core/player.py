@@ -1,4 +1,3 @@
-import re
 import json
 import logging
 from pathlib import Path
@@ -10,10 +9,11 @@ class RecordPlayer:
     def __init__(self, session):
         self.config = session.config
         self.ctx = session.ctx
-        self.executor = session.record_mgr.executor  # 执行器
-        self.record_mgr = session.record_mgr  # 逻辑器
-        self.dest_root = Path(self.config["host"]["dest_root"])
-        self.library_file = self.dest_root / "local_library.json"
+        self.script = session.executor
+        self.executor = session.record_mgr.executor
+        self.record_mgr = session.record_mgr
+        self.workdir = self.ctx.work_dir
+        self.library_file = self.workdir / "local_library.json"
 
     def get_library(self) -> List[Dict[str, Any]]:
         current_fp = self.ctx.get_library_fingerprint()
@@ -26,67 +26,93 @@ class RecordPlayer:
             except Exception:
                 pass
 
-        print(f"检测到目录状态变更，正在扫描本地库{self.dest_root}...")
+        print(f"检测到目录状态变更，正在扫描本地库{self.workdir}...")
         library_list = self.scan_local_library()
         save_obj = {"fingerprint": current_fp, "library": library_list}
         self.library_file.write_text(json.dumps(save_obj, indent=4, ensure_ascii=False))
         return library_list
 
     def scan_local_library(self) -> List[Dict[str, Any]]:
-        """
-        扫描下载目录结构，构建结构化本地库
-        """
         library_map = {}
-
-        for soc_dir in self.dest_root.rglob("*soc*"):
-            if not soc_dir.is_dir(): continue
-            tag_dir = soc_dir.parent
-            readme_path = soc_dir / "README.md"
-            tag_time = "Unknown Time"
-            if readme_path.exists():
-                content = readme_path.read_text(encoding="utf-8")
-                match = re.search(r"- \*\*tag：\*\* ([\d-]+\s[\d:]+)", content)
-                if match:
-                    tag_time = match.group(1)
-            vehicle_dir = tag_dir.parent
-            date_dir = vehicle_dir.parent
-            record_details = []
-            for f in soc_dir.iterdir():
-                if ".record" in f.name:
-                    d_path = self.executor.to_docker_path(str(f.absolute()))
-                    info = self.record_mgr.get_info(d_path)
-                    if info["begin"]:
-                        record_details.append(
-                            {
-                                "path": str(f.absolute()),
-                                "begin": info["begin"].isoformat(),
-                                "duration": info.get("duration", 0),
-                            }
-                        )
-
-            if not record_details:
-                continue
-
-            # 按时间排序片段
-            record_details.sort(key=lambda x: x["begin"])
-            if not record_details:
-                continue
-            tag_name = tag_dir.name
-            if tag_name not in library_map:
-                library_map[tag_name] = {
+        for meta_file in self.workdir.rglob("meta.json"):
+            tag_dir = meta_file.parent
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                tag_name = meta["tag_info"]["name"]
+                tag_entry = {
                     "tag": tag_name,
-                    "time": tag_time,
-                    "vehicle": vehicle_dir.name,
-                    "date": date_dir.name,
+                    "time": meta["tag_info"]["time"],
+                    "vehicle": meta.get("vehicle", tag_dir.parent.name),
+                    "date": meta.get("date", tag_dir.parent.parent.name),
                     "socs": {},
+                    "fast_meta": meta,
                 }
-            library_map[tag_name]["socs"][soc_dir.name] = record_details
-        library_list = list(library_map.values())
-        library_list.sort(key=lambda x: x["time"])
-        self.library_file.write_text(
-            json.dumps(library_list, indent=4, ensure_ascii=False)
-        )
-        return library_list
+
+                # meta["files"] 结构示例: {"soc1": ["f1.record", "f2.record"], "soc2": [...]}
+                for soc_name, file_names in meta.get("files", {}).items():
+                    soc_path = tag_dir / soc_name
+                    if not soc_path.exists():
+                        continue
+
+                    record_details = []
+                    for fname in file_names:
+                        f_abs_path = soc_path / fname
+                        if f_abs_path.exists():
+                            record_details.append(
+                                {
+                                    "path": str(f_abs_path.absolute()),
+                                    "begin": meta["tag_info"]["abs_start"],
+                                    "duration": meta["tag_info"]["offset_bf"]
+                                    + meta["tag_info"]["offset_af"],
+                                }
+                            )
+
+                    if record_details:
+                        record_details.sort(key=lambda x: x["begin"])
+                        tag_entry["socs"][soc_name] = record_details
+
+                library_map[str(tag_dir)] = tag_entry
+            except Exception as e:
+                logging.warning(f"契约解析失败 [{meta_file}]: {e}")
+
+        # # 兼容性扫描查询逻辑，用于旧数据（针对那些没有 meta.json 的老文件夹）
+        for soc_dir in self.workdir.rglob("*soc*"):
+            tag_dir = soc_dir.parent
+
+            if str(tag_dir) in library_map:
+                continue
+
+            record_details = []
+            for f in soc_dir.glob("*.record*"):
+                info = self.record_mgr.get_info(
+                    str(f.absolute())
+                )
+                if info["begin"]:
+                    record_details.append(
+                        {
+                            "path": str(f.absolute()),
+                            "begin": (
+                                info["begin"].isoformat()
+                                if isinstance(info["begin"], datetime)
+                                else info["begin"]
+                            ),
+                            "duration": info["duration"],
+                        }
+                    )
+
+            if record_details:
+                record_details.sort(key=lambda x: x["begin"])
+                if str(tag_dir) not in library_map:
+                    library_map[str(tag_dir)] = {
+                        "tag": tag_dir.name,
+                        "time": "Unknown",
+                        "vehicle": tag_dir.parent.name,
+                        "date": tag_dir.parent.parent.name,
+                        "socs": {},
+                    }
+                library_map[str(tag_dir)]["socs"][soc_dir.name] = record_details
+
+        return sorted(list(library_map.values()), key=lambda x: x["time"])
 
     def play(self, records: List[Dict[str, Any]], start_sec: int = 0, end_sec: int = 0):
         """
@@ -95,6 +121,7 @@ class RecordPlayer:
         if not records:
             logging.error("播放列表为空")
             return
+
         # 路径转换与元数据获取
         def ensure_dt(val):
             if isinstance(val, str):
@@ -103,6 +130,7 @@ class RecordPlayer:
 
         earliest_begin = ensure_dt(records[0]["begin"])
         total_duration = sum(item["duration"] for item in records)
+        self.config["logic"]["version_json"] = Path(records[0]["path"]).parent
 
         # 边界钳位
         final_start = max(0, start_sec)
@@ -112,9 +140,11 @@ class RecordPlayer:
 
         # 逻辑保护
         if final_start >= final_end:
-            logging.warning(f"检测到无效范围 [{start_sec}-{end_sec}]，自动调整为全量播放。")
+            logging.warning(
+                f"检测到无效范围 [{start_sec}-{end_sec}]，自动调整为全量播放。"
+            )
             final_start, final_end = 0, total_duration
-        docker_paths = [self.executor.to_docker_path(r["path"]) for r in records]
+        docker_paths = [self.executor.map_path(r["path"]) for r in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]
 
         # 时间窗口换算 (逻辑封装)
@@ -133,4 +163,4 @@ class RecordPlayer:
         print(f"执行指令: \033[0;32m{full_cmd}\033[0m")
 
         # 交互式执行
-        self.executor.execute_interactive(full_cmd)
+        self.executor.execute_interactive(full_cmd,self.script)

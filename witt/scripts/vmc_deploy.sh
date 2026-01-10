@@ -3,11 +3,12 @@
 set -euo pipefail
 
 UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
-source "$UTILS_DIR/logger.sh"
+source "$UTILS_DIR/utils.sh"
 [[ "$(uname -m)" != "x86_64" ]] && { log_error "仅支持 x86_64 架构!"; exit 1; }
 VMC_BIN_DIR="$HOME/.vmc/bin"
 VMC_EXEC="$VMC_BIN_DIR/vmc"
 SRC_VMC="$UTILS_DIR/vmc_linux_amd64_0.0.151"
+MDRIVE_ROOT="$HOME/project"
 
 log_info "正在安装 vmc 到 $VMC_BIN_DIR ..."
 mkdir -p "$VMC_BIN_DIR"
