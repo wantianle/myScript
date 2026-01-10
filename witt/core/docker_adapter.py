@@ -1,7 +1,6 @@
 import logging
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Union
 
@@ -26,7 +25,7 @@ class DockerAdapter:
         return res.returncode == 0, res.stdout.strip()
 
     def check_docker(self):
-        """核心封装：确保环境可用，否则尝试修复"""
+        """确保环境可用，否则尝试修复"""
         exists, running = self._get_status(self.container)
         if exists:
             if running == "true":
@@ -69,7 +68,6 @@ class DockerAdapter:
             f"docker exec {self.container} /bin/bash -c '{env_cmds} && {source_cmd} && {cmd}'"
         )
         try:
-            # text=True 自动处理编码，capture_output 捕获返回
             result = subprocess.run(
                 full_cmd, shell=True, capture_output=True, text=True, check=True
             )

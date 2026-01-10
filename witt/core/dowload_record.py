@@ -1,13 +1,14 @@
-import os
-import time
-import json
-import subprocess
-import shutil
 import logging
-from utils import handles
+import json
+import os
+import shutil
+import subprocess
+import time
+from alive_progress import alive_bar
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List
+from utils import handles
 
 
 class RecordDownloader:
@@ -29,13 +30,12 @@ class RecordDownloader:
             p = Path(path)
             return p.stat().st_size if p.exists() else 0
 
-    def _cleanup_extra_files(self, save_dir: Path, expected_filenames: List[str]):
+    def _cleanup_extra_files(self, save_dir: Path, filenames: List[str]):
         """
         清理目标目录中不属于当前任务的文件
         """
-        # 这里的 expected_filenames 是当前清单里的文件名列表
         # 加上我们必须保留的元数据文件
-        whitelist = set(expected_filenames) | {"version.json", "README.md"}
+        whitelist = set(filenames) | {"version.json", "README.md"}
 
         for item in save_dir.iterdir():
             if item.is_file() and item.name not in whitelist:
@@ -150,8 +150,6 @@ class RecordDownloader:
 
     def download_tasks(self):
         """核心下载逻辑"""
-        from alive_progress import alive_bar
-        # 预检与计算总大小
         print(">>> 正在预检磁盘空间...")
         total_bytes = 0
         task_details = []

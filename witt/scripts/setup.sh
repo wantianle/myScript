@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
-UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
+PROJECT_DIR="${BASH_SOURCE[0]%/*}/.."
+UTILS_DIR=$PROJECT_DIR/utils
 source "$UTILS_DIR/utils.sh"
 trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
 
 INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
 MDRIVE_ROOT="$HOME/project"
 VMC_SH="$MDRIVE_ROOT/vmc.sh"
+CONTAINER="mdrive_dev_vmc_minieye"
+DEV_START_SCRIPT="$MDRIVE_ROOT/mdrive/docker/dev_start.sh"
+DATA_ROOT="/media/mini" # 硬盘目录
+
 # 检查并安装 pip
 if ! command -v pip3 &> /dev/null; then
     log_warnning "未检测到 pip，尝试安装..."
@@ -49,3 +54,27 @@ if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
     install_cmd=$(vmc fsearch -n mdrive -l amd64 -i 1 --verbose | awk -F': ' '/Install/ {print $2}')
     eval ${install_cmd}
 fi
+
+if [[ ! -w "/media" ]]; then
+    sudo chown $USER:$USER /media
+fi
+
+if [ -d $DATA_ROOT ]; then
+    [[ ! -w $DATA_ROOT ]] && sudo chown -R $USER:$USER $DATA_ROOT
+else
+    mkdir -p $DATA_ROOT
+fi
+
+if [ "$(docker ps -a -q -f name=${CONTAINER})" ]; then
+    docker restart ${CONTAINER} > /dev/null
+else
+    # log_warnning "docker 容器不存在, 尝试创建环境..."
+    bash ${DEV_START_SCRIPT} > /dev/null 2>&1
+fi
+
+if ! docker exec ${CONTAINER} /bin/bash -c "source /mdrive/mdrive/setup.sh && cyber_recorder --help" >/dev/null 2>&1; then
+    log_error " mdrive docker 容器启动失败！"
+    sleep 1
+fi
+
+python3 $PROJECT_DIR/main.py

@@ -1,9 +1,9 @@
 import logging
 import sys
+from utils import handles
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from utils import handles
 
 class RecordManager:
 

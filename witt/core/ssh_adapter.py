@@ -1,5 +1,5 @@
-import subprocess
 import logging
+import subprocess
 
 
 class SSHAdapter:

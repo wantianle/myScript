@@ -1,7 +1,18 @@
 import json
 import logging
-import sys
 import os
+import re
+import sys
+import traceback
+from core.seesion import AppSession
+from utils import cli
+from pathlib import Path
+from utils import handles
+
+def usage():
+    print("=============== 使用文档 ===============")
+    print("回播数据路径结构: <data_root>/<vehicle>/<date>/<tag>/<soc>")
+    print("例如: '/media/road_data/XZB600011/20260101/急刹/soc1/xxxx.record.xxxx'\n")
 
 def get_user_input(prompt, default_value):
     val = input(f"{prompt} (默认 {default_value}): ").strip()
@@ -87,3 +98,75 @@ def get_workflow_params(config):
     config["env"]["debug"] = (
         input("bash 调试模式 [y/N] (回车跳过): ").strip().lower() == "y"
     )
+
+def run_full_pipeline(session: AppSession):
+    cli.get_basic_info(session.config)
+    cli.get_workflow_params(session.config)
+    try:
+        session.task_query()
+        tasks_list = handles.parse_manifest(session.ctx.manifest_path)
+        if input("是否压缩 Record? [y/N] (回车跳过): ").lower() == "y":
+            # 这里怎么简化，我只需要channel名单去过滤信息
+            session.task_compress(Path(tasks_list[0]["files"][0]))
+        for task in tasks_list:
+            _, time, name, files = task["id"], task["time"], task["name"], task["files"]
+            tag_dt = handles.str_to_time(time)
+            print(f"\n>>> 正在处理: {name} {tag_dt}")
+            for f in files:
+                session.task_slice(Path(f), tag_dt)
+        session.task_download()
+        if input("\n是否立即回播数据? [y/N] (回车跳过): ").lower() == "y":
+            task_player_workflow(session)
+    except Exception as e:
+        logging.error(f"全流程执行失败: {e}")
+        logging.debug(traceback.format_exc())
+        sys.exit(1)
+
+
+def task_player_workflow(session: AppSession):
+    while True:
+        library = session.player.get_library()
+        if not library:
+            print("本地没有任何 Record 数据。")
+            return
+
+        print(f"\n{' ID ':<4} | {' Vehicle ':<10} | {' Time ':<20} | {' Tag Message '}")
+        print("-" * 65)
+        count = 1
+        for entry in library:
+            if (
+                entry["date"] == session.config["logic"]["target_date"]
+                and entry["vehicle"] == session.config["logic"]["vehicle"]
+            ):
+                print(
+                    f" {count:<4} | {entry['vehicle']:<10} | {entry['time']:<20} | {entry['tag']}"
+                )
+                count += 1
+        tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
+        if not tag_idx:
+            return
+        selected_tag = library[int(tag_idx) - 1]
+
+        available_socs = list(selected_tag["socs"].keys())
+        for i, s in enumerate(available_socs, 1):
+            print(f"  [{i}] {s}")
+
+        soc_idx = input("选择 (默认 1): ").strip() or "1"
+        soc_key = available_socs[int(soc_idx) - 1]
+        target_records = selected_tag["socs"][soc_key]
+        range_in = (
+            input("输入播放范围(秒) ('0' '5' '10-30' 默认全量播放): ").strip() or "0"
+        )
+
+        start_s, end_s = 0, 0
+        if range_in:
+            try:
+                nums = re.findall(r"\d+", range_in)
+                if len(nums) >= 2:
+                    start_s, end_s = int(nums[0]), int(nums[1])
+                elif len(nums) == 1:
+                    start_s = int(nums[0])
+            except ValueError:
+                print("输入错误，开始全量播放...")
+
+        session.player.play(target_records, start_s, end_s)

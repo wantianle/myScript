@@ -103,7 +103,6 @@ for tag_file in $tag_list; do
             start_sec=$((msg_seconds - BEFORE))
             end_sec=$((msg_seconds + AFTER))
             start_min=$(((start_sec - 60) / 60))
-            [[ $start_min -lt 0 ]] && start_min=0
             end_min=$((end_sec / 60))
 
             matched_files=""
@@ -133,6 +132,10 @@ for tag_file in $tag_list; do
                 done <<< "$sorted_candidates"
                 result="${last_file} ${final_list}"
                 result=$(echo "$result" | xargs)
+                if [[ -z "$result" ]]; then
+                    log_warnning "${formatted_time} ${tag} ==> 该 tag 无法找到对应 record 数据"
+                    continue
+                fi
             else
                 log_warnning "${formatted_time} ${tag} ==> 该 tag 无法找到对应 record 数据"
                 continue

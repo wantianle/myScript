@@ -1,10 +1,9 @@
-import re
-import math
 import logging
+import math
+import re
 from datetime import datetime
 from pathlib import Path
-from typing import List
-from typing import Dict, Any
+from typing import List, Dict, Any
 
 _RE_TIME = re.compile(
     r"(?:begin|end)_time:\s+(\d{4}[-\s]\d{2}[-\s]\d{2}[-\s]\d{2}:\d{2}:\d{2})"
@@ -34,7 +33,7 @@ def parse_record_info(stdout: str) -> Dict[str, Any]:
 def sanitize_name(name: str) -> str:
     """清洗目录文件名，去除非法字符"""
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
-     
+
 
 def str_to_time(t_str: str) -> datetime:
     """

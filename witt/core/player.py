@@ -1,7 +1,7 @@
 import json
 import logging
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Dict, Any
 
 
@@ -13,7 +13,7 @@ class RecordPlayer:
         self.executor = session.record_mgr.executor
         self.record_mgr = session.record_mgr
         self.workdir = self.ctx.work_dir
-        self.library_file = self.workdir / "local_library.json"
+        self.library_file = self.workdir / ".witt" / "local_library.json"
 
     def get_library(self) -> List[Dict[str, Any]]:
         current_fp = self.ctx.get_library_fingerprint()
