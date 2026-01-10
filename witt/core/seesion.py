@@ -8,7 +8,7 @@ from core.player import RecordPlayer
 from core.dowload_record import RecordDownloader
 from datetime import timedelta
 from pathlib import Path
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = BASE_DIR / "config" / "settings.yaml"
 
 class AppSession:

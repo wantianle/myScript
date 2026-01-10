@@ -20,7 +20,7 @@ host:
 
 # Docker 内部路径管理
 docker:
-  image: "gcr.minieye.tech/ad/package/mdrive"
+  # image: "gcr.minieye.tech/ad/package/mdrive"
   container: "mdrive_dev_vmc_minieye"
   workspace: "/mdrive"
   host_mount: "/media"

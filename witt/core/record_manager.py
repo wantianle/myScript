@@ -62,7 +62,7 @@ class RecordManager:
         if blacklist:
             for ch in blacklist:
                 cmd_parts.append(f"-k {ch}")
-        cmd = " ".join(cmd_parts)
+        split_cmd = " ".join(cmd_parts)
         log_msg = f"Executing Split => "
         log_msg += f"{host_out}" if host_out else f"{host_in}.split"
         logging.info(log_msg)
@@ -73,7 +73,7 @@ class RecordManager:
             "header invalid",
         ]
         try:
-            self.executor.execute(cmd)
+            self.executor.execute(split_cmd)
             return True
         except RuntimeError as e:
             err_msg = str(e)

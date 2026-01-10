@@ -9,7 +9,7 @@ class DockerAdapter:
     """负责在 Docker 容器内执行命令并处理路径映射"""
 
     def __init__(self, ctx):
-        self.image = ctx.config["docker"]["image"]
+        # self.image = ctx.config["docker"]["image"]
         self.container = ctx.config["docker"]["container"]
         self.dev_into = ctx.config["docker"]["dev_into"]
         self.dev_start = ctx.config["docker"]["dev_start"]
@@ -17,11 +17,15 @@ class DockerAdapter:
         self.host_mount = Path(ctx.config["docker"]["host_mount"]).resolve()
         self.docker_path = Path(ctx.config["docker"]["docker_mount"])
 
-    def _get_status(self, target: str):
+    def _get_status(self, container: str):
         """通用检查函数：获取容器或镜像的状态"""
         fmt = "{{.State.Running}}"
-        cmd = ["docker", "inspect", "-f", fmt, target]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = subprocess.run(
+            f"docker inspect -f {fmt} {container}",
+            capture_output=True,
+            text=True,
+            shell=True,
+        )
         return res.returncode == 0, res.stdout.strip()
 
     def check_docker(self):
@@ -31,15 +35,16 @@ class DockerAdapter:
             if running == "true":
                 return
             else:
-                res = subprocess.run(["docker start", self.container])
+                res = subprocess.run(f"docker start {self.container}", shell=True)
                 if res.returncode == 0:
                     return
         logging.warning(f"容器启动失败，尝试重新创建并启动...")
         subprocess.run(
-            ["bash", self.dev_start],
+            f"bash {self.dev_start} --remove",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=True,
+            shell=True
         )
 
     def map_path(self, host_path: Union[str, Path]) -> str:
@@ -64,9 +69,7 @@ class DockerAdapter:
         self.check_docker()
         env_cmds = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
         source_cmd = f"source {self.setup_env}"
-        full_cmd = (
-            f"docker exec {self.container} /bin/bash -c '{env_cmds} && {source_cmd} && {cmd}'"
-        )
+        full_cmd = f"docker exec {self.container} /bin/bash -c '{env_cmds} && {source_cmd} && {cmd}'"
         try:
             result = subprocess.run(
                 full_cmd, shell=True, capture_output=True, text=True, check=True

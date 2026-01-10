@@ -3,16 +3,19 @@ import logging
 import os
 import re
 import sys
+import subprocess
 import traceback
 from core.seesion import AppSession
 from utils import cli
 from pathlib import Path
 from utils import handles
 
+README = Path(__file__).parent / "README"
+
+
 def usage():
-    print("=============== 使用文档 ===============")
-    print("回播数据路径结构: <data_root>/<vehicle>/<date>/<tag>/<soc>")
-    print("例如: '/media/road_data/XZB600011/20260101/急刹/soc1/xxxx.record.xxxx'\n")
+    subprocess.run(["less", README])
+
 
 def get_user_input(prompt, default_value):
     val = input(f"{prompt} (默认 {default_value}): ").strip()
@@ -74,22 +77,7 @@ def get_workflow_params(config):
     )
     print("\n查询模式: [1]本地(默认) [2]NAS [3]远程")
     choice = input("选择: ").strip() or "1"
-    if choice == "3":
-        print("-" * 50)
-        print("远程 ssh :")
-        print("  1. 第一次使用需要生成密钥(一路回车即可)并且配置 SSH 免密登录:")
-        print("     ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test")
-        print("     ssh-copy-id -i ~/.ssh/id_ed25519_test.pub nvdia@192.168.10.2")
-        print("  2. 尽量使用有线连接以保证传输稳定，登录失败时需要重置指纹:")
-        print("     ssh-keygen -f ~/.ssh/known_hosts -R 192.168.10.2")
-        print("-" * 50)
-    elif choice == "2":
-        print("-" * 50)
-        print("NAS 模式(谨慎执行操作):")
-        print("  1. 请确保本机已挂载NAS路径到/media/nas")
-        print("  2. NAS 路径仅支持 /media/nas/00.raw/<YYYYMMDD>/<vehicle>/")
-        print("-" * 50)
-    elif choice != "2" and choice != "3":
+    if choice != "2" and choice != "3":
         config["host"]["local_path"] = get_user_input(
             "本地数据根路径(仅限/media下)", config["host"]["local_path"]
         )
@@ -104,15 +92,15 @@ def run_full_pipeline(session: AppSession):
     cli.get_workflow_params(session.config)
     try:
         session.task_query()
-        tasks_list = handles.parse_manifest(session.ctx.manifest_path)
+        task_list = handles.parse_manifest(session.ctx.manifest_path)
         if input("是否压缩 Record? [y/N] (回车跳过): ").lower() == "y":
             # 这里怎么简化，我只需要channel名单去过滤信息
-            session.task_compress(Path(tasks_list[0]["files"][0]))
-        for task in tasks_list:
-            _, time, name, files = task["id"], task["time"], task["name"], task["files"]
+            session.task_compress(Path(task_list[0]["paths"][0]))
+        for task in task_list:
+            _, time, name, paths = task["id"], task["time"], task["name"], task["paths"]
             tag_dt = handles.str_to_time(time)
             print(f"\n>>> 正在处理: {name} {tag_dt}")
-            for f in files:
+            for f in paths:
                 session.task_slice(Path(f), tag_dt)
         session.task_download()
         if input("\n是否立即回播数据? [y/N] (回车跳过): ").lower() == "y":

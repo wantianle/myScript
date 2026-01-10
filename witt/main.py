@@ -17,12 +17,13 @@ def main_menu():
         print("               witt  v1.0")
         print("            What Is That Tag?")
         print("=" * 50)
-        print("  1. 三端查询 -> 压缩/切片/下载 -> 同步环境回放")
+        print("  1. 查询 -> 压缩/切片/下载 -> 同步/回放")
         print("  2. [仅查询] 查询 tag 对应 record 文件")
         print("  3. [仅压缩] 指定文件过滤 Channel")
         print("  4. [仅切片] 指定目录对时间切片")
         print("  5. [仅同步] 同步本地 docker 环境")
         print("  6. [仅回播] 查询并回播已处理数据")
+        print("  h. [说明文档]")
         print("  q. 退出")
         print("=" * 50)
         choice = input("请选择操作: ").strip().lower()
@@ -68,13 +69,13 @@ if __name__ == "__main__":
         main_menu()
     except KeyboardInterrupt:
         sys.exit(0)
-    except subprocess.CalledProcessError as e:
-        logging.error(
-            f"命令执行失败: {' '.join(e.cmd if isinstance(e.cmd, list) else [e.cmd])}"
-        )
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n\033[1;31m[CRITICAL] 发生内部程序错误: {e}\033[0m")
-        logging.debug("--- 捕获到未处理的 Python 异常堆栈 ---")
-        logging.debug(e)
-        sys.exit(1)
+    # except subprocess.CalledProcessError as e:
+    #     logging.error(
+    #         f"命令执行失败: {' '.join(e.cmd if isinstance(e.cmd, list) else [e.cmd])}"
+    #     )
+    #     sys.exit(1)
+    # except Exception as e:
+    #     print(f"\n\033[1;31m[CRITICAL] 发生内部程序错误: {e}\033[0m")
+    #     logging.debug("--- 捕获到未处理的 Python 异常堆栈 ---")
+    #     logging.debug(e)
+    #     sys.exit(1)

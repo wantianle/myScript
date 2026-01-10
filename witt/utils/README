@@ -1,0 +1,14 @@
+=============== 使用文档 ===============
+远程 ssh :
+
+第一次使用需要生成密钥(一路回车即可)并且配置 SSH 免密登录: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_test ssh-copy-id -i ~/.ssh/id_ed25519_test.pub nvdia@192.168.10.2
+
+尽量使用有线连接以保证传输稳定，登录失败时需要重置指纹: ssh-keygen -f ~/.ssh/known_hosts -R 192.168.10.2
+
+NAS 模式(谨慎执行操作):
+
+请确保本机已挂载NAS路径到/media/nas
+
+NAS 路径仅支持 /media/nas/00.raw/<YYYYMMDD>/<vehicle>/
+
+回播： 1.目录结构: <data_root>/<vehicle>/<date>/<tag>/<soc> '/media/road_data/XZB600011/20260101/急刹/soc1/xxxx.record.xxxx'

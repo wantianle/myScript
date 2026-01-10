@@ -23,8 +23,8 @@ class RecordDownloader:
     def _get_file_size(self, path: str) -> int:
         """获取文件大小（本地或远程）"""
         if self.mode == 3:
-            cmd = f"ssh {self.remote_user}@{self.remote_ip} 'stat -c %s {path}'"
-            res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            stat_cmd = f"ssh {self.remote_user}@{self.remote_ip} 'stat -c %s {path}'"
+            res = subprocess.run(stat_cmd, shell=True, capture_output=True, text=True)
             return int(res.stdout.strip()) if res.returncode == 0 else 0
         else:
             p = Path(path)
@@ -67,9 +67,7 @@ class RecordDownloader:
         meta_path = tag_dir / "meta.json"
 
         dt_tag = handles.str_to_time(task["time"])
-        bf, af = int(self.config["logic"]["before"]), int(
-            self.config["logic"]["after"]
-        )
+        bf, af = int(self.config["logic"]["before"]), int(self.config["logic"]["after"])
 
         contract = {
             "tag_info": {
@@ -101,21 +99,14 @@ class RecordDownloader:
         self._save_contract(task, save_dir, file_infos)
 
         # 同步 version.json
-        src_dir = os.path.dirname(file_infos[0][0])
-        v_src = f"{src_dir}/version.json"
+        src_dir = Path(file_infos[0][0]).parent
+        v_src = src_dir / "version.json"
         v_dest = save_dir / "version.json"
 
         try:
             if self.mode == 3:
-                subprocess.run(
-                    [
-                        "rsync",
-                        "-a",
-                        f"{self.remote_user}@{self.remote_ip}:{v_src}",
-                        str(v_dest),
-                    ],
-                    capture_output=True,
-                )
+                down = f"rsync -a {self.remote_user}@{self.remote_ip}:{v_src} {v_dest}"
+                subprocess.run(down, shell=True, capture_output=True)
             else:
                 if os.path.exists(v_src):
                     shutil.copy2(v_src, v_dest)
@@ -152,18 +143,18 @@ class RecordDownloader:
         """核心下载逻辑"""
         print(">>> 正在预检磁盘空间...")
         total_bytes = 0
-        task_details = []
+        task_infos = []
         files_to_cleanup = set()
         for task in handles.parse_manifest(self.ctx.manifest_path):
             task_size = 0
             file_infos = []
-            for f in task["files"]:
+            for f in task["paths"]:
                 split_file = f"{f}.split"
                 size = self._get_file_size(split_file)
                 task_size += size
                 file_infos.append((split_file, size))
             total_bytes += task_size
-            task_details.append((task, task_size, file_infos))
+            task_infos.append((task, task_size, file_infos))
 
         # 检查本地空间
         usage = shutil.disk_usage(self.dest_root)
@@ -181,10 +172,8 @@ class RecordDownloader:
         ) as bar:
             processed_bytes = 0
 
-            for task, task_size, file_infos in task_details:
-                folder_name = (
-                    f"{int(task['id']):02d}_{handles.sanitize_name(task['name'])}"
-                )
+            for task, task_size, file_infos in task_infos:
+                folder_name = f"{int(task['id']):02d}.{task['name']}"
                 save_dir = (
                     self.dest_root
                     / self.ctx.target_date[:8]
@@ -206,19 +195,14 @@ class RecordDownloader:
                         bar(processed_bytes / total_bytes)
                         continue
 
-                    # 启动拷贝进程
-                    cmd = (
-                        [
-                            "scp",
-                            "-q",
-                            f"{self.remote_user}@{self.remote_ip}:{src_path}",
-                            str(dest_file),
-                        ]
+                    cp_cmd = (
+                        f"scp -q f {self.remote_user}@{self.remote_ip}:{src_path} {dest_file}"
                         if self.mode == 3
-                        else ["cp", src_path, str(dest_file)]
+                        else f"cp {src_path} {dest_file}"
                     )
-
-                    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
+                    proc = subprocess.Popen(
+                        cp_cmd, shell=True, stderr=subprocess.PIPE, text=True
+                    )
                     # 监控进度
                     while proc.poll() is None:
                         current_f = (

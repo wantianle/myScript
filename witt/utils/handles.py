@@ -32,7 +32,13 @@ def parse_record_info(stdout: str) -> Dict[str, Any]:
 
 def sanitize_name(name: str) -> str:
     """清洗目录文件名，去除非法字符"""
-    return re.sub(r'[\\/*?:"<>|]', "", name).strip()
+    if not name:
+        return "unnamed"
+    invalid_chars = r'[\\/*?:"<>|！？@#$%^&~`\'"￥+\[\]{}]'
+    sanitized = name.strip().replace(" ", "_")
+    sanitized = re.sub(invalid_chars, "_", name)
+    sanitized = re.sub(r"_+", "_", sanitized)
+    return sanitized.strip("._")
 
 
 def str_to_time(t_str: str) -> datetime:
@@ -58,6 +64,7 @@ def time_to_str(dt: Any) -> str:
 
 def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
     """解析 find_record.sh 生成的 manifest.list"""
+    # time|tag|paths
     lines = [
         line.strip()
         for line in manifest_path.read_text(encoding="utf-8").splitlines()
@@ -69,8 +76,8 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
         tasks.append(
             {
                 "time": parts[0],
-                "name": parts[1].replace(" ", "_"),
-                "files": parts[2].split(),
+                "name": sanitize_name(parts[1]),
+                "paths": parts[2].split(),
             }
         )
     tasks.sort(key=lambda x: x["time"])
