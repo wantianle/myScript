@@ -4,7 +4,7 @@ set -Eeuo pipefail
 UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
 source "$UTILS_DIR/utils.sh"
 trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
-
+VMC_SH="$MDRIVE_ROOT/vmc.sh"
 find_version() {
     json_content=""
     local input_data="${VERSION_JSON}"

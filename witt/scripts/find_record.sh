@@ -132,66 +132,49 @@ for tag_file in $tag_list; do
                 done <<< "$sorted_candidates"
                 result="${last_file} ${final_list}"
                 result=$(echo "$result" | xargs)
-                if [[ -z "$result" ]]; then
-                    log_warnning "${formatted_time} ${tag} ==> 该 tag 无法找到对应 record 数据"
-                    continue
-                fi
             else
-                log_warnning "${formatted_time} ${tag} ==> 该 tag 无法找到对应 record 数据"
-                continue
+                result=""
             fi
             all_tasks+=("${formatted_time}|${tag}|${result}")
         fi
     done <<< "$content"
 done
 
+printf "%s\n" "${all_tasks[@]}"
+
 if [[ ${#all_tasks[@]} -gt 0 ]]; then
     mapfile -t sorted_tasks < <(printf "%s\n" "${all_tasks[@]}" | sort -t'|' -k1,1)
     all_tasks=()
-    final_counter=0
+    error_tasks=()
+    count=0
 
     for task_line in "${sorted_tasks[@]}"; do
-        this_time="${task_line%%|*}"
+        tag_time="${task_line%%|*}"
         tmp="${task_line#*|}"
-        this_tag="${tmp%%|*}"
-        this_result="${tmp#*|}"
-        final_counter=$((final_counter + 1))
-        all_tasks+=("${this_time}|${this_tag}|${this_result}")
-        echo -e "${GREEN}[$final_counter] $this_tag : $this_time${NC}"
-        read -r -a f_arr <<< "${this_result}"
-        if [[ ${#f_arr[@]} -gt 0 ]]; then
-            t_dir="${f_arr[0]%/*}"
+        tag_name="${tmp%%|*}"
+        tag_paths="${tmp#*|}"
+        count=$((count + 1))
+        all_tasks+=("${tag_time}|${tag_name}|${tag_paths}")
+        read -r -a t_paths <<< "${tag_paths}"
+        if [[ ${#t_paths[@]} -gt 0 ]]; then
+            t_dir="${t_paths[0]%/*}"
             t_files=""
-            for f in "${f_arr[@]}"; do t_files+=" ${f##*/}"; done
+            for f in "${t_paths[@]}"; do t_files+=" ${f##*/}"; done
+            echo -e "${GREEN}[$count] $tag_name : $tag_time${NC}"
             echo "[目录]: $t_dir"
             echo "[文件]: ${t_files# }"
-            echo "cyber_recorder play -l -f ${this_result}"
+            echo "cyber_recorder play -l -f ${tag_paths}"
             echo "------------------------------------------------"
-        fi
-    done
-else
-    log_error "未收集到任何有效任务！"
-fi
-
-# ================= 序号选择逻辑 =================
-read -p "找到 $final_counter 个 Tag，请输入要处理的序号 (例如 1,2,5 或输入 0 导出全部): " selection
-copy_tasks=()
-if [[ "$selection" == "0" ]]; then
-    copy_tasks=("${all_tasks[@]}")
-else
-    IFS=',' read -ra selected_tasks <<< "$selection"
-    for i in "${selected_tasks[@]}"; do
-        idx=$(( $(echo "$i" | xargs) - 1 ))
-        if (( idx >= 0 && idx < ${#all_tasks[@]} )); then
-            copy_tasks+=("${all_tasks[$idx]}")
         else
-            log_warnning "无效序号: $((idx+1))，已忽略。"
+            error_tasks+=("[$count] $tag_name : $tag_time")
+            # log_error "该 tag 无法找到对应 record 数据"
+            # echo "------------------------------------------------"
         fi
     done
+    log_error "以下 tag 无法找到对应 record 数据"
+    printf "%s\n" "${error_tasks[@]}"
+    echo "------------------------------------------------"
+else
+    log_error "未找到到任何有效 record"
 fi
-
-if (( ${#copy_tasks[@]} == 0 )); then
-    log_warnning "未选择任何有效序号！"
-    exit 0
-fi
-printf "%s\n" "${copy_tasks[@]}" > "$MANIFEST_PATH"
+printf "%s\n" "${all_tasks[@]}" > "$MANIFEST_PATH"

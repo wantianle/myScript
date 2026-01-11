@@ -10,8 +10,8 @@ class RecordPlayer:
         self.config = session.config
         self.ctx = session.ctx
         self.script = session.executor
-        self.executor = session.record_mgr.executor
-        self.record_mgr = session.record_mgr
+        self.executor = session.recorder.executor
+        self.recorder = session.recorder
         self.workdir = self.ctx.work_dir
         self.library_file = self.workdir / ".witt" / "local_library.json"
 
@@ -84,9 +84,7 @@ class RecordPlayer:
 
             record_details = []
             for f in soc_dir.glob("*.record*"):
-                info = self.record_mgr.get_info(
-                    str(f.absolute())
-                )
+                info = self.recorder.get_info(str(f.absolute()))
                 if info["begin"]:
                     record_details.append(
                         {
@@ -163,4 +161,4 @@ class RecordPlayer:
         print(f"执行指令: \033[0;32m{full_cmd}\033[0m")
 
         # 交互式执行
-        self.executor.execute_interactive(full_cmd,self.script)
+        self.executor.execute_interactive(full_cmd, self.script)

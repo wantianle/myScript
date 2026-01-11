@@ -130,7 +130,6 @@ class TaskContext:
             "DEST_ROOT": cfg["host"]["dest_root"],
             "MDRIVE_ROOT": cfg["host"]["mdrive_root"],
             "LOCAL_PATH": cfg["host"]["local_path"],
-            "VMC_SH": cfg["host"]["vmc_sh_path"],
             "SOC": cfg["logic"]["soc"],
             "BEFORE": cfg["logic"]["before"],
             "AFTER": cfg["logic"]["after"],

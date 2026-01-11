@@ -15,7 +15,6 @@ host:
   nas_root: "/media/nas/00.raw"
   dest_root: "/media/road_test"
   mdrive_root: "/home/mini/project"
-  vmc_sh_path: "/home/mini/project/vmc.sh"
   local_path: "/media/mini"
 
 # Docker 内部路径管理
@@ -25,8 +24,7 @@ docker:
   workspace: "/mdrive"
   host_mount: "/media"
   docker_mount: "/media"
-  dev_into: "/home/mini/project/mdrive/docker/dev_into.sh"
-  dev_start: "/home/mini/project/mdrive/docker/dev_start.sh"
+  docker_scripts: "/home/mini/project/mdrive/docker"
   setup_env: "/mdrive/mdrive/setup.sh"
 
 

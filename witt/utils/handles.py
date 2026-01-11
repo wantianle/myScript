@@ -36,7 +36,7 @@ def sanitize_name(name: str) -> str:
         return "unnamed"
     invalid_chars = r'[\\/*?:"<>|！？@#$%^&~`\'"￥+\[\]{}]'
     sanitized = name.strip().replace(" ", "_")
-    sanitized = re.sub(invalid_chars, "_", name)
+    sanitized = re.sub(invalid_chars, "_", sanitized)
     sanitized = re.sub(r"_+", "_", sanitized)
     return sanitized.strip("._")
 

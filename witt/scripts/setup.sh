@@ -4,7 +4,6 @@ set -Eeuo pipefail
 PROJECT_DIR="${BASH_SOURCE[0]%/*}/.."
 UTILS_DIR=$PROJECT_DIR/utils
 source "$UTILS_DIR/utils.sh"
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
 
 INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
 MDRIVE_ROOT="$HOME/project"

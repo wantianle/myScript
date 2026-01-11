@@ -7,7 +7,6 @@ from utils import cli
 from utils import handles
 from pathlib import Path
 
-# ==================== 主菜单  ====================
 
 def main_menu():
     while True:
@@ -28,16 +27,38 @@ def main_menu():
         print("=" * 50)
         choice = input("请选择操作: ").strip().lower()
         if choice == "1":
-            cli.run_full_pipeline(session)
+            cli.get_basic_info(session.config)
+            cli.get_path_params(session.config)
+            try:
+                session.record_query()
+                task_list = handles.parse_manifest(session.ctx.manifest_path)
+                selected_list = cli.get_selected_indices(task_list)
+                if input("是否压缩 Record? [y/N] (回车跳过): ").lower() == "y":
+                    # 这里怎么简化，我只需要channel名单去过滤信息
+                    session.record_compress(Path(task_list[0]["paths"][0]))
+                valid_tasks = [t for t in selected_list if t.get("paths")]
+                for task in valid_tasks:
+                    time, name, paths = task["time"], task["name"], task["paths"]
+                    tag_dt = handles.str_to_time(time)
+                    print(f"\n>>> 正在处理: {name} {tag_dt}")
+                    for f in paths:
+                        session.record_slice(Path(f), tag_dt)
+                session.record_download(selected_list)
+                if input("\n是否立即回播数据? [y/N] (回车跳过): ").lower() == "y":
+                    session.task_play()
+            except Exception as e:
+                logging.error(f"全流程执行失败: {e}")
+                raise e
+                # logging.debug(traceback.format_exc())
         elif choice in ("2", "3", "4", "5", "6"):
             cli.get_basic_info(config)
             if choice == "2":
-                cli.get_workflow_params(config)
-                session.task_query()
+                cli.get_path_params(config)
+                session.record_query()
             elif choice == "3":
                 target_path = Path(input("需要压缩的 record 文件完整路径: ").strip())
-                session.task_compress(target_path)
-                session.task_slice(target_path)
+                session.record_compress(target_path)
+                session.record_slice(target_path)
             elif choice == "4":
                 cli.get_split_params(config)
                 target = Path(input("需要切片的 record 文件的目录路径: ").strip())
@@ -46,18 +67,18 @@ def main_menu():
                     f"{config['logic']['target_date'][:8]}{time_raw}"
                 )
                 for f in target.glob("*.record*"):
-                    session.task_slice(f, tag_dt)
+                    session.record_slice(f, tag_dt)
             elif choice == "5":
-                config["logic"]["version_json"] = cli.get_json_input() or config["logic"][
-                    "version_json"
-                ]
+                config["logic"]["version_json"] = (
+                    cli.get_json_input() or config["logic"]["version_json"]
+                )
                 session.task_sync()
             elif choice == "6":
                 print("\n>>> 进入数据回播...")
                 config["host"]["dest_root"] = cli.get_user_input(
                     "请输入回播数据根目录(仅限/media下)", config["host"]["dest_root"]
                 )
-                cli.task_player_workflow(session)
+                session.task_play()
         elif choice == "h":
             cli.usage()
         elif choice == "q":
