@@ -1,8 +1,7 @@
 #!/bin/bash
 
 set -Eeuo pipefail
-UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
-source "$UTILS_DIR/utils.sh"
+source "${BASH_SOURCE[0]%/*}/utils.sh"
 trap 'failure ${BASH_SOURCE[0]} $LINENO "$BASH_COMMAND"' ERR
 
 # ================= 确定查询模式 =================
@@ -68,6 +67,7 @@ while read -r record_path; do
     fi
 done <<< "$record_list"
 
+
 # ================= 处理 Tag 文件 =================
 all_tasks=()
 [[ -z "$tag_list" ]] && { log_error "$data_dir 找不到对应的 tag 文件！"; exit 1; }
@@ -113,7 +113,7 @@ for tag_file in $tag_list; do
             done
            # 精确筛选
             if [[ -n "$matched_files" ]]; then
-                sorted_candidates=$(echo "$matched_files" | tr ' ' '\n' | sort -n)
+                sorted_candidates=$(echo "$matched_files" | tr ' ' '\n' | sort - -n)
                 final_list=""
                 last_file=""
 
@@ -122,12 +122,16 @@ for tag_file in $tag_list; do
                     f_sec="${line%%|*}"
                     f_path="${line#*|}"
 
-                    if (( f_sec <= end_sec )); then
-                        if (( f_sec >= start_sec )); then
-                            final_list="${final_list} ${f_path}"
-                        else
-                            last_file="$f_path"
-                        fi
+                    if (( f_sec >= end_sec )); then
+                        continue
+                    fi
+                    # 如果文件起始时间在请求区间内，加入 final_list
+                    if (( f_sec >= start_sec )); then
+                        final_list="${final_list} ${f_path}"
+                        echo -e "${YELLOW}${line}${NC}"
+                    # 如果文件起始时间早于请求开始时间，它可能是包含这段数据的那个“母文件”
+                    else
+                        last_file="$f_path"
                     fi
                 done <<< "$sorted_candidates"
                 result="${last_file} ${final_list}"

@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
-PROJECT_DIR="${BASH_SOURCE[0]%/*}/.."
-UTILS_DIR=$PROJECT_DIR/utils
-source "$UTILS_DIR/utils.sh"
+CUR_DIR="${BASH_SOURCE[0]%/*}"
+source "$CUR_DIR/utils.sh"
 
 INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
 MDRIVE_ROOT="$HOME/project"
@@ -43,8 +42,8 @@ fi
 if [[ ! -f $VMC_SH ]]; then
     log_warnning "未找到 vmc.sh 文件, 尝试创建..."
     mkdir -p $MDRIVE_ROOT
-    cp "$UTILS_DIR/vmc.sh_for_tester" "$MDRIVE_ROOT/vmc.sh"
-    chmod +x "$MDRIVE_ROOT/vmc.sh"
+    cp $CUR_DIR/vmc.sh $VMC_SH
+    chmod +x $MDRIVE_ROOT/vmc.sh
 fi
 
 if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
@@ -55,11 +54,13 @@ if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
 fi
 
 if [[ ! -w "/media" ]]; then
+    log_warnning "/media 没有读写权限，尝试更改..."
     sudo chown $USER:$USER /media
 fi
 
-if [ -d $DATA_ROOT ]; then
-    [[ ! -w $DATA_ROOT ]] && sudo chown -R $USER:$USER $DATA_ROOT
+if [[ -d $DATA_ROOT && ! -w $DATA_ROOT ]]; then
+    log_warnning "$DATA_ROOT 没有读写权限，尝试更改..."
+    sudo chown -R $USER:$USER $DATA_ROOT
 else
     mkdir -p $DATA_ROOT
 fi
@@ -67,7 +68,7 @@ fi
 if [ "$(docker ps -a -q -f name=${CONTAINER})" ]; then
     docker restart ${CONTAINER} > /dev/null
 else
-    # log_warnning "docker 容器不存在, 尝试创建环境..."
+    log_warnning "docker 容器不存在, 尝试创建环境..."
     bash ${DEV_START_SCRIPT} > /dev/null 2>&1
 fi
 
@@ -76,4 +77,4 @@ if ! docker exec ${CONTAINER} /bin/bash -c "source /mdrive/mdrive/setup.sh && cy
     sleep 1
 fi
 
-python3 $PROJECT_DIR/main.py
+python3 $CUR_DIR/../main.py

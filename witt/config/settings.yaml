@@ -1,7 +1,7 @@
 # 基础环境配置
 env:
   log_level: "INFO"
-  debug: false
+  debug: False
   mode: 1
 
 # 远程环境配置
@@ -15,7 +15,9 @@ host:
   nas_root: "/media/nas/00.raw"
   dest_root: "/media/road_test"
   mdrive_root: "/home/mini/project"
-  local_path: "/media/mini"
+  # local_path: "/media/mini"
+  local_path: "/media/data" # 测试
+
 
 # Docker 内部路径管理
 docker:
@@ -27,15 +29,14 @@ docker:
   docker_scripts: "/home/mini/project/mdrive/docker"
   setup_env: "/mdrive/mdrive/setup.sh"
 
-
 # 业务逻辑配置
 logic:
   vehicle: "XZB600011" # 临时测试
   target_date: "20260110" # 临时测试
   version_json: ""
   soc: "soc1"
-  before: 30
-  after: 10
+  before: 10
+  after: 7
   blacklist:
 
 paths:

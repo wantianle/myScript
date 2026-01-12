@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
-source "$UTILS_DIR/utils.sh"
+CUR_DIR="${BASH_SOURCE[0]%/*}"
+source "$CUR_DIR/utils.sh"
 [[ "$(uname -m)" != "x86_64" ]] && { log_error "仅支持 x86_64 架构!"; exit 1; }
 VMC_BIN_DIR="$HOME/.vmc/bin"
 VMC_EXEC="$VMC_BIN_DIR/vmc"
-SRC_VMC="$UTILS_DIR/vmc_linux_amd64_0.0.151"
+SRC_VMC="$CUR_DIR/../bin/vmc_linux_amd64_0.0.151"
 MDRIVE_ROOT="$HOME/project"
 
 log_info "正在安装 vmc 到 $VMC_BIN_DIR ..."
@@ -47,7 +47,7 @@ log_info "配置 Token 并更新..."
 "$VMC_EXEC" self update
 
 mkdir -p "$MDRIVE_ROOT"
-cp "$UTILS_DIR/vmc.sh_for_tester" "$MDRIVE_ROOT/vmc.sh"
+cp "$CUR_DIR/vmc.sh" "$MDRIVE_ROOT/vmc.sh"
 chmod +x "$MDRIVE_ROOT/vmc.sh"
 
 log_info "部署完成! 请运行 'source ~/.zshrc' 和 'source ~/.bashrc' 使补全生效。"
