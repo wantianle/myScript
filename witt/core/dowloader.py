@@ -14,11 +14,10 @@ from utils import handles
 class RecordDownloader:
     def __init__(self, session):
         self.ctx = session.ctx
-        self.config = self.ctx.config
-        self.dest_root = Path(self.config["host"]["dest_root"])
-        self.mode = self.config["env"].get("mode", 1)
-        self.remote_user = self.config["remote"]["user"]
-        self.remote_ip = self.config["remote"]["ip"]
+        self.dest_root = Path(self.ctx.config["host"]["dest_root"])
+        self.mode = self.ctx.config["env"].get("mode", 1)
+        self.remote_user = self.ctx.config["remote"]["user"]
+        self.remote_ip = self.ctx.config["remote"]["ip"]
 
     def get_file_size(self, path: str) -> int:
         """获取文件大小（本地或远程）"""
@@ -59,7 +58,9 @@ class RecordDownloader:
         meta_path = tag_dir / "meta.json"
 
         dt_tag = handles.str_to_time(task["time"])
-        bf, af = int(self.config["logic"]["before"]), int(self.config["logic"]["after"])
+        bf, af = int(self.ctx.config["logic"]["before"]), int(
+            self.ctx.config["logic"]["after"]
+        )
 
         contract = {
             "tag_info": {
@@ -120,11 +121,16 @@ class RecordDownloader:
 ```
 - **数据路径：**
 ```bash
-{self.config['host']['nas_root']}/{self.ctx.target_date}/{self.ctx.vehicle}/{task['name']}/{self.config['logic']['soc']}
+{self.ctx.config['host']['nas_root']}/{self.ctx.target_date}/{self.ctx.vehicle}/{task['name']}/{self.ctx.config['logic']['soc']}
 ```
 - **数据时刻：**
 ```bash
 {records_str}
+```
+- **回播命令：**
+```bash
+cd {self.ctx.config['host']['dest_root']}/{self.ctx.target_date}/{self.ctx.vehicle}/{task['name']}/{self.ctx.config['logic']['soc']}
+cyber_recorder play -l -f {records_str}
 ```
 """
         readme_path = save_dir / "README.md"
@@ -165,7 +171,7 @@ class RecordDownloader:
 
             for task, task_size, file_infos in task_infos:
                 folder_name = f"{int(task['id']):02d}.{task['name']}"
-                soc_name = self.config["logic"]["soc"].strip("/")
+                soc_name = self.ctx.config["logic"]["soc"].strip("/")
                 save_dir = (
                     self.dest_root
                     / self.ctx.target_date[:8]

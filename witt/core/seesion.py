@@ -8,6 +8,7 @@ from core.runner import ScriptRunner
 from core.player import RecordPlayer
 from core.dowloader import RecordDownloader
 from utils import cli
+from utils import handles
 from datetime import timedelta
 from pathlib import Path
 
@@ -20,21 +21,20 @@ class AppSession:
 
     def __init__(self):
         self.ctx = TaskContext(DEFAULT_CONFIG_PATH)
-        self.config = self.ctx.config
-        if self.config["env"].get("mode") == 3:
-            self.executor = SSHAdapter(self.ctx)
+        if self.ctx.config["env"].get("mode") == 3:
+            self.executor = SSHAdapter(self.ctx.config)
         else:
             self.executor = DockerAdapter(self.ctx)
         self.recorder = Recorder(self.executor)
         self.runner = ScriptRunner(self.ctx)
         self.downloader = RecordDownloader(self)
         self.player = RecordPlayer(self)
-        self.before = self.config["logic"]["before"]
-        self.after = self.config["logic"]["after"]
+        self.before = self.ctx.config["logic"]["before"]
+        self.after = self.ctx.config["logic"]["after"]
 
     def record_query(self):
         self.ctx.setup_logger()
-        logging.info(">>> 执行数据检索与同步 (find_record)...")
+        logging.info(">>> 执行数据检索查询...")
         self.runner.run_find_record()
 
     def record_compress(self, record_path: Path):
@@ -49,9 +49,9 @@ class AppSession:
             print(f"{i:<4} | {ch['name']:<55} | {ch['count']}")
         selected_indices = cli.get_selected_indices(channels)
         selected_channels = [c["name"] for c in selected_indices]
-        self.config["logic"]["blacklist"] = selected_channels
+        self.ctx.config["logic"]["blacklist"] = selected_channels
         logging.info(
-            f">>> 执行数据压缩切片 ==> split_time: {self.before}-{self.after} del_channels: {selected_channels}"
+            f">>> 执行数据压缩切片 ==> 取 tag 前 {self.before}s 后{self.after}s 删除 channels: {selected_channels}"
         )
 
     def record_slice(self, input_path: Path, tag_dt=None):
@@ -66,7 +66,7 @@ class AppSession:
             # host_out=str(input_path.with_suffix(".split")),
             start_dt=tag_start,
             end_dt=tag_end,
-            blacklist=self.config["logic"]["blacklist"],
+            blacklist=self.ctx.config["logic"]["blacklist"],
         )
         if not success:
             logging.warning(f">>> [Skip] 文件 {input_path} 可能已损坏，切片失败。")
@@ -78,19 +78,22 @@ class AppSession:
         """
         读取清单 -> 用户选择 -> 执行下载
         """
+        self.ctx.setup_logger()
         self.downloader.download_record(selected_list)
 
     def task_sync(self):
         """
         同步环境
         """
+        self.ctx.setup_logger()
         self.runner.run_restore_env()
 
     def task_play(self):
+        self.ctx.setup_logger()
         while True:
             library = self.player.get_library()
             if not library:
-                print("本地没有任何 Record 数据。")
+                logging.warning("本地没有任何 Record 数据")
                 return
 
             print(
@@ -100,12 +103,17 @@ class AppSession:
             count = 1
             for entry in library:
                 if (
-                    entry["date"] == self.config["logic"]["target_date"]
-                    and entry["vehicle"] == self.config["logic"]["vehicle"]
+                    entry["date"] == self.ctx.target_date
+                    and entry["vehicle"] == self.ctx.vehicle
                 ):
+                    # tag_dir = self.ctx.work_dir / entry["tag"]
+                    # print(
+                    #     f" {count:<4} | {entry['vehicle']:<10} | {entry['time']:<20} | ", end=""
+                    # )
                     print(
                         f" {count:<4} | {entry['vehicle']:<10} | {entry['time']:<20} | {entry['tag']}"
                     )
+                    # handles.print_tree(tag_dir)
                     count += 1
             tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
             if not tag_idx:

@@ -7,15 +7,17 @@ from typing import List, Dict, Any
 
 class RecordPlayer:
     def __init__(self, session):
-        self.config = session.config
         self.ctx = session.ctx
-        self.script = session.executor
-        self.executor = session.recorder.executor
+        self.runner = session.runner
+        self.executor = session.executor
         self.recorder = session.recorder
-        self.workdir = self.ctx.work_dir
-        self.library_file = self.workdir / ".witt" / "local_library.json"
+
+    @property
+    def library_file(self):
+        return self.ctx.work_dir / ".witt" / "local_library.json"
 
     def get_library(self) -> List[Dict[str, Any]]:
+        # self.ctx.setup_logger()
         current_fp = self.ctx.get_library_fingerprint()
         if self.library_file.exists():
             try:
@@ -26,15 +28,19 @@ class RecordPlayer:
             except Exception:
                 pass
 
-        print(f"检测到目录状态变更，正在扫描本地库{self.workdir}...")
+        logging.info(f"检测到目录状态变更，正在扫描本地库{self.ctx.work_dir}...")
         library_list = self.scan_local_library()
         save_obj = {"fingerprint": current_fp, "library": library_list}
-        self.library_file.write_text(json.dumps(save_obj, indent=4, ensure_ascii=False))
+        try:
+            self.library_file.write_text(json.dumps(save_obj, indent=4, ensure_ascii=False))
+        except Exception as e:
+            logging.warning("缓存文件写入失败")
+            raise e
         return library_list
 
     def scan_local_library(self) -> List[Dict[str, Any]]:
         library_map = {}
-        for meta_file in self.workdir.rglob("meta.json"):
+        for meta_file in self.ctx.work_dir.rglob("meta.json"):
             tag_dir = meta_file.parent
             try:
                 meta = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -73,10 +79,10 @@ class RecordPlayer:
 
                 library_map[str(tag_dir)] = tag_entry
             except Exception as e:
-                logging.warning(f"契约解析失败 [{meta_file}]: {e}")
+                logging.warning(f"元数据解析失败 [{meta_file}]: {e}")
 
         # # 兼容性扫描查询逻辑，用于旧数据（针对那些没有 meta.json 的老文件夹）
-        for soc_dir in self.workdir.rglob("*soc*"):
+        for soc_dir in self.ctx.work_dir.rglob("*soc*"):
             tag_dir = soc_dir.parent
 
             if str(tag_dir) in library_map:
@@ -128,7 +134,7 @@ class RecordPlayer:
 
         earliest_begin = ensure_dt(records[0]["begin"])
         total_duration = sum(item["duration"] for item in records)
-        self.config["logic"]["version_json"] = Path(records[0]["path"]).parent
+        self.ctx.config["logic"]["version_json"] = Path(records[0]["path"]).parent
 
         # 边界钳位
         final_start = max(0, start_sec)
@@ -161,4 +167,4 @@ class RecordPlayer:
         print(f"执行指令: \033[0;32m{full_cmd}\033[0m")
 
         # 交互式执行
-        self.executor.execute_interactive(full_cmd, self.script)
+        self.executor.execute_interactive(full_cmd, self.runner)

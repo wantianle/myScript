@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 
 class ScriptRunner:
@@ -7,22 +8,26 @@ class ScriptRunner:
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.scripts_dir = Path(self.ctx.config["paths"]["scripts_dir"]).resolve()
+        PROJECT_ROOT = Path(__file__).resolve().parents[1]
+        self.scripts_dir = (
+            PROJECT_ROOT / self.ctx.config["paths"]["scripts_dir"]
+        ).resolve()
 
-    def _run_script(self, script_name: str, quit: bool, *args: str) -> None:
+    def _run_script(self, script_name: str, quiet: bool, *args: str) -> None:
         """
         注入参数执行 Shell 脚本
         """
         script_path = self.scripts_dir / script_name
+        print(script_path)
         if not script_path.exists():
-            script_path = self.ctx.config["docker"]["dev_start"]
+            script_path = Path(self.ctx.config["docker"]["docker_scripts"]) / script_name
         env_vars = self.ctx.get_env_vars()
         bash_cmd = ["bash"]
         if self.ctx.config["env"]["debug"]:
             bash_cmd.append("-x")
         cmd = bash_cmd + [str(script_path)]
         try:
-            subprocess.run(cmd, env=env_vars, text=True, check=True, capture_output=quit)
+            subprocess.run(cmd, env=env_vars, text=True, check=True, capture_output=quiet)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"{script_name} 脚本执行失败") from e
 

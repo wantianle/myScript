@@ -121,24 +121,23 @@ class TaskContext:
 
     def get_env_vars(self) -> Dict[str, str]:
         """构建注入 Shell 脚本的环境变量字典"""
-        cfg = self.config
         vars = {
             "MANIFEST_PATH": self.manifest_path,
             "VEHICLE": self.vehicle,
             "TARGET_DATE": self.target_date,
-            "NAS_ROOT": cfg["host"]["nas_root"],
-            "DEST_ROOT": cfg["host"]["dest_root"],
-            "MDRIVE_ROOT": cfg["host"]["mdrive_root"],
-            "LOCAL_PATH": cfg["host"]["local_path"],
-            "SOC": cfg["logic"]["soc"],
-            "BEFORE": cfg["logic"]["before"],
-            "AFTER": cfg["logic"]["after"],
-            "MODE": cfg["env"]["mode"],
-            "VERSION_JSON": cfg["logic"]["version_json"],
-            "CONTAINER": cfg["docker"]["container"],
-            "REMOTE_USER": cfg["remote"]["user"],
-            "REMOTE_IP": cfg["remote"]["ip"],
-            "REMOTE_DATA_ROOT": cfg["remote"]["data_root"],
+            "NAS_ROOT": self.config["host"]["nas_root"],
+            "DEST_ROOT": self.config["host"]["dest_root"],
+            "MDRIVE_ROOT": self.config["host"]["mdrive_root"],
+            "LOCAL_PATH": self.config["host"]["local_path"],
+            "SOC": self.config["logic"]["soc"],
+            "BEFORE": self.config["logic"]["before"],
+            "AFTER": self.config["logic"]["after"],
+            "MODE": self.config["env"]["mode"],
+            "VERSION_JSON": self.config["logic"]["version_json"],
+            "CONTAINER": self.config["docker"]["container"],
+            "REMOTE_USER": self.config["remote"]["user"],
+            "REMOTE_IP": self.config["remote"]["ip"],
+            "REMOTE_DATA_ROOT": self.config["remote"]["data_root"],
         }
         full_env = os.environ.copy()
         full_env.update({k: str(v) for k, v in vars.items()})

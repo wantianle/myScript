@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
 source "$UTILS_DIR/utils.sh"
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
+trap 'failure ${BASH_SOURCE[0]} ${LINENO} "$BASH_COMMAND"' ERR
 VMC_SH="$MDRIVE_ROOT/vmc.sh"
 find_version() {
     json_content=""
@@ -73,7 +73,7 @@ show_git_info() {
 }
 
 sync_local_env() {
-    log_info "===== 同步本地环境 ====="
+    log_info "同步本地环境..."
     local cur_vehicle_model=$(grep '^MDRIVE_VEHICLE_MODEL=' "$VMC_SH" | cut -d '"' -f2)
     local cur_vehicle=$(grep '^MDRIVE_VEHICLE_NAME=' "$VMC_SH" | cut -d '"' -f2)
     local cur_mdrive_ver=$(grep '^MDRIVE_VERSION=' "$VMC_SH" | cut -d '=' -f2)

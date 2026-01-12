@@ -84,3 +84,31 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
     for i, task in enumerate(tasks, start=1):
         task["id"] = f"{i:02d}"
     return tasks
+
+
+def print_tree(directory, max_depth=2, current_depth=0):
+    """
+    专门打印带有 soc1/soc2 层级的目录结构
+    """
+    path = Path(directory)
+    if current_depth >= max_depth:
+        return
+
+    # 获取文件夹并排序
+    items = sorted(
+        [
+            item
+            for item in path.iterdir()
+            if item.is_dir() and not item.name.startswith(".")
+        ]
+    )
+
+    for i, item in enumerate(items):
+        is_last = i == len(items) - 1
+        connector = "└── " if is_last else "├── "
+
+        # 打印当前层级
+        print("    " * current_depth + connector + item.name)
+
+        # 递归
+        print_tree(item, max_depth, current_depth + 1)

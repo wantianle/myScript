@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 UTILS_DIR="${BASH_SOURCE[0]%/*}/../utils"
 source "$UTILS_DIR/utils.sh"
-trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
+trap 'failure ${BASH_SOURCE[0]} $LINENO "$BASH_COMMAND"' ERR
 
 # ================= 确定查询模式 =================
 if [[ $MODE == "3" ]]; then
@@ -140,8 +140,6 @@ for tag_file in $tag_list; do
     done <<< "$content"
 done
 
-printf "%s\n" "${all_tasks[@]}"
-
 if [[ ${#all_tasks[@]} -gt 0 ]]; then
     mapfile -t sorted_tasks < <(printf "%s\n" "${all_tasks[@]}" | sort -t'|' -k1,1)
     all_tasks=()
@@ -167,13 +165,13 @@ if [[ ${#all_tasks[@]} -gt 0 ]]; then
             echo "------------------------------------------------"
         else
             error_tasks+=("[$count] $tag_name : $tag_time")
-            # log_error "该 tag 无法找到对应 record 数据"
-            # echo "------------------------------------------------"
         fi
     done
-    log_error "以下 tag 无法找到对应 record 数据"
-    printf "%s\n" "${error_tasks[@]}"
-    echo "------------------------------------------------"
+    if [[ ${#error_tasks[@]} -gt 0 ]]; then
+        log_error "以下 tag 无法找到对应 record 数据"
+        printf "%s\n" "${error_tasks[@]}"
+        echo "------------------------------------------------"
+    fi
 else
     log_error "未找到到任何有效 record"
 fi

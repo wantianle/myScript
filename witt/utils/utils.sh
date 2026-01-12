@@ -45,8 +45,10 @@ log_DEBUG() {
 
 # -------- 错误处理函数 --------
 failure() {
-  local lineno=$1
-  local msg=$2
-  log_error "命令在第 ${lineno} 行发生错误: ${msg}"
-  log_error "退出状态码: $?"
+    local script=$1
+    local lineno=$2
+    local msg=$3
+    log_error "${script}退出状态码: $?"
+    log_error "命令在第 ${lineno} 行发生错误: ${msg}"
 }
+
