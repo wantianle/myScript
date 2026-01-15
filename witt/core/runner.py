@@ -17,7 +17,6 @@ class ScriptRunner:
         注入参数执行 Shell 脚本
         """
         script_path = self.scripts_dir / script_name
-        print(script_path)
         if not script_path.exists():
             script_path = Path(self.ctx.config["docker"]["docker_scripts"]) / script_name
         env_vars = self.ctx.get_env_vars()

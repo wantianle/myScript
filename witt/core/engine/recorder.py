@@ -1,5 +1,4 @@
 import logging
-import sys
 from utils import handles
 from datetime import datetime
 from pathlib import Path
@@ -7,8 +6,8 @@ from typing import Dict, List, Optional, Any
 
 class Recorder:
 
-    def __init__(self, executor):
-        self.executor = executor
+    def __init__(self, session):
+        self.session = session
 
     def get_info(
         self, docker_path: str, fast_meta: Optional[dict] = None
@@ -25,48 +24,52 @@ class Recorder:
                 "channels": [],
             }
         try:
-            stdout = self.executor.execute(f"cyber_recorder info {docker_path}")
+            stdout = self.session.executor.execute(f"cyber_recorder info {docker_path}")
             return handles.parse_record_info(stdout)
         except Exception as e:
-            if "open record file error" in str(e):
-                logging.warning(f"Record 文件不存在或无权限访问, 请查看文件路径及权限:")
-                print(f"    ls -l {docker_path}")
-                print("如果存在权限问题，请确保 Docker 容器对该文件有读取权限:")
-                print("    sudo chown -R $USER:$USER /your_data_root && sudo chmod 775 -R /your_data_path")
-                raise e
             logging.error(f"解析 Record 元数据失败 [Path: {docker_path}]: {e}")
-            sys.exit(1)
+            raise e
 
-    def split(
+    def split_async(
         self,
         host_in: str,
-        host_out: Optional[str] = None,
-        start_dt: Optional[datetime] = None,
-        end_dt: Optional[datetime] = None,
-        blacklist: Optional[List[str]] = None,
+        host_out: str,
+        start_dt: str,
+        end_dt: str,
+        blacklist: List[str],
     ) -> bool:
         """
         执行 record 切片
         """
-        d_in = self.executor.map_path(host_in)
-        cmd_parts = ["cyber_recorder split", f"-f {d_in}"]
-        if host_out:
-            d_out = self.executor.map_path(host_out)
-            cmd_parts.append(f"-o {d_out}")
-        if start_dt:
-            start_str = handles.time_to_str(start_dt)
-            cmd_parts.append(f'-b "{start_str}"')
-        if end_dt:
-            end_str = handles.time_to_str(end_dt)
-            cmd_parts.append(f'-e "{end_str}"')
+        d_in = self.session.executor.map_path(host_in)
+        d_out = self.session.executor.map_path(host_out)
+        cmd_parts = ["cyber_recorder split", f"-f {d_in}", f"-o {d_out}"]
+        if start_dt: cmd_parts.append(f'-b "{handles.time_to_str(start_dt)}"')
+        if end_dt: cmd_parts.append(f'-e "{handles.time_to_str(end_dt)}"')
         if blacklist:
-            for ch in blacklist:
-                cmd_parts.append(f"-k {ch}")
+            for ch in blacklist: cmd_parts.append(f"-k {ch}")
         split_cmd = " ".join(cmd_parts)
-        print(split_cmd)
-        log_msg = f"Executing Split => "
-        log_msg += f"{host_out}" if host_out else f"{host_in}.split"
-        logging.info(log_msg)
+        return self.session.executor.popen(split_cmd)
+
+    def split(
+        self,
+        host_in: str,
+        host_out: Optional[str]=None,
+        start_dt: Optional[str]=None,
+        end_dt: Optional[str]=None,
+        blacklist: Optional[List[str]]=None,
+    ) -> bool:
+        """
+        执行 record 切片
+        """
+        cmd_parts = ["cyber_recorder split", f"-f {host_in}"]
+        if host_out:
+            cmd_parts.append(f'-o "{handles.time_to_str(host_out)}"')
+        if start_dt: cmd_parts.append(f'-b "{handles.time_to_str(start_dt)}"')
+        if end_dt: cmd_parts.append(f'-e "{handles.time_to_str(end_dt)}"')
+        if blacklist:
+            for ch in blacklist: cmd_parts.append(f"-k {ch}")
+        split_cmd = " ".join(cmd_parts)
         CORRUPT_SIGNATURES = [
             "Parse section message failed",
             "read chunk body section fail",
@@ -74,7 +77,7 @@ class Recorder:
             "header invalid",
         ]
         try:
-            self.executor.execute(split_cmd)
+            self.session.executor.execute(split_cmd)
             return True
         except RuntimeError as e:
             err_msg = str(e)

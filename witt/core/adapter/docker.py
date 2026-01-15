@@ -1,20 +1,37 @@
 import logging
 import subprocess
+import os
 import sys
 from pathlib import Path
 from typing import Union
+from core.adapter.base import BaseAdapter
 from core.runner import ScriptRunner
 
 
-class DockerAdapter:
+class DockerAdapter(BaseAdapter):
     """负责在 Docker 容器内执行命令并处理路径映射"""
 
     def __init__(self, ctx):
+        self.ctx = ctx
         self.runner = ScriptRunner(ctx)
         self.container = ctx.config["docker"]["container"]
         self.setup_env = ctx.config["docker"]["setup_env"]
         self.host_mount = Path(ctx.config["docker"]["host_mount"]).resolve()
         self.docker_mount = Path(ctx.config["docker"]["docker_mount"])
+
+    def fetch_file(self, remote_path: str, local_dest: Path):
+        """
+        Docker 模式下因为有挂载，文件已经在宿主机了。
+        如果路径不一致，可以执行 shutil.move，通常情况下什么都不用做。
+        """
+        pass
+
+    def get_size(self, path: str) -> int:
+        return os.path.getsize(path) if os.path.exists(path) else 0
+
+    def remove(self, path: str):
+        if os.path.exists(path):
+            os.remove(path)
 
     def check_docker(self):
         """确保环境可用，否则尝试修复"""
@@ -71,11 +88,33 @@ class DockerAdapter:
             )
             raise RuntimeError(error_detail)
 
-    def execute_interactive(self, cmd: str, scripts):
+    def popen(self, cmd: str):
+        """
+        异步执行容器命令，返回 subprocess.Popen 对象
+        """
+        # 保持与 execute 一致的环境变量加载
+        env_cmds = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
+        source_cmd = f"source {self.ctx.config['docker']['setup_env']}"
+
+        full_cmd = (
+            f"docker exec {self.ctx.config['docker']['container']} /bin/bash -c "
+            f"'{env_cmds} && {source_cmd} && {cmd}'"
+        )
+
+        # 注意：这里不能使用 capture_output，因为我们要手动控制
+        return subprocess.Popen(
+            full_cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def execute_interactive(self, cmd: str, scriptRunner):
         """
         用于 cyber_recorder play 等需要交互和实时刷新的命令
         """
-        scripts.run_restore_env()
+        scriptRunner.run_restore_env()
         env_setup = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
         play_cmd = f"docker exec -it {self.container} /bin/bash -c '{env_setup} && source {self.setup_env} && {cmd}'"
         subprocess.run(play_cmd, shell=True, check=True)

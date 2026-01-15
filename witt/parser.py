@@ -4,10 +4,10 @@ import os
 import re
 import sys
 import subprocess
+import ui
 from pathlib import Path
 
-
-README = Path(__file__).resolve().parents[1] / "docs" / "README"
+README = Path(__file__).resolve().parents[0] / "docs" / "README"
 
 
 def usage():
@@ -20,12 +20,16 @@ def get_user_input(prompt, default_value):
 
 
 def get_json_input() -> str:
-    print("请粘贴 version.json 内容或所在目录 (Ctrl+D 结束):")
+    print("直接拖拽 or 输入 version.json 内容或文件路径 (回车 + Ctrl D 结束):")
     try:
-        input = sys.stdin.read().strip()
+        input = sys.stdin.read().strip().strip("'\"")
         if not input:
             logging.error("错误: 输入内容为空")
             sys.exit(1)
+        if input.startswith("file"):
+            return input[7:]
+        if os.path.isfile(input):
+            return input
         if os.path.isdir(input):
             return input
         return json.dumps(json.loads(input))
@@ -98,7 +102,7 @@ def get_selected_indices(all_tasks, prompt="请输入要处理的序号"):
     while True:
         # print("\n" + "-" * 50)
         raw_input = input(
-            f"{prompt}\n(单选: 1,3,5 | 范围: 2-6 | 全选: 0 | 排除: 0 5 7-15): "
+            f"{prompt}\n( 1,3 |  2-6 | 全选: 0 | 排除: 0 5 7-15): "
         ).strip()
 
         # 预清洗：只保留数字、横杠、逗号、空白、换行
@@ -162,3 +166,29 @@ def get_selected_indices(all_tasks, prompt="请输入要处理的序号"):
             return [all_tasks[i - 1] for i in final_ids]
         else:
             print("已取消...")
+
+
+def select_channels_interactive(recorder, record_path):
+    """
+    专门负责：展示 Channel 列表并让用户选
+    """
+    info = recorder.get_info(str(record_path))
+    channels = info.get("channels", [])
+
+    ui.show_channel_table(channels)
+
+    selected_indices = get_selected_indices(channels, prompt="请选择要【删除】的 Channel 序号")
+    return [c["name"] for c in selected_indices]
+
+
+def confirm_action(prompt: str, default: bool = False) -> bool:
+    """通用的二次确认函数"""
+    suffix = "[Y/n]" if default else "[y/N]"
+    res = (
+        input(f"{prompt} {suffix} (回车默认{'Y' if default else 'N'}): ")
+        .strip()
+        .lower()
+    )
+    if not res:
+        return default
+    return res == "y"

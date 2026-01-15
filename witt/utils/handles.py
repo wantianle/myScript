@@ -84,3 +84,20 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
     for i, task in enumerate(tasks, start=1):
         task["id"] = f"{i:02d}"
     return tasks
+
+
+def parser_range_logic(range_in: str):
+    """
+    专门处理播放时间范围字符串，确保永远返回两个整数
+    """
+    if not range_in:
+        return 0, 0
+    try:
+        nums = re.findall(r"\d+", range_in)
+        if len(nums) >= 2:
+            return int(nums[0]), int(nums[1])
+        elif len(nums) == 1:
+            return int(nums[0]), 0
+    except (ValueError, TypeError):
+        pass
+    return 0, 0

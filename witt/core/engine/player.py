@@ -17,7 +17,6 @@ class RecordPlayer:
         return self.ctx.work_dir / ".witt" / "local_library.json"
 
     def get_library(self) -> List[Dict[str, Any]]:
-        # self.ctx.setup_logger()
         current_fp = self.ctx.get_library_fingerprint()
         if self.library_file.exists():
             try:
@@ -80,7 +79,8 @@ class RecordPlayer:
 
                 library_map[str(tag_dir)] = tag_entry
             except Exception as e:
-                logging.warning(f"元数据解析失败 [{meta_file}]: {e}")
+                logging.warning(f"[{meta_file}] ==> 元数据解析失败, 开始扫描目录... ")
+                logging.debug(f"{e}")
 
         # # 兼容性扫描查询逻辑，用于旧数据（针对那些没有 meta.json 的老文件夹）
         for soc_dir in self.ctx.work_dir.rglob("*soc*"):
@@ -133,8 +133,9 @@ class RecordPlayer:
                 return datetime.fromisoformat(val)
             return val
 
+        records.sort(key=lambda x: ensure_dt(x["begin"]))
         earliest_begin = ensure_dt(records[0]["begin"])
-        total_duration = sum(item["duration"] for item in records)
+        total_duration = max(item["duration"] for item in records)
         self.ctx.config["logic"]["version_json"] = Path(records[0]["path"]).parent
 
         # 边界钳位

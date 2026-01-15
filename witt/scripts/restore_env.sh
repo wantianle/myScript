@@ -7,12 +7,13 @@ VMC_SH="$MDRIVE_ROOT/vmc.sh"
 find_version() {
     json_content=""
     local input_data="${VERSION_JSON}"
-    if [[ "$input_data" =~ ^\{.*\}$ ]]; then
-        # log_info "使用指定的 JSON 数据..."
+    if [[ "$input_data" =~ ^\\s*{.*\}$ ]]; then
+        log_info "使用指定的 JSON 数据..."
         json_content="$input_data"
     else
-        # log_info "使用指定的 version.json 文件: $input_data"
-        json_content=$(cat "$input_data/version.json")
+        log_info "使用指定的 version.json 文件: $input_data"
+        [[ -d $input_data ]] && input_data="$input_data/version.json"
+        json_content=$(cat "$input_data")
     fi
 
     if [ -n "$json_content" ]; then
@@ -110,10 +111,12 @@ start_docker() {
         fi
         bash "$START_SCRIPT" --remove
     fi
-    docker exec -d "$CONTAINER" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview'
-    # log_info "Supervisor status 和 Dreamview 已启动..."
+    docker exec -d "$CONTAINER" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview && sudo supervisorctl stop NebulaObu && sudo supervisorctl start Debug_Driver-LiDAR'
+    log_info "Supervisor status 和 Dreamview 已启动..."
 
-    # docker exec -d "$CONTAINER" bash -c "/mdrive/mdrive/bin/mdrive_multiviz >/dev/null 2>&1"
+    cp -n "${BASH_SOURCE[0]%/*}/../docs/customized_20251222.multiviz.yaml" "$MDRIVE_ROOT/"
+
+    docker exec -d "$CONTAINER" bash -c "/mdrive/mdrive/bin/mdrive_multiviz -d /mdrive/customized_20251222.multiviz.yaml >/dev/null 2>&1"
 
     # log_info "mdrive_multiviz 已启动..."
 

@@ -3,20 +3,20 @@ import json
 import os
 import shutil
 import subprocess
-import time
 from alive_progress import alive_bar
+# from core.session import AppSession
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
 from utils import handles
 
 
 class RecordDownloader:
     def __init__(self, session):
+        self.session = session
         self.ctx = session.ctx
+        self.recorder = session.recorder
         self.remote_user = self.ctx.config["remote"]["user"]
         self.remote_ip = self.ctx.config["remote"]["ip"]
-
 
     @property
     def mode(self):
@@ -25,38 +25,13 @@ class RecordDownloader:
     def dest_root(self):
         return Path(self.ctx.config["host"]["dest_root"])
 
-    def get_file_size(self, path: str) -> int:
-        """获取文件大小（本地或远程）"""
-        if self.mode == 3:
-            stat_cmd = f"ssh {self.remote_user}@{self.remote_ip} 'stat -c %s {path}'"
-            res = subprocess.run(stat_cmd, shell=True, capture_output=True, text=True)
-            return int(res.stdout.strip()) if res.returncode == 0 else 0
-        else:
-            p = Path(path)
-            return p.stat().st_size if p.exists() else 0
-
-    def cleanup_file(self, target_path: Path, file_list: Optional[List[str]] = None):
+    def _prepare_dir(self, target_dir: Path):
         """
-        删除源端的中间文件
+        彻底清理目标目录，确保没有旧数据干扰
         """
-        if file_list:
-            whitelist = set(file_list) | {"version.json", "README.md"}
-            for item in target_path.iterdir():
-                if item.is_file() and item.name not in whitelist:
-                    item.unlink()
-        else:
-            try:
-                if self.mode == 3:
-                    rm_cmd = (
-                        f"ssh {self.remote_user}@{self.remote_ip} 'rm -f {target_path}'"
-                    )
-                    subprocess.run(rm_cmd, shell=True, capture_output=True)
-                else:
-                    p = Path(target_path)
-                    if p.exists():
-                        p.unlink()
-            except Exception as e:
-                logging.warning(f"清理源端文件失败: {target_path}, 错误: {e}")
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
 
     def save_contract(self, task, save_dir, file_infos):
         """保存元数据，实现信息透传"""
@@ -90,7 +65,7 @@ class RecordDownloader:
             except:
                 logging.warning("元数据文件损坏，执行全量重写")
         current_soc = self.ctx.config["logic"]["soc"]
-        contract["files"][current_soc] = [Path(f[0]).name for f in file_infos]
+        contract["files"][current_soc] = [Path(f[1]).name for f in file_infos]
         contract["last_update"][current_soc] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         meta_path.write_text(json.dumps(contract, indent=4, ensure_ascii=False))
 
@@ -106,13 +81,12 @@ class RecordDownloader:
         try:
             if self.mode == 3:
                 remote_src = f"{self.remote_user}@{self.remote_ip}:{v_src}"
-                down_cmd = ["scp", "-q", "-r", remote_src, v_dest]
+                down_cmd = ["scp", "-q", "-o", remote_src, v_dest]
 
-                # 打印调试信息（可选）
-                print(f"正在拷贝: {v_src} -> {v_dest}")
+                env_c = os.environ.copy()
+                env_c["LC_ALL"] = "C"
 
-                # 运行
-                result = subprocess.run(down_cmd, capture_output=True, text=True)
+                result = subprocess.run(down_cmd,env=env_c, capture_output=True, text=True)
 
                 if result.returncode != 0:
                     print(f"拷贝失败: {result.stderr}")
@@ -124,14 +98,12 @@ class RecordDownloader:
 
         # 生成 README
         v_content = v_dest.read_text() if v_dest.exists() else "N/A"
-        records_str = " ".join([Path(f[0]).name for f in file_infos])
+        records_str = " ".join([Path(f[1]).name for f in file_infos])
         readme_content = f"""- **tag：** {task['time']} {task['name']}
 - **问题描述：**
 > 填写补充描述
 - **预期结果：**
 > 填写正确情况
-- **实际结果：**
-> 填写错误情况
 - **车辆软硬件信息：**
 ```json
 {v_content}
@@ -146,98 +118,111 @@ class RecordDownloader:
 ```
 - **回播命令：**
 ```bash
-cd {self.ctx.config['host']['dest_root']}/{self.ctx.target_date}/{self.ctx.vehicle}/{task['name']}/{self.ctx.config['logic']['soc']}
+cd {save_dir}
 cyber_recorder play -l -f {records_str}
 ```
 """
         readme_path = save_dir / "README.md"
         readme_path.write_text(readme_content, encoding="utf-8")
 
-    def download_record(self, task_list):
-        """核心下载逻辑"""
-        total_bytes = 0
-        task_infos = []
-        files_to_cleanup = set()
-        for task in task_list:
-            task_size = 0
-            file_infos = []
-            if not task["paths"]: continue
-            for f in task["paths"]:
-                split_file = f"{f}.split"
-                size = self.get_file_size(split_file)
-                task_size += size
-                file_infos.append((split_file, size))
-            total_bytes += task_size
-            task_infos.append((task, task_size, file_infos))
+    def _sync_file(self, src, dest, task):
+        """
+        同步的核心逻辑：
+        1. 在执行环境生成 .split 文件
+        2. 如果是远程，拉回宿主机
+        3. 清理中间文件
+        """
+        # 环境准备
 
-        print(">>> 正在预检磁盘空间...")
-        usage = shutil.disk_usage(self.dest_root)
-        if total_bytes > (usage.free - 1024 * 1024 * 100):
-            print(
-                f"错误: 磁盘空间不足！需要 {total_bytes/1e9:.2f}GB, 剩余 {usage.free/1e9:.2f}GB"
+        logic = self.ctx.config["logic"]
+        tag_dt = handles.str_to_time(task["time"])
+        t_start = tag_dt - timedelta(seconds=int(logic["before"]))
+        t_end = tag_dt + timedelta(seconds=int(logic["after"]))
+        blacklist = logic.get("blacklist")
+
+        if self.ctx.config["env"]["mode"] != 3:
+            self.session.recorder.split(
+                host_in=src,
+                host_out=dest,
+                start_dt=t_start,
+                end_dt=t_end,
+                blacklist=blacklist
             )
+        else:
+            remote_out = f"{src}.split"
+            self.session.executor.remove(remote_out)
+            success = self.session.recorder.split(
+                host_in=src,
+                host_out=remote_out,
+                start_dt=t_start,
+                end_dt=t_end,
+                blacklist=blacklist,
+            )
+
+            if success:
+                self.session.executor.fetch_file(remote_out, dest)
+                self.session.executor.remove(remote_out)
+            else:
+                logging.error(f"切片生成失败: {src}")
+
+    def _get_task_save_dir(self, task) -> Path:
+        """统一管理保存路径规则"""
+        return self.ctx.get_task_dir(
+            task["id"], task["name"], self.ctx.config["logic"]["soc"]
+        )
+
+    def download_record(self, task_list):
+        """
+        主入口：现在它只负责高层调度和进度条
+        """
+        # 任务打平 (只处理有路径的任务)
+        download_queue = []
+        prepared_dirs = set()
+        for task in task_list:
+            if not task["paths"]:
+                continue
+            save_dir = self._get_task_save_dir(task)
+            if save_dir not in prepared_dirs:
+                self._prepare_dir(save_dir)
+                prepared_dirs.add(save_dir)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            for p in task["paths"]:
+                download_queue.append(
+                    {
+                        "src": Path(p),
+                        "dest": save_dir / (Path(p).name + ".split"),
+                        "task": task,
+                        "save_dir": save_dir,
+                    }
+                )
+
+        if not download_queue:
+            logging.warning("下载队列为空")
             return
 
-        print(f"计划同步数据量: {total_bytes/1e6:.2f} MB")
+        print(f"\n>>> 准备同步 {len(download_queue)} 个 Record 片段...")
 
-        # 执行下载
-        with alive_bar(
-            total_bytes, title="Overall", manual=True, unit="B", scale="IEC"
-        ) as bar:
-            processed_bytes = 0
+        # 执行下载流水线
+        with alive_bar(len(download_queue), title="Progress", theme="classic") as bar:
+            processed_files = []  # 记录当前任务已完成的文件，用于后处理
 
-            for task, task_size, file_infos in task_infos:
-                folder_name = f"{int(task['id']):02d}.{task['name']}"
-                soc_name = self.ctx.config["logic"]["soc"].strip("/")
-                save_dir = (
-                    self.dest_root
-                    / self.ctx.target_date[:8]
-                    / self.ctx.vehicle
-                    / folder_name
-                    / soc_name
+            for i, item in enumerate(download_queue):
+                task = item["task"]
+                bar.text = f"-> [Tag: {task['name'][:15]}]"
+
+                # 执行单个文件同步
+                self._sync_file(item["src"], item["dest"], task)
+                processed_files.append((str(item["src"]), str(item["dest"])))
+
+                # 判断是否是当前 Tag 的最后一个文件，或者是整个队列的最后一个
+                is_last_in_tag = (i == len(download_queue) - 1) or (
+                    download_queue[i + 1]["task"]["id"] != task["id"]
                 )
-                save_dir.mkdir(parents=True, exist_ok=True)
 
-                filenames = [Path(f[0]).name for f in file_infos]
-                self.cleanup_file(save_dir, filenames)
+                if is_last_in_tag:
+                    self.post_process_task(task, item["save_dir"], processed_files)
+                    processed_files = []
 
-                for src_path, f_size in file_infos:
-                    dest_path = save_dir / Path(src_path).name
+                bar()
 
-                    # 检查断点续传
-                    if dest_path.exists() and dest_path.stat().st_size == f_size:
-                        processed_bytes += f_size
-                        bar(processed_bytes / total_bytes)
-                        continue
-
-                    cp_cmd = (
-                        f"scp -q {self.remote_user}@{self.remote_ip}:{src_path} {dest_path}"
-                        if self.mode == 3
-                        else f"cp {src_path} {dest_path}"
-                    )
-                    proc = subprocess.Popen(
-                        cp_cmd, shell=True, stderr=subprocess.PIPE, text=True
-                    )
-                    # 监控进度
-                    while proc.poll() is None:
-                        current_f = (
-                            dest_path.stat().st_size if dest_path.exists() else 0
-                        )
-                        overall_ratio = (processed_bytes + current_f) / total_bytes
-                        bar(min(overall_ratio, 1.0))
-                        bar.text = f"-> Copying: {folder_name[:15]}.. | ({(current_f/(1024*1024)):.1f}MB)"
-                        time.sleep(0.2)
-                    processed_bytes += f_size
-                    bar(min(processed_bytes / total_bytes, 1.0))
-                    exit_code = proc.wait()
-                    if exit_code != 0:
-                        _, stderr = proc.communicate()
-                        logging.warning(f"拷贝失败: {src_path}\n >>> {stderr}")
-                    else:
-                        if Path(src_path).name.endswith((".split", ".sliced")):
-                            files_to_cleanup.add(src_path)
-                self.post_process_task(task, save_dir, file_infos)
-        if files_to_cleanup:
-            logging.info("正在清理源端 split 文件...")
-            for f in files_to_cleanup:
-                self.cleanup_file(f)
+        print("\n>>> 所有同步任务已完成！")

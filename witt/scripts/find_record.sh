@@ -128,7 +128,6 @@ for tag_file in $tag_list; do
                     # 如果文件起始时间在请求区间内，加入 final_list
                     if (( f_sec >= start_sec )); then
                         final_list="${final_list} ${f_path}"
-                        echo -e "${YELLOW}${line}${NC}"
                     # 如果文件起始时间早于请求开始时间，它可能是包含这段数据的那个“母文件”
                     else
                         last_file="$f_path"

@@ -4,26 +4,12 @@ import os
 import tempfile
 import shutil
 import yaml
+import ui
 from utils import handles
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
-
-class _WittFormatter(logging.Formatter):
-    """私有格式化器：全自动处理颜色与格式"""
-    COLORS = {
-        "DEBUG": "\033[0;90m",
-        "INFO": "\033[0;32m",
-        "WARNING": "\033[0;33m",
-        "ERROR": "\033[0;31m",
-        "RESET": "\033[0m",
-    }
-    def format(self, record):
-        color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
-        fmt = f"{color}%(asctime)s [%(levelname)s] %(message)s{self.COLORS['RESET']}"
-        return logging.Formatter(fmt, datefmt="%H:%M:%S").format(record)
-
 
 @dataclass
 class TaskContext:
@@ -34,6 +20,7 @@ class TaskContext:
 
     def __post_init__(self):
         self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+        self.config["logic"]["target_date"] = datetime.now().strftime("%Y%m%d")
         self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
         atexit.register(self._cleanup_temp)
 
@@ -62,6 +49,14 @@ class TaskContext:
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
+    def get_task_dir(self, task_id: str, task_name: str, soc: str = "") -> Path:
+        """统一管理任务存储路径规则"""
+        folder = f"{int(task_id):02d}.{task_name}"
+        path = self.work_dir / folder
+        if soc:
+            path = path / soc
+        return path
+
     def setup_logger(self):
         """
         写日志时才创建文件。
@@ -81,7 +76,7 @@ class TaskContext:
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
         sh = logging.StreamHandler()
-        sh.setFormatter(_WittFormatter())
+        sh.setFormatter(ui.Formatter())
         sh.setLevel(logging.INFO)
         logger.addHandler(sh)
 
