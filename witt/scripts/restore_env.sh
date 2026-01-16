@@ -114,9 +114,9 @@ start_docker() {
     docker exec -d "$CONTAINER" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview && sudo supervisorctl stop NebulaObu && sudo supervisorctl start Debug_Driver-LiDAR'
     log_info "Supervisor status 和 Dreamview 已启动..."
 
-    cp -n "${BASH_SOURCE[0]%/*}/../docs/customized_20251222.multiviz.yaml" "$MDRIVE_ROOT/"
+    cp -n "${BASH_SOURCE[0]%/*}/../docs/customized_20260115.multiviz.yaml" "$MDRIVE_ROOT/"
 
-    docker exec -d "$CONTAINER" bash -c "/mdrive/mdrive/bin/mdrive_multiviz -d /mdrive/customized_20251222.multiviz.yaml >/dev/null 2>&1"
+    docker exec -d "$CONTAINER" bash -c "/mdrive/mdrive/bin/mdrive_multiviz -d /mdrive/customized_20260115.multiviz.yaml >/dev/null 2>&1"
 
     # log_info "mdrive_multiviz 已启动..."
 

@@ -44,11 +44,12 @@ if [[ $MODE == "3" ]]; then
 else
     raw_files=$(eval "$find_cmd")
 fi
+
+[[ -z $raw_files ]] && { log_error "$data_dir 目录下找不到相关的文件！"; exit 1; }
 record_list=$(echo "$raw_files" | grep record)
 tag_list=$(echo "$raw_files" | grep tag)
 
 # ${bash_dir}/20251220-112907.record.00000.112907
-[[ -z "$record_list" ]] && { log_error "$data_dir 目录下找不到 record 文件！"; exit 1; }
 while read -r record_path; do
     record_time="${record_path##*.}"
     if [[ "$record_time" =~ ^[0-9]{6}$ ]]; then

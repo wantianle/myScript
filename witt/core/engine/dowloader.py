@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 from alive_progress import alive_bar
+
 # from core.session import AppSession
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -20,7 +21,8 @@ class RecordDownloader:
 
     @property
     def mode(self):
-        return self.ctx.config["env"]["mode"]
+        return self.ctx.config["logic"]["mode"]
+
     @property
     def dest_root(self):
         return Path(self.ctx.config["host"]["dest_root"])
@@ -66,7 +68,9 @@ class RecordDownloader:
                 logging.warning("元数据文件损坏，执行全量重写")
         current_soc = self.ctx.config["logic"]["soc"]
         contract["files"][current_soc] = [Path(f[1]).name for f in file_infos]
-        contract["last_update"][current_soc] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        contract["last_update"][current_soc] = datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
         meta_path.write_text(json.dumps(contract, indent=4, ensure_ascii=False))
 
     def post_process_task(self, task, save_dir, file_infos):
@@ -86,7 +90,9 @@ class RecordDownloader:
                 env_c = os.environ.copy()
                 env_c["LC_ALL"] = "C"
 
-                result = subprocess.run(down_cmd,env=env_c, capture_output=True, text=True)
+                result = subprocess.run(
+                    down_cmd, env=env_c, capture_output=True, text=True
+                )
 
                 if result.returncode != 0:
                     print(f"拷贝失败: {result.stderr}")
@@ -125,6 +131,9 @@ cyber_recorder play -l -f {records_str}
         readme_path = save_dir / "README.md"
         readme_path.write_text(readme_content, encoding="utf-8")
 
+        logging.info(f"[TASK_COMPLETE] Tag: {task['name']} | Saved to: {save_dir}")
+        logging.debug(f"    Files: {[f[1] for f in file_infos]}")
+
     def _sync_file(self, src, dest, task):
         """
         同步的核心逻辑：
@@ -140,13 +149,13 @@ cyber_recorder play -l -f {records_str}
         t_end = tag_dt + timedelta(seconds=int(logic["after"]))
         blacklist = logic.get("blacklist")
 
-        if self.ctx.config["env"]["mode"] != 3:
+        if self.ctx.config["logic"]["mode"] != 3:
             self.session.recorder.split(
                 host_in=src,
                 host_out=dest,
                 start_dt=t_start,
                 end_dt=t_end,
-                blacklist=blacklist
+                blacklist=blacklist,
             )
         else:
             remote_out = f"{src}.split"
@@ -203,7 +212,13 @@ cyber_recorder play -l -f {records_str}
         print(f"\n>>> 准备同步 {len(download_queue)} 个 Record 片段...")
 
         # 执行下载流水线
-        with alive_bar(len(download_queue), title="Progress", theme="classic") as bar:
+        with alive_bar(
+            len(download_queue),
+            title="Progress",
+            theme="classic",
+            stats=False,
+            elapsed=False,
+        ) as bar:
             processed_files = []  # 记录当前任务已完成的文件，用于后处理
 
             for i, item in enumerate(download_queue):

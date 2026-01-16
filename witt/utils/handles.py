@@ -23,8 +23,8 @@ def parse_record_info(stdout: str) -> Dict[str, Any]:
     channels = [{"name": name, "count": int(count)} for name, count in raw_channels]
     channels.sort(key=lambda x: x["name"])
     return {
-        "begin_time": begin_time,
-        "end_time": end_time,
+        "begin": begin_time,
+        "end": end_time,
         "duration": duration,
         "channels": channels,
     }
@@ -86,7 +86,7 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
     return tasks
 
 
-def parser_range_logic(range_in: str):
+def parse_range_logic(range_in: str):
     """
     专门处理播放时间范围字符串，确保永远返回两个整数
     """

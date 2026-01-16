@@ -54,17 +54,21 @@ class Recorder:
     def split(
         self,
         host_in: str,
-        host_out: Optional[str]=None,
-        start_dt: Optional[str]=None,
-        end_dt: Optional[str]=None,
+        host_out: Optional[str],
+        start_dt: Optional[str],
+        end_dt: Optional[str],
         blacklist: Optional[List[str]]=None,
     ) -> bool:
         """
         执行 record 切片
         """
+        logging.info(f"[SLICE_START] File: {Path(host_in).name}")
+        logging.info(f"    Range: {start_dt} -> {end_dt}")
+        if blacklist:
+            logging.info(f"    Blacklist: {','.join(blacklist)}")
+
         cmd_parts = ["cyber_recorder split", f"-f {host_in}"]
-        if host_out:
-            cmd_parts.append(f'-o "{handles.time_to_str(host_out)}"')
+        cmd_parts.append(f'-o "{handles.time_to_str(host_out)}"')
         if start_dt: cmd_parts.append(f'-b "{handles.time_to_str(start_dt)}"')
         if end_dt: cmd_parts.append(f'-e "{handles.time_to_str(end_dt)}"')
         if blacklist:

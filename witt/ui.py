@@ -1,32 +1,8 @@
-import logging
-from rich.console import Console
-from rich.table import Table
-
-console = Console()
-
-
-class Formatter(logging.Formatter):
-    """处理颜色与格式"""
-
-    COLORS = {
-        "DEBUG": "\033[0;90m",
-        "INFO": "\033[0;32m",
-        "WARNING": "\033[0;33m",
-        "ERROR": "\033[0;31m",
-        "RESET": "\033[0m",
-    }
-
-    def format(self, record):
-        color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
-        fmt = f"{color}[%(levelname)s] %(message)s{self.COLORS['RESET']}"
-        return logging.Formatter(fmt).format(record)
-
-
 def print_banner():
-    print("\n" + "=" * 50)
+    print("" + "=" * 42)
     print("               witt  v1.0")
     print("            What Is That Tag?")
-    print("=" * 50)
+    print("=" * 42)
 
 
 def print_menu():
@@ -38,13 +14,13 @@ def print_menu():
     print("  6. [仅回播] 查询并回播已处理数据")
     print("  h. [说明文档]")
     print("  q. 退出")
-    print("=" * 50)
+    print("=" * 42)
 
 
 def show_playback_library(library, vehicle, target_date):
-    """专门负责打印那个漂亮的播放列表"""
+    """专门负责打印播放列表"""
     print(f"\n{'ID '} | {vehicle:<9} | {target_date}")
-    print("-" * 65)
+    print("-" * 42)
 
     count = 1
     for entry in library:
@@ -53,7 +29,6 @@ def show_playback_library(library, vehicle, target_date):
                 f"{count:<3} ├── \033[3m{entry['time'][11:]} \033[1;32m{entry['tag']}\033[0m "
             )
 
-            # 打印 SOC 更新时间
             indent = " " * 4
             meta = entry.get("fast_meta", {}).get("last_update", {})
             soc1_update = meta.get("soc1", "N/A")
@@ -62,19 +37,6 @@ def show_playback_library(library, vehicle, target_date):
             print(f"{indent}├── soc1 update: \033[1;33m{soc1_update}\033[0m")
             print(f"{indent}└── soc2 update: \033[1;33m{soc2_update}\033[0m")
             count += 1
-    # return count - 1  # 返回显示的任务总数
-
-
-def show_tasks_table(tasks):
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("ID", style="dim", width=6)
-    table.add_column("Time", style="cyan")
-    table.add_column("Tag Name", style="green")
-
-    for t in tasks:
-        table.add_row(t["id"], t["time"], t["name"])
-
-    console.print(table)
 
 
 def show_channel_table(channels):
@@ -84,4 +46,38 @@ def show_channel_table(channels):
     print("-" * 72)
     for i, ch in enumerate(channels, 1):
         print(f"{i:<4} | {ch['name']:<55} | {ch['count']}")
+    print("-" * 72)
 
+
+def show_manual_play_header():
+    print("\n" + "=" * 20 + " 手动回播模式 " + "=" * 20)
+    print("提示: 直接将多个 record 文件/文件夹拖入终端，回车确认 | 'q' 返回")
+
+
+def show_playback_info(tag, duration, channels=None):
+    print(f"\n当前回播: \033[1;32m{tag}\033[0m")
+    print(f"总时长: \033[1;33m{duration}s\033[0m")
+    if channels:
+        print(f"频道过滤: \033[1;34m{channels}\033[0m")
+
+
+def print_status(msg, level="INFO"):
+    """
+    终端即时反馈，不进入日志文件。
+    """
+    colors = {
+        "INFO": "\033[32m",
+        "WARN": "\033[33m",
+        "ERR": "\033[31m",
+        "RESET": "\033[0m",
+    }
+    print(f"{colors.get(level, '')}[{level}] {msg}{colors['RESET']}")
+
+
+def notify_operation(op_name, details):
+    """
+    专门用于告知用户正在进行繁重操作。
+    """
+    print(f"\n\033[1;34m>>> 正在执行: {op_name}\033[0m")
+    for k, v in details.items():
+        print(f"    {k}: {v}")

@@ -11,9 +11,28 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
 
+
+class Formatter(logging.Formatter):
+    """处理颜色与格式"""
+
+    COLORS = {
+        "DEBUG": "\033[0;90m",
+        "INFO": "\033[0;32m",
+        "WARNING": "\033[0;33m",
+        "ERROR": "\033[0;31m",
+        "RESET": "\033[0m",
+    }
+
+    def format(self, record):
+        color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
+        fmt = f"{color}[%(levelname)s] %(message)s{self.COLORS['RESET']}"
+        return logging.Formatter(fmt).format(record)
+
+
 @dataclass
 class TaskContext:
     config_path: Path
+
     config: dict = field(init=False)
     temp_dir: Path = field(init=False)
     _logger_ready: bool = field(default=False, init=False)
@@ -76,8 +95,8 @@ class TaskContext:
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
         sh = logging.StreamHandler()
-        sh.setFormatter(ui.Formatter())
-        sh.setLevel(logging.INFO)
+        sh.setFormatter(Formatter())
+        sh.setLevel(logging.WARNING)
         logger.addHandler(sh)
 
         fh = logging.FileHandler(log_file, encoding="utf-8")
@@ -106,7 +125,6 @@ class TaskContext:
 
     def get_library_fingerprint(self) -> str:
         """
-        [性能优化] 只检查当前 Vehicle 目录的状态
         原理：如果在这个目录下下载了新文件，work_dir 或 log_dir 的 mtime 必变
         """
         if not self.work_dir.exists():
@@ -127,7 +145,7 @@ class TaskContext:
             "SOC": self.config["logic"]["soc"],
             "BEFORE": self.config["logic"]["before"],
             "AFTER": self.config["logic"]["after"],
-            "MODE": self.config["env"]["mode"],
+            "MODE": self.config["logic"]["mode"],
             "VERSION_JSON": self.config["logic"]["version_json"],
             "CONTAINER": self.config["docker"]["container"],
             "REMOTE_USER": self.config["remote"]["user"],
