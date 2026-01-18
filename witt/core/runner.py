@@ -12,7 +12,7 @@ class ScriptRunner:
             PROJECT_ROOT / self.ctx.config["paths"]["scripts_dir"]
         ).resolve()
 
-    def _run_script(self, script_name: str, quiet: bool, *args: str) -> None:
+    def _run_script(self, script_name: str, quiet: bool = False, *args: str) -> None:
         """
         注入参数执行 Shell 脚本
         """
@@ -30,19 +30,16 @@ class ScriptRunner:
             raise RuntimeError(f"{script_name} 脚本执行失败") from e
 
     def run_find_record(self) -> None:
-        """
-        注入参数执行 record 检索任务
-        """
-        self._run_script("find_record.sh", False)
+        self._run_script("find_record.sh")
 
     def run_restore_env(self) -> None:
-        """
-        注入参数执行环境同步还原
-        """
-        self._run_script("restore_env.sh", False)
+        self._run_script("restore_env.sh")
 
-    def run_dreamview(self) -> None:
-        self._run_script("dreamview.sh", False)
+    def run_tools(self) -> None:
+        self._run_script("tools.sh")
 
     def run_docker(self) -> None:
         self._run_script("dev_start.sh", True, "--remove")
+
+    def into_docker(self) -> None:
+        self._run_script("dev_into.sh")

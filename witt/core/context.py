@@ -4,12 +4,12 @@ import os
 import tempfile
 import shutil
 import yaml
-import ui
-from utils import handles
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
+
+from utils import parser
 
 
 class Formatter(logging.Formatter):
@@ -64,7 +64,7 @@ class TaskContext:
     def manifest_path(self) -> Path:
         return self.temp_dir / "tasks.list"
 
-    def _cleanup_temp(self):
+    def _cleanup_temp(self) -> None:
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
@@ -76,7 +76,7 @@ class TaskContext:
             path = path / soc
         return path
 
-    def setup_logger(self):
+    def setup_logger(self) -> None:
         """
         写日志时才创建文件。
         """
@@ -87,10 +87,10 @@ class TaskContext:
         log_file = self.log_dir / f"witt_{timestamp}.log"
 
         logger = logging.getLogger()
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
 
-        if logger.hasHandlers():
-            logger.handlers.clear()
+        # if logger.hasHandlers():
+        #     logger.handlers.clear()
 
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
@@ -101,36 +101,18 @@ class TaskContext:
 
         fh = logging.FileHandler(log_file, encoding="utf-8")
         fh.setFormatter(formatter)
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(logging.INFO)
         logger.addHandler(fh)
 
         self._logger_ready = True
 
-    def get_task_metadata(self, tag_time, tag_name, files, bf, af):
-        """构造结构化的元数据对象"""
-        dt_tag = handles.str_to_time(tag_time)
-        return {
-            "tag_info": {
-                "name": tag_name,
-                "time": tag_time,
-                "offset_bf": bf,
-                "offset_af": af,
-                "abs_start": (dt_tag - timedelta(seconds=bf)).isoformat(),
-                "abs_end": (dt_tag + timedelta(seconds=af)).isoformat(),
-            },
-            "files": [Path(f).name for f in files],
-            "vehicle": self.vehicle,
-            "date": self.target_date,
-        }
-
     def get_library_fingerprint(self) -> str:
         """
-        原理：如果在这个目录下下载了新文件，work_dir 或 log_dir 的 mtime 必变
+        如果在这个目录下下载了新文件，work_dir 的 mtime 必变
         """
         if not self.work_dir.exists():
-            return "none"
-        mtime_sum = self.work_dir.stat().st_mtime + self.log_dir.stat().st_mtime
-        return f"{datetime.now().day}_{mtime_sum}"
+            return ""
+        return f"{datetime.now().day}_{self.work_dir.stat().st_mtime}"
 
     def get_env_vars(self) -> Dict[str, str]:
         """构建注入 Shell 脚本的环境变量字典"""

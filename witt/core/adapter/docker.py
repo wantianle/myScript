@@ -1,10 +1,9 @@
-import logging
 import subprocess
 import os
-import sys
 from pathlib import Path
 from typing import Union
-from core.adapter.base import BaseAdapter
+from interface import ui
+from .base import BaseAdapter
 from core.runner import ScriptRunner
 
 
@@ -50,7 +49,7 @@ class DockerAdapter(BaseAdapter):
                 res = subprocess.run(f"docker start {self.container}", shell=True)
                 if res.returncode == 0:
                     return
-        logging.warning(f"容器启动失败，尝试重新创建并启动...")
+        ui.print_status(f"容器启动失败，尝试重新创建并启动...", "WARN")
         self.runner.run_docker()
 
     def map_path(self, host_path: Union[str, Path]) -> str:
@@ -63,10 +62,10 @@ class DockerAdapter(BaseAdapter):
             d_path = self.docker_mount / relative
             return d_path.as_posix()
         except ValueError:
-            logging.error(
-                f"{host_path} 不在 {self.host_mount} 里，请重新确认路径..."
+            ui.print_status(
+                f"{host_path} 不在 {self.host_mount} 里，请重新确认路径...", "ERROR"
             )
-            sys.exit(1)
+            raise
 
     def execute(self, cmd: str) -> str:
         """
@@ -82,11 +81,7 @@ class DockerAdapter(BaseAdapter):
             )
             return result.stdout
         except subprocess.CalledProcessError as e:
-            error_detail = e.stderr.strip() or e.stdout.strip()
-            logging.error(
-                f"\n[Docker Exec Error]\nCommand: {cmd}\nDetail: {error_detail}"
-            )
-            raise RuntimeError(error_detail)
+            raise e
 
     def popen(self, cmd: str):
         """
@@ -114,7 +109,6 @@ class DockerAdapter(BaseAdapter):
         """
         用于 cyber_recorder play 等需要交互和实时刷新的命令
         """
-        scriptRunner.run_restore_env()
         env_setup = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
         play_cmd = f"docker exec -it {self.container} /bin/bash -c '{env_setup} && source {self.setup_env} && {cmd}'"
         subprocess.run(play_cmd, shell=True, check=True)

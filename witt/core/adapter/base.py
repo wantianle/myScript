@@ -2,8 +2,6 @@ from abc import ABC, abstractmethod
 from typing import Union
 from pathlib import Path
 
-from core.runner import ScriptRunner
-
 class BaseAdapter(ABC):
     """
     适配器抽象基类，定义所有执行通道必须实现的接口
@@ -45,7 +43,7 @@ class BaseAdapter(ABC):
         """
         pass
 
-    def execute_interactive(self, cmd: str, scriptRunner: ScriptRunner):
+    def execute_interactive(self, cmd: str, scriptRunner):
         """
         可选实现：交互式执行（如回放数据），默认调用普通 execute
         如果子类需要特殊处理（如 docker -it），则重写此方法

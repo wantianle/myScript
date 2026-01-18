@@ -18,13 +18,20 @@ if ! command -v pip3 &> /dev/null; then
 fi
 
 # 检查并安装 Python 依赖
-deps=("yaml" "alive-progress")
+deps=("questionary" "rich" "pyyaml" "alive-progress")
 
 for pkg in "${deps[@]}"; do
-    # 使用 python3 -c 快速检查包是否存在
-    if ! python3 -c "import ${pkg//-/_}" &> /dev/null; then
+    # 针对 PyYAML 的特殊映射
+    if [[ "$pkg" == "pyyaml" ]]; then
+        import_name="yaml"
+    else
+        import_name="${pkg//-/_}"
+    fi
+
+    # 检查导入名
+    if ! python3 -c "import $import_name" &> /dev/null; then
         log_warnning "正在安装缺失 python 依赖: $pkg ..."
-        pip3 install "$pkg" -i $INDEX || { log_error "依赖 $pkg 安装失败"; exit 1; }
+        python3 -m pip install "$pkg" -i $INDEX || { log_error "依赖 $pkg 安装失败"; exit 1; }
     fi
 done
 

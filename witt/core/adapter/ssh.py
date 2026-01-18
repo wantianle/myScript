@@ -1,10 +1,9 @@
 import os
-import logging
 import subprocess
 from typing import Union
 from pathlib import Path
-
-from core.adapter.base import BaseAdapter
+from interface import ui
+from .base import BaseAdapter
 
 
 class SSHAdapter(BaseAdapter):
@@ -69,6 +68,5 @@ class SSHAdapter(BaseAdapter):
             )
             return result.stdout
         except subprocess.CalledProcessError as e:
-            error_detail = e.stderr.strip() or e.stdout.strip()
-            logging.error(f"[SSH Exec Error] Command: {cmd}\nDetail: {error_detail}")
-            raise RuntimeError(error_detail)
+            ui.print_status(f"SSH Exec Error", "ERROR")
+            raise e

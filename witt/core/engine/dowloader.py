@@ -4,11 +4,11 @@ import os
 import shutil
 import subprocess
 from alive_progress import alive_bar
-
-# from core.session import AppSession
 from datetime import datetime, timedelta
 from pathlib import Path
-from utils import handles
+
+from interface import ui
+from utils import parser
 
 
 class RecordDownloader:
@@ -39,12 +39,10 @@ class RecordDownloader:
         """保存元数据，实现信息透传"""
         tag_dir = save_dir.parent
         meta_path = tag_dir / "meta.json"
-
-        dt_tag = handles.str_to_time(task["time"])
+        dt_tag = parser.str_to_time(task["time"])
         bf, af = int(self.ctx.config["logic"]["before"]), int(
             self.ctx.config["logic"]["after"]
         )
-
         contract = {
             "tag_info": {
                 "name": task["name"],
@@ -65,7 +63,7 @@ class RecordDownloader:
                 contract["last_update"] = old_contract["last_update"]
                 contract["files"] = old_contract["files"]
             except:
-                logging.warning("元数据文件损坏，执行全量重写")
+                ui.print_status("元数据文件损坏，执行全量重写", "WARN")
         current_soc = self.ctx.config["logic"]["soc"]
         contract["files"][current_soc] = [Path(f[1]).name for f in file_infos]
         contract["last_update"][current_soc] = datetime.now().strftime(
@@ -75,33 +73,32 @@ class RecordDownloader:
 
     def post_process_task(self, task, save_dir, file_infos):
         """生成元数据文件、 README 和 version.json"""
+        # 生成元数据文件
         self.save_contract(task, save_dir, file_infos)
-
         # 同步 version.json
         src_dir = Path(file_infos[0][0]).parent
         v_src = src_dir / "version.json"
         v_dest = save_dir / "version.json"
-
         try:
             if self.mode == 3:
                 remote_src = f"{self.remote_user}@{self.remote_ip}:{v_src}"
                 down_cmd = ["scp", "-q", "-o", remote_src, v_dest]
-
                 env_c = os.environ.copy()
                 env_c["LC_ALL"] = "C"
-
                 result = subprocess.run(
                     down_cmd, env=env_c, capture_output=True, text=True
                 )
-
                 if result.returncode != 0:
-                    print(f"拷贝失败: {result.stderr}")
+                    ui.print_status(
+                        f"拷贝 {task['name']}: version.json 文件失败: {result.stderr}",
+                        "ERROR",
+                    )
             else:
                 if os.path.exists(v_src):
                     shutil.copy2(v_src, v_dest)
         except Exception as e:
-            logging.warning(f"拷贝 {task['name']}: version.json 文件失败：{e}")
-
+            ui.print_status(f"拷贝 {task['name']}: version.json 文件失败", "ERROR")
+            raise e
         # 生成 README
         v_content = v_dest.read_text() if v_dest.exists() else "N/A"
         records_str = " ".join([Path(f[1]).name for f in file_infos])
@@ -130,9 +127,8 @@ cyber_recorder play -l -f {records_str}
 """
         readme_path = save_dir / "README.md"
         readme_path.write_text(readme_content, encoding="utf-8")
-
         logging.info(f"[TASK_COMPLETE] Tag: {task['name']} | Saved to: {save_dir}")
-        logging.debug(f"    Files: {[f[1] for f in file_infos]}")
+        logging.info(f"    Files: {[f[1] for f in file_infos]}")
 
     def _sync_file(self, src, dest, task):
         """
@@ -142,13 +138,11 @@ cyber_recorder play -l -f {records_str}
         3. 清理中间文件
         """
         # 环境准备
-
         logic = self.ctx.config["logic"]
-        tag_dt = handles.str_to_time(task["time"])
+        tag_dt = parser.str_to_time(task["time"])
         t_start = tag_dt - timedelta(seconds=int(logic["before"]))
         t_end = tag_dt + timedelta(seconds=int(logic["after"]))
         blacklist = logic.get("blacklist")
-
         if self.ctx.config["logic"]["mode"] != 3:
             self.session.recorder.split(
                 host_in=src,
@@ -167,12 +161,11 @@ cyber_recorder play -l -f {records_str}
                 end_dt=t_end,
                 blacklist=blacklist,
             )
-
             if success:
                 self.session.executor.fetch_file(remote_out, dest)
                 self.session.executor.remove(remote_out)
             else:
-                logging.error(f"切片生成失败: {src}")
+                logging.error(f"[SSH] 切片失败: {src}")
 
     def _get_task_save_dir(self, task) -> Path:
         """统一管理保存路径规则"""
@@ -182,7 +175,7 @@ cyber_recorder play -l -f {records_str}
 
     def download_record(self, task_list):
         """
-        主入口：现在它只负责高层调度和进度条
+        负责高层调度和进度条
         """
         # 任务打平 (只处理有路径的任务)
         download_queue = []
@@ -204,13 +197,10 @@ cyber_recorder play -l -f {records_str}
                         "save_dir": save_dir,
                     }
                 )
-
         if not download_queue:
-            logging.warning("下载队列为空")
+            ui.print_status("下载队列为空", "WARN")
             return
-
-        print(f"\n>>> 准备同步 {len(download_queue)} 个 Record 片段...")
-
+        ui.print_status(f">>> 准备同步 {len(download_queue)} 个 Record 片段...")
         # 执行下载流水线
         with alive_bar(
             len(download_queue),
@@ -220,7 +210,6 @@ cyber_recorder play -l -f {records_str}
             elapsed=False,
         ) as bar:
             processed_files = []  # 记录当前任务已完成的文件，用于后处理
-
             for i, item in enumerate(download_queue):
                 task = item["task"]
                 bar.text = f"-> [Tag: {task['name'][:15]}]"
@@ -240,4 +229,4 @@ cyber_recorder play -l -f {records_str}
 
                 bar()
 
-        print("\n>>> 所有同步任务已完成！")
+        ui.print_status(">>> 所有同步任务已完成！")

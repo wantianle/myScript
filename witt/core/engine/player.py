@@ -1,13 +1,15 @@
 import json
-import ui
-import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any
 
+from core import session
+from interface import ui, workflow
+
 
 class RecordPlayer:
     def __init__(self, session):
+        self.session = session
         self.ctx = session.ctx
         self.runner = session.runner
         self.executor = session.executor
@@ -18,23 +20,22 @@ class RecordPlayer:
         return self.ctx.work_dir / ".witt" / "local_library.json"
 
     def get_library(self) -> List[Dict[str, Any]]:
-        current_fp = self.ctx.get_library_fingerprint()
+        fp = self.ctx.get_library_fingerprint()
         if self.library_file.exists():
-            try:
-                data = json.loads(self.library_file.read_text(encoding="utf-8"))
-                if data.get("fingerprint") == current_fp:
-                    print(f"本地库状态未变，加载缓存: {self.library_file}...")
-                    return data.get("library", [])
-            except Exception:
-                pass
-
-        print(f"检测到目录状态变更，正在扫描本地库{self.ctx.work_dir}...")
+            data = json.loads(self.library_file.read_text(encoding="utf-8"))
+            if data.get("fingerprint") == fp and data.get("library"):
+                ui.print_status(f"本地库状态未变，加载缓存: {self.library_file}...")
+                return data.get("library", [])
+        ui.print_status(f"正在扫描本地库{self.ctx.work_dir}...")
         library_list = self.scan_local_library()
-        save_obj = {"fingerprint": current_fp, "library": library_list}
+        save_obj = {"fingerprint": fp, "library": library_list}
         try:
-            self.library_file.write_text(json.dumps(save_obj, indent=4, ensure_ascii=False))
+            self.library_file.parent.mkdir(parents=True, exist_ok=True)
+            self.library_file.write_text(
+                json.dumps(save_obj, indent=4, ensure_ascii=False)
+            )
         except Exception as e:
-            logging.warning("缓存文件写入失败")
+            ui.print_status("缓存文件写入失败", "ERROR")
             raise e
         return library_list
 
@@ -53,14 +54,10 @@ class RecordPlayer:
                     "socs": {},
                     "fast_meta": meta,
                 }
-
-                for soc_name, file_names in (
-                    meta.get("files", {}).items()
-                ):
+                for soc_name, file_names in meta.get("files", {}).items():
                     soc_path = tag_dir / soc_name
                     if not soc_path.exists():
                         continue
-
                     record_details = []
                     for fname in file_names:
                         f_abs_path = soc_path / fname
@@ -73,15 +70,13 @@ class RecordPlayer:
                                     + meta["tag_info"]["offset_af"],
                                 }
                             )
-
                     if record_details:
                         record_details.sort(key=lambda x: x["begin"])
                         tag_entry["socs"][soc_name] = record_details
-
                 library_map[str(tag_dir)] = tag_entry
             except Exception as e:
-                logging.warning(f"[{meta_file}] ==> 元数据解析失败, 进入手动模式... ")
-                logging.debug(f"{e}")
+                ui.print_status(f"[{meta_file}] 元数据解析失败...", "ERROR")
+                raise e
         return sorted(list(library_map.values()), key=lambda x: x["time"])
 
     def play(
@@ -95,39 +90,30 @@ class RecordPlayer:
         执行播放：支持相对偏移转绝对时间
         """
         if not records:
-            logging.error("播放列表为空")
+            ui.print_status("播放列表为空", "ERROR")
             return
-
         def ensure_dt(val):
             return datetime.fromisoformat(val) if isinstance(val, str) else val
-
-        # records.sort(key=lambda x: ensure_dt(x["begin"]))
         global_start = ensure_dt(records[0]["begin"])
         total_duration = max(r["duration"] for r in records)
         self.ctx.config["logic"]["version_json"] = Path(records[0]["path"]).parent
         # 构造指令
         docker_paths = [self.executor.map_path(r["path"]) for r in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]
-
         # 时间窗
         fmt = "%Y-%m-%d %H:%M:%S"
         final_start = max(0, start_sec)
         final_end = total_duration if end_sec <= 0 else min(end_sec, total_duration)
-
         cmd_parts.append(
             f'-b "{(global_start + timedelta(seconds=final_start)).strftime(fmt)}"'
         )
         cmd_parts.append(
             f'-e "{(global_start + timedelta(seconds=final_end)).strftime(fmt)}"'
         )
-
         if selected_channels:
             for c in selected_channels:
-                cmd_parts.append(f'-c "{c}"')
-
+                cmd_parts.append(f'-k "{c}"')
         full_cmd = " ".join(cmd_parts)
-
-        # 3. UI 展示与执行
         ui.show_playback_info(
             tag=Path(records[0]["path"]).name[:20] + "...",
             duration=total_duration,
@@ -135,5 +121,5 @@ class RecordPlayer:
         )
         print(f"执行指令: \033[1;32m{full_cmd}\033[0m")
 
-        # 交互式执行
+        workflow.restore_env_flow(self.session, True)
         self.executor.execute_interactive(full_cmd, self.runner)

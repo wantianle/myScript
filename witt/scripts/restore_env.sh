@@ -11,8 +11,8 @@ find_version() {
         log_info "使用指定的 JSON 数据..."
         json_content="$input_data"
     else
-        log_info "使用指定的 version.json 文件: $input_data"
         [[ -d $input_data ]] && input_data="$input_data/version.json"
+        log_info "使用指定的 version.json 文件: $input_data"
         json_content=$(cat "$input_data")
     fi
 
@@ -113,20 +113,6 @@ start_docker() {
     fi
     docker exec -d "$CONTAINER" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview && sudo supervisorctl stop NebulaObu && sudo supervisorctl start Debug_Driver-LiDAR'
     log_info "Supervisor status 和 Dreamview 已启动..."
-
-    cp -n "${BASH_SOURCE[0]%/*}/../docs/customized_20260115.multiviz.yaml" "$MDRIVE_ROOT/"
-
-    docker exec -d "$CONTAINER" bash -c "/mdrive/mdrive/bin/mdrive_multiviz -d /mdrive/customized_20260115.multiviz.yaml >/dev/null 2>&1"
-
-    # log_info "mdrive_multiviz 已启动..."
-
-    # # 打开浏览器
-    # nohup xdg-open http://localhost:9001 >/dev/null 2>&1 &
-    # sleep 1
-    # nohup xdg-open http://localhost:8888 >/dev/null 2>&1 &
-
-    # log_info "进入 Docker 容器: ${CONTAINER}"
-    # bash ${MDRIVE_ROOT}/mdrive/docker/dev_into.sh
 }
 
 # ================= 主流程 =================
