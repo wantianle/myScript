@@ -15,7 +15,7 @@ DEFAULT_CONFIG_PATH = BASE_DIR / "config" / "settings.yaml"
 class AppSession:
     """初始化并持有所有执行对象，减少重复创建"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.ctx = TaskContext(DEFAULT_CONFIG_PATH)
         self.ctx.setup_logger()
         self.runner = ScriptRunner(self.ctx)
@@ -24,7 +24,7 @@ class AppSession:
         self.player = RecordPlayer(self)
 
     @property
-    def executor(self):
+    def executor(self) -> DockerAdapter | SSHAdapter:
         return (
             DockerAdapter(self.ctx)
             if self.ctx.config["logic"].get("mode") != 3

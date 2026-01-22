@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Any
 
 from interface import ui
 
-class Recorder:
 
+class Recorder:
     def __init__(self, session):
         self.session = session
 
@@ -29,7 +29,7 @@ class Recorder:
             stdout = self.session.executor.execute(f"cyber_recorder info {docker_path}")
             return parser.parse_record_info(stdout)
         except Exception as e:
-            ui.print_status(f"解析 Record 元数据失败...", "ERROR")
+            ui.print_status("解析 Record 元数据失败...", "ERROR")
             raise e
 
     def split(

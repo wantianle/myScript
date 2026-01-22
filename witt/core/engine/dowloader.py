@@ -62,7 +62,7 @@ class RecordDownloader:
                 old_contract = json.loads(meta_path.read_text(encoding="utf-8"))
                 contract["last_update"] = old_contract["last_update"]
                 contract["files"] = old_contract["files"]
-            except:
+            except Exception:
                 ui.print_status("元数据文件损坏，执行全量重写", "WARN")
         current_soc = self.ctx.config["logic"]["soc"]
         contract["files"][current_soc] = [Path(f[1]).name for f in file_infos]

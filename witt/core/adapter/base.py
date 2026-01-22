@@ -6,7 +6,7 @@ class BaseAdapter(ABC):
     """
     适配器抽象基类，定义所有执行通道必须实现的接口
     """
-    def __init__(self, setup_env: str):
+    def __init__(self, setup_env: str) -> None:
         self.setup_env = setup_env
 
     def wrap_env(self, cmd: str) -> str:
@@ -20,12 +20,12 @@ class BaseAdapter(ABC):
         return 0
 
     @abstractmethod
-    def remove(self, path: str):
+    def remove(self, path: str) -> None:
         """删除执行环境中的中间文件"""
         pass
 
     @abstractmethod
-    def fetch_file(self, remote_path: str, local_dest: Path):
+    def fetch_file(self, remote_path: str, local_dest: Path) -> None:
         """将执行环境中的文件拉取到宿主机。本地/Docker模式下通常是 move 或 pass"""
         pass
 
@@ -43,12 +43,12 @@ class BaseAdapter(ABC):
         """
         pass
 
-    def execute_interactive(self, cmd: str, scriptRunner):
+    def execute_interactive(self, cmd: str, scriptRunner) -> None:
         """
         可选实现：交互式执行（如回放数据），默认调用普通 execute
         如果子类需要特殊处理（如 docker -it），则重写此方法
         """
         self.execute(cmd)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__name__}>"

@@ -2,13 +2,11 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any
-
-from core import session
 from interface import ui, workflow
 
 
 class RecordPlayer:
-    def __init__(self, session):
+    def __init__(self, session) -> None:
         self.session = session
         self.ctx = session.ctx
         self.runner = session.runner

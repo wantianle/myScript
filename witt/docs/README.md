@@ -20,14 +20,7 @@
 ### 1. 远程 SSH 免密配置
 第一次使用远程模式（Mode 3）需配置免密登录：
 ```bash
-# 1. 生成密钥 (一路回车即可)
-ssh-keygen -t ed25519 -f ~/.ssh/id_witt
-
-# 2. 拷贝公钥到车机 (以 192.168.10.2 为例)
-ssh-copy-id -i ~/.ssh/id_witt.pub nvidia@192.168.10.2
-
-# 3. (可选) 遇到登录失败/指纹变动时重置
-ssh-keygen -f ~/.ssh/known_hosts -R 192.168.10.2
+bash ~/witt/scripts/ssh.sh
 ```
 
 ### 2. NAS 挂载要求

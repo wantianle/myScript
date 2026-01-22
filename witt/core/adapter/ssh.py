@@ -9,7 +9,7 @@ from .base import BaseAdapter
 class SSHAdapter(BaseAdapter):
     """远程执行命令拼接"""
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         self.user = config["remote"]["user"]
         self.ip = config["remote"]["ip"]
         self.setup_env = config["docker"]["setup_env"]
@@ -18,7 +18,7 @@ class SSHAdapter(BaseAdapter):
         """远程模式下通常不需要路径映射，直接返回原路径"""
         return str(host_path)
 
-    def fetch_file(self, remote_path: str, local_dest: Path):
+    def fetch_file(self, remote_path: str, local_dest: Path) -> None:
         """使用 scp 从远程车机拉回文件"""
         env_c = os.environ.copy()
         env_c["LC_ALL"] = "C"
@@ -31,7 +31,7 @@ class SSHAdapter(BaseAdapter):
         res = self.execute(f"stat -c %s {path}")
         return int(res.strip()) if res else 0
 
-    def remove(self, path: str):
+    def remove(self, path: str) -> None:
         self.execute(f"rm -f {path}")
 
     def execute(self, cmd: str) -> str:
@@ -68,5 +68,5 @@ class SSHAdapter(BaseAdapter):
             )
             return result.stdout
         except subprocess.CalledProcessError as e:
-            ui.print_status(f"SSH Exec Error", "ERROR")
+            ui.print_status("SSH Exec Error", "ERROR")
             raise e

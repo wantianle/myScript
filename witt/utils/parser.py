@@ -87,7 +87,7 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
     return tasks
 
 
-def parse_range_logic(range_in: str):
+def parse_range_logic(range_in: str) -> tuple:
     """
     专门处理播放时间范围字符串，确保永远返回两个整数
     """
@@ -104,14 +104,14 @@ def parse_range_logic(range_in: str):
     return 0, 0
 
 
-def sort_records(file_list: list):
+def sort_records(file_list: list) -> list:
     """
     根据 Cyber Record 的序号进行全局排序
     排序规则：先按序号排，序号相同按文件名排（处理 soc1/soc2 同序号情况）
     文件名示例: 20260110125227.record.00005.125739
     """
 
-    def get_index(path):
+    def get_index(path) -> int:
         match = re.search(r"\.record\.(\d+)", path.name)
         return int(match.group(1)) if match else 0
 

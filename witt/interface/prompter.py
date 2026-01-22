@@ -22,7 +22,7 @@ def usage() -> None:
     subprocess.run(["python3", "-m", "rich.markdown", README])
 
 
-def get_user_input(prompt: str, default_value: str):
+def get_user_input(prompt: str, default_value: str) -> str:
     try:
         val = input(f"\033[32m{prompt}\033[0m (默认 {default_value}): ").strip()
         return val if val else default_value
@@ -132,7 +132,7 @@ def get_selected_indices(all_tasks: list, prompt="请输入要处理的序号") 
         display_ids = final_ids[:preview_limit]
         preview_str = ", ".join(map(str, display_ids))
         if len(final_ids) > preview_limit:
-            preview_str += f" ..."
+            preview_str += " ..."
         ui.print_status(f"选中待处理序号: [{preview_str}(共 {len(final_ids)} 项)]")
         if get_confirm_input("确认执行？", True):
             return [all_tasks[i - 1] for i in final_ids]
@@ -177,7 +177,7 @@ def get_json_input() -> str:
             try:
                 json_obj = json.loads(raw_data)
                 return json.dumps(json_obj)
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError:
                 ui.print_status("非法 JSON 格式！", "WARN")
                 continue
         except KeyboardInterrupt:
@@ -309,7 +309,6 @@ def get_selected_channels_for_play(
     unique_channels = get_channels_from_records(session, records)
     return select_channels_wizard(unique_channels, prompt="请【选中】要删除的频道:")
 
-
 def get_cached_playback(session: AppSession, selected_tag: dict) -> None:
     """处理缓存库的回放逻辑"""
     socs = sorted(list(selected_tag["socs"].keys()))
@@ -317,7 +316,7 @@ def get_cached_playback(session: AppSession, selected_tag: dict) -> None:
         print(f"  [{i}] {s}")
     if len(socs) > 1:
         print(f"  [{len(socs) + 1}] All")
-    choice = input(f"选择 SOC (默认 1): ").strip() or "1"
+    choice = input("选择 SOC (默认 1): ").strip() or "1"
     target_records = []
     if choice.isdigit() and int(choice) <= len(socs):
         target_records = selected_tag["socs"][socs[int(choice) - 1]]

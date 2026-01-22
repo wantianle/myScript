@@ -5,7 +5,7 @@ from pathlib import Path
 class ScriptRunner:
     """任务执行器：负责本地调用外部脚本完成各项任务"""
 
-    def __init__(self, ctx):
+    def __init__(self, ctx) -> None:
         self.ctx = ctx
         PROJECT_ROOT = Path(__file__).resolve().parents[1]
         self.scripts_dir = (

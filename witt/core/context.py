@@ -5,11 +5,9 @@ import tempfile
 import shutil
 import yaml
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
-
-from utils import parser
+from typing import Dict
 
 
 class Formatter(logging.Formatter):
@@ -23,7 +21,7 @@ class Formatter(logging.Formatter):
         "RESET": "\033[0m",
     }
 
-    def format(self, record):
+    def format(self, record) -> str:
         color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
         fmt = f"{color}[%(levelname)s] %(message)s{self.COLORS['RESET']}"
         return logging.Formatter(fmt).format(record)
@@ -37,18 +35,18 @@ class TaskContext:
     temp_dir: Path = field(init=False)
     _logger_ready: bool = field(default=False, init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
         self.config["logic"]["target_date"] = datetime.now().strftime("%Y%m%d")
         self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
         atexit.register(self._cleanup_temp)
 
     @property
-    def vehicle(self):
+    def vehicle(self) -> str:
         return self.config["logic"]["vehicle"]
 
     @property
-    def target_date(self):
+    def target_date(self) -> str:
         return self.config["logic"]["target_date"]
 
     @property
@@ -108,11 +106,14 @@ class TaskContext:
 
     def get_library_fingerprint(self) -> str:
         """
-        如果在这个目录下下载了新文件，work_dir 的 mtime 必变
+        检查工作目录下所有子目录的最新修改时间，生成指纹。
         """
         if not self.work_dir.exists():
             return ""
-        return f"{datetime.now().day}_{self.work_dir.stat().st_mtime}"
+        mtimes = [path.stat().st_mtime for path in self.work_dir.rglob('*') if path.is_dir()]
+        mtimes.append(self.work_dir.stat().st_mtime)
+        latest_mtime = max(mtimes)
+        return f"{datetime.now().day}_{latest_mtime}"
 
     def get_env_vars(self) -> Dict[str, str]:
         """构建注入 Shell 脚本的环境变量字典"""

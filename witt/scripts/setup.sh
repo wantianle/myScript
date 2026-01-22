@@ -4,7 +4,7 @@ set -Eeuo pipefail
 CUR_DIR="${BASH_SOURCE[0]%/*}"
 source "$CUR_DIR/utils.sh"
 
-INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
+INDEX="https://mirrors.aliyun.com/pypi/simple/"
 MDRIVE_ROOT="$HOME/project"
 VMC_SH="$MDRIVE_ROOT/vmc.sh"
 CONTAINER="mdrive_dev_vmc_minieye"
@@ -31,7 +31,7 @@ for pkg in "${deps[@]}"; do
     # 检查导入名
     if ! python3 -c "import $import_name" &> /dev/null; then
         log_warnning "正在安装缺失 python 依赖: $pkg ..."
-        python3 -m pip install "$pkg" -i $INDEX || { log_error "依赖 $pkg 安装失败"; exit 1; }
+        python3 -m pip install "$pkg" -i $INDEX --trusted-host mirrors.aliyun.com || { log_error "依赖 $pkg 安装失败"; exit 1; }
     fi
 done
 

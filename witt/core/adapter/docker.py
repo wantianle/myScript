@@ -10,7 +10,7 @@ from core.runner import ScriptRunner
 class DockerAdapter(BaseAdapter):
     """负责在 Docker 容器内执行命令并处理路径映射"""
 
-    def __init__(self, ctx):
+    def __init__(self, ctx) -> None:
         self.ctx = ctx
         self.runner = ScriptRunner(ctx)
         self.container = ctx.config["docker"]["container"]
@@ -18,7 +18,7 @@ class DockerAdapter(BaseAdapter):
         self.host_mount = Path(ctx.config["docker"]["host_mount"]).resolve()
         self.docker_mount = Path(ctx.config["docker"]["docker_mount"])
 
-    def fetch_file(self, remote_path: str, local_dest: Path):
+    def fetch_file(self, remote_path: str, local_dest: Path) -> None:
         """
         Docker 模式下因为有挂载，文件已经在宿主机了。
         如果路径不一致，可以执行 shutil.move，通常情况下什么都不用做。
@@ -28,11 +28,11 @@ class DockerAdapter(BaseAdapter):
     def get_size(self, path: str) -> int:
         return os.path.getsize(path) if os.path.exists(path) else 0
 
-    def remove(self, path: str):
+    def remove(self, path: str) -> None:
         if os.path.exists(path):
             os.remove(path)
 
-    def check_docker(self):
+    def check_docker(self) -> None:
         """确保环境可用，否则尝试修复"""
         fmt = "{{.State.Running}}"
         res = subprocess.run(
@@ -49,7 +49,7 @@ class DockerAdapter(BaseAdapter):
                 res = subprocess.run(f"docker start {self.container}", shell=True)
                 if res.returncode == 0:
                     return
-        ui.print_status(f"容器启动失败，尝试重新创建并启动...", "WARN")
+        ui.print_status("容器启动失败，尝试重新创建并启动...", "WARN")
         self.runner.run_docker()
 
     def map_path(self, host_path: Union[str, Path]) -> str:
@@ -83,7 +83,7 @@ class DockerAdapter(BaseAdapter):
         except subprocess.CalledProcessError as e:
             raise e
 
-    def popen(self, cmd: str):
+    def popen(self, cmd: str) -> subprocess.Popen[str]:
         """
         异步执行容器命令，返回 subprocess.Popen 对象
         """
@@ -105,7 +105,7 @@ class DockerAdapter(BaseAdapter):
             text=True,
         )
 
-    def execute_interactive(self, cmd: str, scriptRunner):
+    def execute_interactive(self, cmd: str, scriptRunner) -> None:
         """
         用于 cyber_recorder play 等需要交互和实时刷新的命令
         """

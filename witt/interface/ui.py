@@ -1,10 +1,10 @@
-def print_banner():
+def print_banner() -> None:
     print("" + "=" * 42)
     print("     witt ( What Is That Tag ? ）v1.4")
     print("" + "=" * 42)
 
 
-def show_playback_library(library, vehicle, target_date):
+def show_playback_library(library, vehicle, target_date) -> None:
     """专门负责打印播放列表"""
     print(f"{'ID '} | {vehicle:<9} | {target_date}")
     print("-" * 42)
@@ -23,7 +23,7 @@ def show_playback_library(library, vehicle, target_date):
             count += 1
 
 
-def show_channel_table(channels):
+def show_channel_table(channels) -> None:
     """打印 Channel 列表表格"""
     print("-" * 72)
     print(f"{'ID':<4} | {'Channel Name':<55} | {'Messages'}")
@@ -33,19 +33,19 @@ def show_channel_table(channels):
     print("-" * 72)
 
 
-def show_manual_play_header():
+def show_manual_play_header() -> None:
     print("" + "=" * 14 + " 手动回播模式 " + "=" * 14)
     print("将 record 文件/目录拖入终端 | 'q' 返回")
 
 
-def show_playback_info(tag, duration, channels=None):
+def show_playback_info(tag, duration, channels=None) -> None:
     print(f"当前回播: \033[1;32m{tag}\033[0m")
     print(f"总时长: \033[1;33m{duration}s\033[0m")
     if channels:
         print(f"频道过滤: \033[1;34m{channels}\033[0m")
 
 
-def print_status(msg, level="INFO"):
+def print_status(msg, level="INFO") -> None:
     """
     终端即时反馈，不进入日志文件。
     """
