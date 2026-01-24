@@ -58,8 +58,8 @@ def menu():
             try:
                 action()
             except KeyboardInterrupt:
-                ui.print_status("程序中断...", "WARN")
+                ui.print_status("用户终止程序...", "WARN")
             except Exception as e:
                 ui.print_status(f"执行 {choice} 时发生异常", "ERROR")
-                logging.exception(f"{e}")
+                logging.exception(f"执行操作 {choice} 时发生异常: {e}")
             input("按回车键继续...")

@@ -10,34 +10,21 @@ VMC_SH="$MDRIVE_ROOT/vmc.sh"
 CONTAINER="mdrive_dev_vmc_minieye"
 DEV_START_SCRIPT="$MDRIVE_ROOT/mdrive/docker/dev_start.sh"
 DATA_ROOT="/media/mini" # 硬盘目录
-
-# 检查并安装 pip
-if ! command -v pip3 &> /dev/null; then
-    log_warnning "未检测到 pip，尝试安装..."
-    sudo apt-get update && sudo apt-get install python3-pip -y || { log_error "pip 安装失败"; exit 1; }
+VENV_DIR="$CUR_DIR/../.venv"
+VENV_PIP="$VENV_DIR/bin/pip"
+PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+if [ ! -d "$VENV_DIR" ]; then
+    log_warnning "未检测到虚拟环境，尝试安装..."
+    sudo apt-get update && sudo apt-get install python${PY_VER}-venv -y
+    python3 -m venv "$VENV_DIR"
+    $VENV_PIP install -i $INDEX --trusted-host mirrors.aliyun.com -r "$CUR_DIR/../requirements.txt"
 fi
 
-# 检查并安装 Python 依赖
-deps=("questionary" "rich" "pyyaml" "alive-progress")
-
-for pkg in "${deps[@]}"; do
-    # 针对 PyYAML 的特殊映射
-    if [[ "$pkg" == "pyyaml" ]]; then
-        import_name="yaml"
-    else
-        import_name="${pkg//-/_}"
-    fi
-
-    # 检查导入名
-    if ! python3 -c "import $import_name" &> /dev/null; then
-        log_warnning "正在安装缺失 python 依赖: $pkg ..."
-        python3 -m pip install "$pkg" -i $INDEX --trusted-host mirrors.aliyun.com || { log_error "依赖 $pkg 安装失败"; exit 1; }
-    fi
-done
+source $VENV_DIR/bin/activate
 
 if ! command -v jq >/dev/null 2>&1; then
     log_warnning "未检测到 jq ，尝试安装..."
-    sudo apt-get update && sudo apt-get install -y jq || { log_error "jq 安装失败"; exit 1; }
+    sudo apt-get install -y jq
 fi
 
 if ! command -v vmc >/dev/null 2>&1; then

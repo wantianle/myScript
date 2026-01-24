@@ -1,0 +1,5 @@
+prompt-toolkit==3.0.36
+questionary==2.0.1
+rich
+pyyaml
+alive-progress

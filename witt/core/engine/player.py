@@ -83,7 +83,7 @@ class RecordPlayer:
         start_sec: int = 0,
         end_sec: int = 0,
         selected_channels=None,
-    ):
+    ) -> None:
         """
         执行播放：支持相对偏移转绝对时间
         """
@@ -120,4 +120,4 @@ class RecordPlayer:
         print(f"执行指令: \033[1;32m{full_cmd}\033[0m")
 
         workflow.restore_env_flow(self.session, True)
-        self.executor.execute_interactive(full_cmd, self.runner)
+        self.executor.execute_interactive(full_cmd)

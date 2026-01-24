@@ -29,42 +29,42 @@ find_version() {
     echo "$json_content" | jq .
 }
 
+show_info() {
+    if [ -z "${2:-}" ]; then
+        return 0
+    fi
+    vmc search --name "$1" --version "$2" --verbose 2>/dev/null \
+    | awk '
+        function print_block() {
+            if (buffer != "") {
+                if (!has_platform || is_amd64) {
+                    print "--------------------"
+                    printf "%s", buffer
+                }
+            }
+        }
+        /^ *Name:/ {
+            print_block()
+            buffer = ""
+            has_platform = 0
+            is_amd64 = 0
+        }
+        /^ *Name:/ || /^ *Version:/ || /^ *Platform:/ || /^ *ReleaseTime:/ || /^ *GitBranch:/ {
+            buffer = buffer $0 "\n"
+            if ($1 ~ /^Platform:/) {
+                has_platform = 1
+                if ($2 == "amd64" || $2 == "any") {
+                    is_amd64 = 1
+                }
+            }
+        }
+        END {
+            print_block()
+        }
+    '
+}
+
 show_git_info() {
-    # log_info "===== 解析版本信息 ====="
-    show_info() {
-        if [ -z "${2:-}" ]; then
-            return 0
-        fi
-        vmc search --name "$1" --version "$2" --verbose 2>/dev/null \
-        | awk '
-            function print_block() {
-                if (buffer != "") {
-                    if (!has_platform || is_amd64) {
-                        print "--------------------"
-                        printf "%s", buffer
-                    }
-                }
-            }
-            /^ *Name:/ {
-                print_block()
-                buffer = ""
-                has_platform = 0
-                is_amd64 = 0
-            }
-            /^ *Name:/ || /^ *Version:/ || /^ *Platform:/ || /^ *ReleaseTime:/ || /^ *GitBranch:/ {
-                buffer = buffer $0 "\n"
-                if ($1 ~ /^Platform:/) {
-                    has_platform = 1
-                    if ($2 == "amd64" || $2 == "any") {
-                        is_amd64 = 1
-                    }
-                }
-            }
-            END {
-                print_block()
-            }
-        '
-    }
     log_info "Git 详细版本信息"
     show_info mdrive $mdrive_ver
     show_info mdrive_conf $conf_ver
@@ -86,7 +86,6 @@ sync_local_env() {
        [ "$cur_conf_ver" = "$conf_ver" ] &&
        [ "$cur_model_ver" = "$model_ver" ] &&
        [ "$cur_map_ver" = "$map_ver" ]; then
-        # log_info "vmc.sh 已是最新状态，无需更新"
         return
     fi
     sed -i -e "/^MDRIVE_VEHICLE_MODEL/c\MDRIVE_VEHICLE_MODEL=\"$vehicle_model_code\"" \
@@ -96,23 +95,19 @@ sync_local_env() {
         -e "/^MDRIVE_MODEL_VERSION/c\MDRIVE_MODEL_VERSION=$model_ver" \
         -e "/^MDRIVE_MAP_VERSION/c\MDRIVE_MAP_VERSION=$map_ver" "$VMC_SH"
     source "$VMC_SH"
-    # log_info "vmc.sh 已更新"
 }
 
 start_docker() {
     if [ -z "$(docker ps -q -f "name=^/${CONTAINER}$")" ]; then
-        # log_info "容器 [${CONTAINER}] 已存在且正在运行，跳过启动..."
-    # else
         log_warnning "容器 [${CONTAINER}] 不存在或未运行，尝试启动..."
         START_SCRIPT="${MDRIVE_ROOT}/mdrive/docker/dev_start.sh"
         if [ ! -f "$START_SCRIPT" ]; then
-            # log_warnning "启动脚本不存在: $START_SCRIPT, 请检查${MDRIVE_ROOT}是否有 mdrive, 尝试重新配置环境..."
             source "$VMC_SH"
         fi
         bash "$START_SCRIPT" --remove
     fi
-    docker exec -d "$CONTAINER" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview && sudo supervisorctl stop NebulaObu && sudo supervisorctl start Debug_Driver-LiDAR'
-    log_info "Supervisor status 和 Dreamview 已启动..."
+    docker exec -d "$CONTAINER" bash -c 'sudo -E bash /mdrive/mdrive/scripts/cmd.sh && sudo supervisorctl start Dreamview && sudo supervisorctl start Debug_Driver-LiDAR'
+    log_info "Supervisor 和 Dreamview 已启动..."
 }
 
 # ================= 主流程 =================

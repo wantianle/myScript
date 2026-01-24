@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from pathlib import Path
 from . import prompter
@@ -37,6 +38,7 @@ def full_progress(session: AppSession) -> None:
 def search_flow(session: AppSession) -> None:
     prompter.get_basic_params(session.ctx.config)
     prompter.get_path_params(session.ctx.config)
+    session.init_logging()
     ui.print_status("正在执行数据检索...")
     session.runner.run_find_record()
 
@@ -47,12 +49,15 @@ def compress_flow(session: AppSession) -> None:
     blacklist = prompter.get_selected_channels(session.recorder, target_path)
     session.ctx.config["logic"]["blacklist"] = blacklist
     ui.print_status(f">>> 执行数据压缩，删除 channels {len(blacklist)} 个")
+    if blacklist:
+        logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
     record_slice(session, target_path)
 
 
 def slice_flow(session: AppSession) -> None:
     prompter.get_basic_params(session.ctx.config)
     prompter.get_split_params(session.ctx.config)
+    session.init_logging()
     record_files, tag_dt = prompter.get_record_files(session)
     for f in record_files:
         record_slice(session, f, tag_dt)
@@ -91,6 +96,7 @@ def play_flow(session: AppSession) -> None:
             "请输入回播数据根目录(仅限/media下)",
             session.ctx.config["host"]["dest_root"],
         )
+        session.init_logging()
         auto_play(session)
 
 

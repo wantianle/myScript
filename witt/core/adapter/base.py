@@ -43,7 +43,7 @@ class BaseAdapter(ABC):
         """
         pass
 
-    def execute_interactive(self, cmd: str, scriptRunner) -> None:
+    def execute_interactive(self, cmd: str) -> None:
         """
         可选实现：交互式执行（如回放数据），默认调用普通 execute
         如果子类需要特殊处理（如 docker -it），则重写此方法

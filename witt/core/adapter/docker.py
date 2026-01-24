@@ -83,7 +83,7 @@ class DockerAdapter(BaseAdapter):
         except subprocess.CalledProcessError as e:
             raise e
 
-    def popen(self, cmd: str) -> subprocess.Popen[str]:
+    def popen(self, cmd: str):
         """
         异步执行容器命令，返回 subprocess.Popen 对象
         """
@@ -105,7 +105,7 @@ class DockerAdapter(BaseAdapter):
             text=True,
         )
 
-    def execute_interactive(self, cmd: str, scriptRunner) -> None:
+    def execute_interactive(self, cmd: str) -> None:
         """
         用于 cyber_recorder play 等需要交互和实时刷新的命令
         """

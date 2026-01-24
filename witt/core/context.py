@@ -29,11 +29,11 @@ class Formatter(logging.Formatter):
 
 @dataclass
 class TaskContext:
+    _logger_ready = False
     config_path: Path
 
     config: dict = field(init=False)
     temp_dir: Path = field(init=False)
-    _logger_ready: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
         self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
@@ -87,8 +87,8 @@ class TaskContext:
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
 
-        # if logger.hasHandlers():
-        #     logger.handlers.clear()
+        if logger.hasHandlers():
+            logger.handlers.clear()
 
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
@@ -101,8 +101,11 @@ class TaskContext:
         fh.setFormatter(formatter)
         fh.setLevel(logging.INFO)
         logger.addHandler(fh)
-
-        self._logger_ready = True
+        TaskContext._logger_ready = True
+        logging.info("="*30)
+        logging.info("Witt Logger Initialized. Mode: %s", self.config["env"]["mode"])
+        logging.info("Log File: %s", log_file)
+        logging.info("="*30)
 
     def get_library_fingerprint(self) -> str:
         """

@@ -40,8 +40,9 @@ class RecordDownloader:
         tag_dir = save_dir.parent
         meta_path = tag_dir / "meta.json"
         dt_tag = parser.str_to_time(task["time"])
-        bf, af = int(self.ctx.config["logic"]["before"]), int(
-            self.ctx.config["logic"]["after"]
+        bf, af = (
+            int(self.ctx.config["logic"]["before"]),
+            int(self.ctx.config["logic"]["after"]),
         )
         contract = {
             "tag_info": {
@@ -102,7 +103,8 @@ class RecordDownloader:
         # 生成 README
         v_content = v_dest.read_text() if v_dest.exists() else "N/A"
         records_str = " ".join([Path(f[1]).name for f in file_infos])
-        readme_content = f"""- **tag：** {task['time']} {task['name']}
+        nas_path = save_dir.relative_to(Path(self.ctx.config["host"]["dest_root"]))
+        readme_content = f"""- **tag：** {task["time"]} {task["name"]}
 - **问题描述：**
 > 填写补充描述
 - **预期结果：**
@@ -113,22 +115,17 @@ class RecordDownloader:
 ```
 - **数据路径：**
 ```bash
-{self.ctx.config['host']['nas_root']}/{self.ctx.target_date}/{self.ctx.vehicle}/{task['name']}/{self.ctx.config['logic']['soc']}
+{self.ctx.config["host"]["nas_root"]}/{nas_path}
 ```
 - **数据时刻：**
 ```bash
 {records_str}
 ```
-- **回播命令：**
-```bash
-cd {save_dir}
-cyber_recorder play -l -f {records_str}
-```
 """
         readme_path = save_dir / "README.md"
         readme_path.write_text(readme_content, encoding="utf-8")
         logging.info(f"[TASK_COMPLETE] Tag: {task['name']} | Saved to: {save_dir}")
-        logging.info(f"    Files: {[f[1] for f in file_infos]}")
+        logging.info(f"  Files: {[Path(f[1]).name for f in file_infos]}")
 
     def _sync_file(self, src, dest, task):
         """
@@ -143,6 +140,8 @@ cyber_recorder play -l -f {records_str}
         t_start = tag_dt - timedelta(seconds=int(logic["before"]))
         t_end = tag_dt + timedelta(seconds=int(logic["after"]))
         blacklist = logic.get("blacklist")
+        if blacklist:
+            logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
         if self.ctx.config["logic"]["mode"] != 3:
             self.session.recorder.split(
                 host_in=src,

@@ -43,10 +43,8 @@ class Recorder:
         """
         执行 record 切片
         """
-        logging.info(f"[SLICE_START] File: {Path(host_in).name}")
-        logging.info(f"    Range: {start_dt} -> {end_dt}")
-        if blacklist:
-            logging.info(f"    Blacklist: {','.join(blacklist)}")
+        logging.info(f"[RECORDER_SLICE] File: {Path(host_in).name}")
+        logging.info(f"  Range: {start_dt} -> {end_dt}")
 
         cmd_parts = ["cyber_recorder split", f"-f {host_in}"]
         cmd_parts.append(f'-o "{parser.time_to_str(host_out)}"')
