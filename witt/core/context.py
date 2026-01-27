@@ -85,7 +85,7 @@ class TaskContext:
         log_file = self.log_dir / f"witt_{timestamp}.log"
 
         logger = logging.getLogger()
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
 
         if logger.hasHandlers():
             logger.handlers.clear()
@@ -99,13 +99,15 @@ class TaskContext:
 
         fh = logging.FileHandler(log_file, encoding="utf-8")
         fh.setFormatter(formatter)
-        fh.setLevel(logging.INFO)
+        fh.setLevel(logging.DEBUG)
         logger.addHandler(fh)
         TaskContext._logger_ready = True
-        logging.info("="*30)
-        logging.info("Witt Logger Initialized. Mode: %s", self.config["env"]["mode"])
+        logging.info("=" * 50)
+        logging.info(
+            "Witt Logger Initialized. Data_root: %s", self.config["host"]["data_root"]
+        )
         logging.info("Log File: %s", log_file)
-        logging.info("="*30)
+        logging.info("=" * 50)
 
     def get_library_fingerprint(self) -> str:
         """
@@ -113,7 +115,9 @@ class TaskContext:
         """
         if not self.work_dir.exists():
             return ""
-        mtimes = [path.stat().st_mtime for path in self.work_dir.rglob('*') if path.is_dir()]
+        mtimes = [
+            path.stat().st_mtime for path in self.work_dir.rglob("*") if path.is_dir()
+        ]
         mtimes.append(self.work_dir.stat().st_mtime)
         latest_mtime = max(mtimes)
         return f"{datetime.now().day}_{latest_mtime}"
@@ -127,11 +131,11 @@ class TaskContext:
             "NAS_ROOT": self.config["host"]["nas_root"],
             "DEST_ROOT": self.config["host"]["dest_root"],
             "MDRIVE_ROOT": self.config["host"]["mdrive_root"],
-            "LOCAL_PATH": self.config["host"]["local_path"],
+            "DATA_ROOT": self.config["host"]["data_root"],
             "SOC": self.config["logic"]["soc"],
             "BEFORE": self.config["logic"]["before"],
             "AFTER": self.config["logic"]["after"],
-            "MODE": self.config["logic"]["mode"],
+            # "MODE": self.config["logic"]["mode"],
             "VERSION_JSON": self.config["logic"]["version_json"],
             "CONTAINER": self.config["docker"]["container"],
             "REMOTE_USER": self.config["remote"]["user"],

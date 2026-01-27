@@ -1,5 +1,6 @@
 set -Eeuo pipefail
-source "${BASH_SOURCE[0]%/*}/utils.sh"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$DIR/utils.sh"
 trap 'failure ${BASH_SOURCE[0]} ${LINENO} "$BASH_COMMAND"' ERR
 
 cp -n "${BASH_SOURCE[0]%/*}/../docs/customized_20260115.multiviz.yaml" "$MDRIVE_ROOT/"

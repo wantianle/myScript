@@ -9,9 +9,7 @@ class RecordPlayer:
     def __init__(self, session) -> None:
         self.session = session
         self.ctx = session.ctx
-        self.runner = session.runner
         self.executor = session.executor
-        self.recorder = session.recorder
 
     @property
     def library_file(self):
@@ -50,7 +48,7 @@ class RecordPlayer:
                     "vehicle": meta.get("vehicle", tag_dir.parent.name),
                     "date": meta.get("date", tag_dir.parents[1].name),
                     "socs": {},
-                    "fast_meta": meta,
+                    "last_update": meta.get("last_update"),
                 }
                 for soc_name, file_names in meta.get("files", {}).items():
                     soc_path = tag_dir / soc_name
@@ -84,9 +82,6 @@ class RecordPlayer:
         end_sec: int = 0,
         selected_channels=None,
     ) -> None:
-        """
-        执行播放：支持相对偏移转绝对时间
-        """
         if not records:
             ui.print_status("播放列表为空", "ERROR")
             return
@@ -108,14 +103,14 @@ class RecordPlayer:
         cmd_parts.append(
             f'-e "{(global_start + timedelta(seconds=final_end)).strftime(fmt)}"'
         )
-        if selected_channels:
-            for c in selected_channels:
-                cmd_parts.append(f'-k "{c}"')
+        # if selected_channels:
+        #     for c in selected_channels:
+        #         cmd_parts.append(f'-k "{c}"')
         full_cmd = " ".join(cmd_parts)
         ui.show_playback_info(
             tag=Path(records[0]["path"]).name[:20] + "...",
             duration=total_duration,
-            channels=selected_channels,
+            # channels=selected_channels,
         )
         print(f"执行指令: \033[1;32m{full_cmd}\033[0m")
 

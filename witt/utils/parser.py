@@ -66,23 +66,39 @@ def time_to_str(dt: Any) -> str:
 def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
     """解析 find_record.sh 生成的 manifest.list"""
     # time|tag|paths
+    if not manifest_path.exists():
+        return []
+
     lines = [
-        line.strip()
-        for line in manifest_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        i.strip()
+        for i in manifest_path.read_text(encoding="utf-8").splitlines()
+        if i.strip()
     ]
     tasks = []
+
     for line in lines:
         parts = line.split("|")
+        tag_time = parts[0]
+        tag_name = sanitize_name(parts[1])
+        raw_paths = parts[2].split()
+        # 结构从 paths: [] 变为 soc_paths: {"soc1": [], "soc2": []}
+        soc_paths = {"soc1": [], "soc2": []}
+        for p in raw_paths:
+            if "soc1" in p:
+                soc_paths["soc1"].append(p)
+            elif "soc2" in p:
+                soc_paths["soc2"].append(p)
         tasks.append(
             {
-                "time": parts[0],
-                "name": sanitize_name(parts[1]),
-                "paths": parts[2].split(),
+                "time": tag_time,
+                "name": tag_name,
+                "soc_paths": soc_paths,
+                "paths": raw_paths,
             }
         )
+
     tasks.sort(key=lambda x: x["time"])
-    for i, task in enumerate(tasks, start=1):
+    for i, task in enumerate(tasks, 1):
         task["id"] = f"{i:02d}"
     return tasks
 

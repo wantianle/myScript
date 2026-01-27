@@ -21,8 +21,8 @@ class ScriptRunner:
             script_path = Path(self.ctx.config["docker"]["docker_scripts"]) / script_name
         env_vars = self.ctx.get_env_vars()
         bash_cmd = ["bash"]
-        if self.ctx.config["env"]["debug"]:
-            bash_cmd.append("-x")
+        # if self.ctx.config["env"]["debug"]:
+        #     bash_cmd.append("-x")
         cmd = bash_cmd + [str(script_path)]
         try:
             subprocess.run(cmd, env=env_vars, text=True, check=True, capture_output=quiet)

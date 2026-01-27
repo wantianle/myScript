@@ -2,10 +2,9 @@ import os
 import subprocess
 from typing import Union
 from pathlib import Path
-from interface import ui
 from .base import BaseAdapter
 
-
+# 废弃，基本没有使用场景
 class SSHAdapter(BaseAdapter):
     """远程执行命令拼接"""
 
@@ -27,10 +26,6 @@ class SSHAdapter(BaseAdapter):
             ["scp", "-q", remote_uri, str(local_dest)], env=env_c, check=True
         )
 
-    def get_size(self, path: str) -> int:
-        res = self.execute(f"stat -c %s {path}")
-        return int(res.strip()) if res else 0
-
     def remove(self, path: str) -> None:
         self.execute(f"rm -f {path}")
 
@@ -39,7 +34,6 @@ class SSHAdapter(BaseAdapter):
         env_setup = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8 && export GLOG_log_dir=/tmp && export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep'"
         remote_cmd = f"{env_setup} && source {self.setup_env} && {cmd}"
 
-        # 构造 SSH 命令
         full_cmd = [
             "ssh",
             "-o",
@@ -61,12 +55,7 @@ class SSHAdapter(BaseAdapter):
             f"{self.user}@{self.ip}",
             f"LC_ALL=C {remote_cmd}",  # 强制远程环境为标准 C 语言环境
         ]
-
-        try:
-            result = subprocess.run(
-                full_cmd, capture_output=True, text=True, check=True
-            )
-            return result.stdout
-        except subprocess.CalledProcessError as e:
-            ui.print_status("SSH Exec Error", "ERROR")
-            raise e
+        result = subprocess.run(
+            full_cmd, capture_output=True, text=True, check=True
+        )
+        return result.stdout

@@ -1,9 +1,8 @@
 #!/bin/bash
 
 set -euo pipefail
-
-CUR_DIR="${BASH_SOURCE[0]%/*}"
-source "$CUR_DIR/utils.sh"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$DIR/utils.sh"
 [[ "$(uname -m)" != "x86_64" ]] && { log_error "仅支持 x86_64 架构!"; exit 1; }
 VMC_BIN_DIR="$HOME/.vmc/bin"
 VMC_EXEC="$VMC_BIN_DIR/vmc"

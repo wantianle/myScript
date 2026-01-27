@@ -1,7 +1,8 @@
 #!/bin/bash
 
 set -Eeuo pipefail
-source "${BASH_SOURCE[0]%/*}/utils.sh"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$DIR/utils.sh"
 trap 'failure ${BASH_SOURCE[0]} ${LINENO} "$BASH_COMMAND"' ERR
 VMC_SH="$MDRIVE_ROOT/vmc.sh"
 find_version() {

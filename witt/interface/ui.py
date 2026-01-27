@@ -15,22 +15,12 @@ def show_playback_library(library, vehicle, target_date) -> None:
                 f"{count:<3} ├── \033[3m{entry['time'][11:]} \033[1;32m{entry['tag']}\033[0m "
             )
             indent = " " * 4
-            meta = entry.get("fast_meta", {}).get("last_update", {})
+            meta = entry.get("last_update", {})
             soc1_update = meta.get("soc1", "N/A")
             soc2_update = meta.get("soc2", "N/A")
             print(f"{indent}├── soc1 update: \033[3;33m{soc1_update}\033[0m")
             print(f"{indent}└── soc2 update: \033[3;33m{soc2_update}\033[0m")
             count += 1
-
-
-def show_channel_table(channels) -> None:
-    """打印 Channel 列表表格"""
-    print("-" * 72)
-    print(f"{'ID':<4} | {'Channel Name':<55} | {'Messages'}")
-    print("-" * 72)
-    for i, ch in enumerate(channels, 1):
-        print(f"{i:<4} | {ch['name']:<55} | {ch['count']}")
-    print("-" * 72)
 
 
 def show_manual_play_header() -> None:
@@ -41,8 +31,8 @@ def show_manual_play_header() -> None:
 def show_playback_info(tag, duration, channels=None) -> None:
     print(f"当前回播: \033[1;32m{tag}\033[0m")
     print(f"总时长: \033[1;33m{duration}s\033[0m")
-    if channels:
-        print(f"频道过滤: \033[1;34m{channels}\033[0m")
+    # if channels:
+    #     print(f"频道过滤: \033[1;34m{channels}\033[0m")
 
 
 def print_status(msg, level="INFO") -> None:

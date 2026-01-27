@@ -1,9 +1,3 @@
-# 基础环境配置
-env:
-  log_level: "INFO"
-  debug: False
-  mode: 1
-
 # 远程环境配置
 remote:
   user: "nvidia"
@@ -15,9 +9,7 @@ host:
   nas_root: "/media/nas/00.raw"
   dest_root: "/media/road_test"
   mdrive_root: "/home/mini/project"
-  local_path: "/media/mini"
-  # local_path: "/media/data" # 测试
-
+  data_root: "/media/mini/data"
 
 # Docker 内部路径管理
 docker:
@@ -30,11 +22,11 @@ docker:
 
 # 业务逻辑配置
 logic:
-  vehicle: "XZB600011" # 临时测试
-  target_date: "20251227" # 临时测试
-  mode: 1
+  vehicle: "XZB600013" # 临时测试
+  target_date: "20260101"
+  # mode: 1
   version_json: ""
-  soc: "soc1"
+  soc: "soc"
   before: 15
   after: 0
   blacklist:

@@ -1,51 +1,45 @@
 #!/bin/bash
 
 set -Eeuo pipefail
-source "${BASH_SOURCE[0]%/*}/utils.sh"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$DIR/utils.sh"
 trap 'failure ${BASH_SOURCE[0]} $LINENO "$BASH_COMMAND"' ERR
 
 # ================= 确定查询模式 =================
-if [[ $MODE == "3" ]]; then
-    data_dir="$REMOTE_DATA_ROOT"
-    log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$data_dir"
-    ssh_cmd() {
-        # 确保 socket 目录存在（建议放在 /tmp 下，重启会自动清理）
-        mkdir -p /tmp/ssh_mux
-        LC_ALL=C LANG=C ssh -o ConnectTimeout=3 \
-            -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
-            -o LogLevel=ERROR \
-            -o ControlMaster=auto \
-            -o ControlPath=/tmp/ssh_mux/%r@%h:%p \
-            -o ControlPersist=5m \
-            "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
-}
-elif [[ $MODE == "2" ]]; then
-    data_dir="${NAS_ROOT}/${TARGET_DATE:0:8}/${VEHICLE}"
-    log_info "NAS 模式: $data_dir"
+# if [[ $MODE == "3" ]]; then
+#     data_root="$REMOTE_DATA_ROOT"
+#     log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$data_root"
+#     ssh_cmd() {
+#         mkdir -p /tmp/ssh_mux
+#         LC_ALL=C LANG=C ssh -o ConnectTimeout=3 \
+#             -o StrictHostKeyChecking=no \
+#             -o UserKnownHostsFile=/dev/null \
+#             -o LogLevel=ERROR \
+#             -o ControlMaster=auto \
+#             -o ControlPath=/tmp/ssh_mux/%r@%h:%p \
+#             -o ControlPersist=5m \
+#             "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
+# }
+# elif [[ $MODE == "2" ]]; then
+if findmnt -nt cifs "$DATA_ROOT" > /dev/null; then
+    data_root="${NAS_ROOT}/${TARGET_DATE:0:8}/${VEHICLE}"
+    log_info "NAS 模式: $data_root"
 else
-    if [ ! -d $LOCAL_PATH ]; then
-        log_error "错误: $LOCAL_PATH 不是一个目录或不存在: sudo mkdir $LOCAL_PATH"
-        exit 1
-    elif [ ! -w $LOCAL_PATH ] || [ ! -x $LOCAL_PATH ]; then
-        log_error "你没有足够的权限访问 $LOCAL_PATH, 请执行 sudo chown -R $USER:$USER $LOCAL_PATH"
-        exit 1
-    fi
-    data_dir="${LOCAL_PATH%/}"
-    log_info "本地路径模式: $data_dir"
+    data_root="${DATA_ROOT%/}"
+    log_info "本地路径模式: $data_root"
 fi
 # ================= 建立 Record 索引 =================
 declare -A records
 shopt -s nullglob
-find_cmd="find \"$data_dir\" -type f \( \( -path '*${SOC}*' -name '${TARGET_DATE}*record*' \) -o -name 'tag_${TARGET_DATE}*.pb.txt' \) 2>/dev/null"
+find_cmd="find \"$data_root\" -type f \( \( -path '*${SOC}*' -name '${TARGET_DATE}*record*' \) -o -name 'tag_${TARGET_DATE}*.pb.txt' \) 2>/dev/null"
 
-if [[ $MODE == "3" ]]; then
-    raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
-else
-    raw_files=$(eval "$find_cmd")
-fi
-
-[[ -z $raw_files ]] && { log_error "$data_dir 目录下找不到相关的文件！"; exit 1; }
+# if [[ $MODE == "3" ]]; then
+#     raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
+# else
+#     raw_files=$(eval "$find_cmd")
+# fi
+raw_files=$(eval "$find_cmd")
+[[ -z $raw_files ]] && { log_error "$data_root 目录下找不到相关的文件！"; exit 1; }
 record_list=$(echo "$raw_files" | grep record)
 tag_list=$(echo "$raw_files" | grep tag)
 
@@ -71,15 +65,15 @@ done <<< "$record_list"
 
 # ================= 处理 Tag 文件 =================
 all_tasks=()
-[[ -z "$tag_list" ]] && { log_error "$data_dir 找不到对应的 tag 文件！"; exit 1; }
+[[ -z "$tag_list" ]] && { log_error "$data_root 找不到对应的 tag 文件！"; exit 1; }
 
 for tag_file in $tag_list; do
-    if [[ $MODE == "3" ]]; then
-        content=$(ssh_cmd "cat $tag_file")
-    else
-        content=$(cat "$tag_file")
-    fi
-
+    # if [[ $MODE == "3" ]]; then
+    #     content=$(ssh_cmd "cat $tag_file")
+    # else
+    #     content=$(cat "$tag_file")
+    # fi
+    content=$(cat "$tag_file")
     while IFS= read -r line; do
         if [[ $line =~ msg:\ \"([^\"]+)\" ]]; then
             msg="${BASH_REMATCH[1]//\\n/}"
@@ -112,12 +106,11 @@ for tag_file in $tag_list; do
                     matched_files="${matched_files} ${records[$m]}"
                 fi
             done
-           # 精确筛选
+            # 精确筛选
             if [[ -n "$matched_files" ]]; then
-                sorted_candidates=$(echo "$matched_files" | tr ' ' '\n' | sort - -n)
+                sorted_candidates=$(echo "$matched_files" | tr ' ' '\n' | sort -n -t'|' -k1,1)
                 final_list=""
-                last_file=""
-
+                declare -A last_before_soc=()
                 while read -r line; do
                     [[ -z "$line" ]] && continue
                     f_sec="${line%%|*}"
@@ -126,15 +119,25 @@ for tag_file in $tag_list; do
                     if (( f_sec >= end_sec )); then
                         continue
                     fi
-                    # 如果文件起始时间在请求区间内，加入 final_list
+
+                    current_soc="unknown"
+                    if [[ "$f_path" == *"soc1"* ]]; then
+                        current_soc="soc1"
+                    elif [[ "$f_path" == *"soc2"* ]]; then
+                        current_soc="soc2"
+                    fi
+
                     if (( f_sec >= start_sec )); then
                         final_list="${final_list} ${f_path}"
-                    # 如果文件起始时间早于请求开始时间，它可能是包含这段数据的那个“母文件”
                     else
-                        last_file="$f_path"
+                        last_before_soc[$current_soc]="$f_path"
                     fi
                 done <<< "$sorted_candidates"
-                result="${last_file} ${final_list}"
+                merged_last_files=""
+                for soc in "${!last_before_soc[@]}"; do
+                    merged_last_files="${merged_last_files} ${last_before_soc[$soc]}"
+                done
+                result="${merged_last_files} ${final_list}"
                 result=$(echo "$result" | xargs)
             else
                 result=""
@@ -159,12 +162,13 @@ if [[ ${#all_tasks[@]} -gt 0 ]]; then
         all_tasks+=("${tag_time}|${tag_name}|${tag_paths}")
         read -r -a t_paths <<< "${tag_paths}"
         if [[ ${#t_paths[@]} -gt 0 ]]; then
-            t_dir="${t_paths[0]%/*}"
-            t_files=""
-            for f in "${t_paths[@]}"; do t_files+=" ${f##*/}"; done
-            echo -e "${GREEN}[$count] $tag_name : $tag_time${NC}"
-            echo "[目录]: $t_dir"
-            echo "[文件]: ${t_files# }"
+            # t_dir="${t_paths[0]%/*}"
+            # t_files=""
+            # for f in "${t_paths[@]}"; do t_files+=" ${f##*/}"; done
+            found_socs=$(echo "${tag_paths}" | grep -o "soc[12]" | sort -u | xargs)
+            echo -e "${GREEN}[$count] $tag_name : $tag_time [$found_socs]${NC}"
+            # echo "[目录]: $t_dir"
+            # echo "[文件]: ${t_files# }"
             echo "cyber_recorder play -l -f ${tag_paths}"
             echo "------------------------------------------------"
         else

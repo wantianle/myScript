@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
-CUR_DIR="${BASH_SOURCE[0]%/*}"
-source "$CUR_DIR/utils.sh"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$DIR/utils.sh"
 
 INDEX="https://mirrors.aliyun.com/pypi/simple/"
 MDRIVE_ROOT="$HOME/project"
@@ -10,14 +10,14 @@ VMC_SH="$MDRIVE_ROOT/vmc.sh"
 CONTAINER="mdrive_dev_vmc_minieye"
 DEV_START_SCRIPT="$MDRIVE_ROOT/mdrive/docker/dev_start.sh"
 DATA_ROOT="/media/mini" # 硬盘目录
-VENV_DIR="$CUR_DIR/../.venv"
+VENV_DIR="$DIR/../.venv"
 VENV_PIP="$VENV_DIR/bin/pip"
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 if [ ! -d "$VENV_DIR" ]; then
     log_warnning "未检测到虚拟环境，尝试安装..."
     sudo apt-get update && sudo apt-get install python${PY_VER}-venv -y
     python3 -m venv "$VENV_DIR"
-    $VENV_PIP install -i $INDEX --trusted-host mirrors.aliyun.com -r "$CUR_DIR/../requirements.txt"
+    $VENV_PIP install -i $INDEX --trusted-host mirrors.aliyun.com -r "$DIR/../requirements.txt"
 fi
 
 source $VENV_DIR/bin/activate
@@ -36,7 +36,7 @@ fi
 if [[ ! -f $VMC_SH ]]; then
     log_warnning "未找到 vmc.sh 文件, 尝试创建..."
     mkdir -p $MDRIVE_ROOT
-    cp $CUR_DIR/vmc.sh $VMC_SH
+    cp $DIR/vmc.sh $VMC_SH
     chmod +x $MDRIVE_ROOT/vmc.sh
 fi
 
@@ -71,4 +71,4 @@ if ! docker exec ${CONTAINER} /bin/bash -c "source /mdrive/mdrive/setup.sh && cy
     sleep 1
 fi
 
-python3 $CUR_DIR/../main.py
+python3 $DIR/../main.py

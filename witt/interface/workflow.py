@@ -1,6 +1,6 @@
-import logging
-from datetime import timedelta
-from pathlib import Path
+# import logging
+# from datetime import datetime,timedelta
+# from pathlib import Path
 from . import prompter
 from . import ui
 from core.session import AppSession
@@ -21,17 +21,13 @@ def full_progress(session: AppSession) -> None:
         if not valid_tasks:
             ui.print_status("所选序号无效或无路径数据", "ERROR")
             return
-        if prompter.get_confirm_input("是否对 Record 执行 Channel 过滤压缩?"):
-            session.ctx.config["logic"]["blacklist"] = prompter.get_selected_channels(
-                session.recorder, Path(valid_tasks[0]["paths"][0])
-            )
-        else:
-            session.ctx.config["logic"]["blacklist"] = ""
+        session.ctx.config["logic"]["blacklist"] = (
+            prompter.get_tasks_channels(session, valid_tasks) or ""
+        )
         session.downloader.download_record(valid_tasks)
         if prompter.get_confirm_input("\n处理完成，是否立即回播数据?", default=True):
             auto_play(session)
     except Exception as e:
-        ui.print_status("全流程执行失败...", "ERROR")
         raise e
 
 
@@ -43,39 +39,43 @@ def search_flow(session: AppSession) -> None:
     session.runner.run_find_record()
 
 
-def compress_flow(session: AppSession) -> None:
-    """Channel 过滤压缩"""
-    target_path = Path(input("需要压缩的 record 文件完整路径: ").strip())
-    blacklist = prompter.get_selected_channels(session.recorder, target_path)
-    session.ctx.config["logic"]["blacklist"] = blacklist
-    ui.print_status(f">>> 执行数据压缩，删除 channels {len(blacklist)} 个")
-    if blacklist:
-        logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
-    record_slice(session, target_path)
+# def compress_flow(session: AppSession) -> None:
+#     """Channel 过滤压缩"""
+#     target_path = Path(input("需要压缩的 record 文件完整路径: ").strip())
+#     blacklist = prompter.get_tasks_channels(session, target_path)
+#     session.ctx.config["logic"]["blacklist"] = blacklist
+#     ui.print_status(f"执行数据压缩，删除 channels {len(blacklist)} 个")
+#     if blacklist:
+#         logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
+#     record_slice(session, target_path)
 
 
-def slice_flow(session: AppSession) -> None:
-    prompter.get_basic_params(session.ctx.config)
-    prompter.get_split_params(session.ctx.config)
-    session.init_logging()
-    record_files, tag_dt = prompter.get_record_files(session)
-    for f in record_files:
-        record_slice(session, f, tag_dt)
+# def slice_flow(session: AppSession) -> None:
+#     prompter.get_basic_params(session.ctx.config)
+#     prompter.get_split_params(session.ctx.config)
+#     session.init_logging()
+#     record_files = prompter.get_dragged_input()
+#     time_raw = input("基准时间 (HHMMSS): ").strip()
+#     tag_dt = datetime.strptime(
+#         f"{session.ctx.target_date[:8]}{time_raw}", "%Y%m%d%H%M%S"
+#     )
+#     for f in record_files:
+#         record_slice(session, f, tag_dt)
 
 
-def record_slice(session: AppSession, input_path: Path, tag_dt=None) -> bool:
-    """时间截取切片"""
-    tag_start, tag_end = None, None
-    if tag_dt:
-        tag_start = tag_dt - timedelta(seconds=session.ctx.config["logic"]["before"])
-        tag_end = tag_dt + timedelta(seconds=session.ctx.config["logic"]["after"])
-    return session.recorder.split(
-        host_in=str(input_path),
-        host_out=str(input_path.with_suffix(".split")),
-        start_dt=tag_start,
-        end_dt=tag_end,
-        blacklist=session.ctx.config["logic"]["blacklist"],
-    )
+# def record_slice(session: AppSession, input_path: Path, tag_dt=None):
+#     """时间截取切片"""
+#     tag_start, tag_end = None, None
+#     if tag_dt:
+#         tag_start = tag_dt - timedelta(seconds=session.ctx.config["logic"]["before"])
+#         tag_end = tag_dt + timedelta(seconds=session.ctx.config["logic"]["after"])
+#     session.recorder.split(
+#         host_in=str(input_path),
+#         host_out=str(input_path.with_suffix(".split")),
+#         start_dt=tag_start,
+#         end_dt=tag_end,
+#         blacklist=session.ctx.config["logic"]["blacklist"],
+#     )
 
 
 def restore_env_flow(session: AppSession, auto: bool = False) -> None:
@@ -114,36 +114,49 @@ def auto_play(session: AppSession) -> None:
         tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
         if not tag_idx:
             break
-        prompter.get_cached_playback(session, library[int(tag_idx) - 1])
+        selected_tag = library[int(tag_idx) - 1]
+        socs = sorted(list(selected_tag["socs"].keys()))
+        for i, s in enumerate(socs, 1):
+            print(f"  [{i}] {s}")
+        if len(socs) > 1:
+            print(f"  [{len(socs) + 1}] All")
+        choice = input("选择 SOC (默认 1): ").strip() or "1"
+        target_records = []
+        if choice.isdigit() and int(choice) <= len(socs):
+            target_records = selected_tag["socs"][socs[int(choice) - 1]]
+        else:
+            for s in socs:
+                target_records.extend(selected_tag["socs"][s])
+        # selected_channels = prompter.get_tasks_channels(session, target_records)
+        range_in = input("播放范围 (5 | 10-20 | 回车全播): ").strip()
+        start_s, end_s = parser.parse_range_logic(range_in)
+        session.player.play(target_records, start_s, end_s)
 
 
 def manual_play(session: AppSession) -> None:
     """
     手动播放循环：保留文件列表，支持多次调整时间播放
     """
-    ui.show_manual_play_header()
-    raw_input = prompter.get_dragged_input()
-    if raw_input.lower() == "q":
-        return
-    paths = prompter.get_dragged_paths(raw_input)
-    if not paths:
-        ui.print_status("无效路径", "ERROR")
-        return
-    info_start = session.recorder.get_info(str(paths[0]))
-    info_end = session.recorder.get_info(str(paths[-1]))
-    g_start = info_start["begin"]
-    g_end = info_end["end"]
-    g_duration = int((g_end - g_start).total_seconds())
-    current_records = [
-        {"path": str(p), "begin": g_start, "duration": g_duration} for p in paths
-    ]
-    while True:
-        ui.print_status(f"已加载 {len(paths)} 个文件，总长 {g_duration}s")
-        selected_channels = prompter.get_selected_channels_for_play(
-            session, current_records
-        )
-        range_in = input("输入播放范围 (如 0-60, 回车全播): ").strip()
-        s, e = parser.parse_range_logic(range_in)
-        session.player.play(current_records, s, e, selected_channels)
-        if not prompter.get_confirm_input("继续调整该组文件播放?"):
-            break
+    try:
+        ui.show_manual_play_header()
+        paths = prompter.get_dragged_input()
+        if paths:
+            return
+        info_start = session.recorder.get_info(str(paths[0]))
+        info_end = session.recorder.get_info(str(paths[-1]))
+        g_start = info_start["begin"]
+        g_end = info_end["end"]
+        g_duration = int((g_end - g_start).total_seconds())
+        current_records = [
+            {"path": str(p), "begin": g_start, "duration": g_duration} for p in paths
+        ]
+        while True:
+            ui.print_status(f"已加载 {len(paths)} 个文件，总长 {g_duration}s")
+            # selected_channels = prompter.get_tasks_channels(session, current_records)
+            range_in = input("输入播放范围 (如 0-60, 回车全播): ").strip()
+            s, e = parser.parse_range_logic(range_in)
+            session.player.play(current_records, s, e)
+            if not prompter.get_confirm_input("继续调整该组文件播放?"):
+                break
+    except Exception as e:
+        raise e

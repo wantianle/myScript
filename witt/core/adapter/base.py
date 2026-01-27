@@ -15,16 +15,10 @@ class BaseAdapter(ABC):
         return f"{base_env} && source {self.setup_env} && {cmd}"
 
     @abstractmethod
-    def get_size(self, path: str) -> int:
-        """获取执行环境中文件的大小"""
-        return 0
-
-    @abstractmethod
     def remove(self, path: str) -> None:
         """删除执行环境中的中间文件"""
         pass
 
-    @abstractmethod
     def fetch_file(self, remote_path: str, local_dest: Path) -> None:
         """将执行环境中的文件拉取到宿主机。本地/Docker模式下通常是 move 或 pass"""
         pass
