@@ -43,9 +43,7 @@ def sanitize_name(name: str) -> str:
 
 
 def str_to_time(t_str: str) -> datetime:
-    """
-    统一解析 Cyber 时间字符串为 datetime 对象
-    """
+    """统一解析 Cyber 时间字符串为 datetime 对象"""
     clean_t = (
         f"{t_str[:10]} {t_str[11:]}" if len(t_str) > 10 and t_str[10] == "-" else t_str
     )
@@ -64,24 +62,20 @@ def time_to_str(dt: Any) -> str:
 
 
 def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
-    """解析 find_record.sh 生成的 manifest.list"""
-    # time|tag|paths
+    """解析 find_record.sh 生成的 manifest.list: time|tag|paths"""
     if not manifest_path.exists():
         return []
-
     lines = [
         i.strip()
         for i in manifest_path.read_text(encoding="utf-8").splitlines()
         if i.strip()
     ]
     tasks = []
-
     for line in lines:
         parts = line.split("|")
         tag_time = parts[0]
         tag_name = sanitize_name(parts[1])
         raw_paths = parts[2].split()
-        # 结构从 paths: [] 变为 soc_paths: {"soc1": [], "soc2": []}
         soc_paths = {"soc1": [], "soc2": []}
         for p in raw_paths:
             if "soc1" in p:
@@ -96,7 +90,6 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
                 "paths": raw_paths,
             }
         )
-
     tasks.sort(key=lambda x: x["time"])
     for i, task in enumerate(tasks, 1):
         task["id"] = f"{i:02d}"
@@ -104,9 +97,7 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
 
 
 def parse_range_logic(range_in: str) -> tuple:
-    """
-    专门处理播放时间范围字符串，确保永远返回两个整数
-    """
+    """专门处理播放时间范围字符串，确保永远返回两个整数"""
     if not range_in:
         return 0, 0
     try:

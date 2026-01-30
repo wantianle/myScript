@@ -6,21 +6,6 @@ source "$DIR/utils.sh"
 trap 'failure ${BASH_SOURCE[0]} $LINENO "$BASH_COMMAND"' ERR
 
 # ================= 确定查询模式 =================
-# if [[ $MODE == "3" ]]; then
-#     data_root="$REMOTE_DATA_ROOT"
-#     log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$data_root"
-#     ssh_cmd() {
-#         mkdir -p /tmp/ssh_mux
-#         LC_ALL=C LANG=C ssh -o ConnectTimeout=3 \
-#             -o StrictHostKeyChecking=no \
-#             -o UserKnownHostsFile=/dev/null \
-#             -o LogLevel=ERROR \
-#             -o ControlMaster=auto \
-#             -o ControlPath=/tmp/ssh_mux/%r@%h:%p \
-#             -o ControlPersist=5m \
-#             "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
-# }
-# elif [[ $MODE == "2" ]]; then
 if findmnt -nt cifs "$DATA_ROOT" > /dev/null; then
     data_root="${NAS_ROOT}/${TARGET_DATE:0:8}/${VEHICLE}"
     log_info "NAS 模式: $data_root"
@@ -33,11 +18,6 @@ declare -A records
 shopt -s nullglob
 find_cmd="find \"$data_root\" -type f \( \( -path '*${SOC}*' -name '${TARGET_DATE}*record*' \) -o -name 'tag_${TARGET_DATE}*.pb.txt' \) 2>/dev/null"
 
-# if [[ $MODE == "3" ]]; then
-#     raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
-# else
-#     raw_files=$(eval "$find_cmd")
-# fi
 raw_files=$(eval "$find_cmd")
 [[ -z $raw_files ]] && { log_error "$data_root 目录下找不到相关的文件！"; exit 1; }
 record_list=$(echo "$raw_files" | grep record)
@@ -68,11 +48,6 @@ all_tasks=()
 [[ -z "$tag_list" ]] && { log_error "$data_root 找不到对应的 tag 文件！"; exit 1; }
 
 for tag_file in $tag_list; do
-    # if [[ $MODE == "3" ]]; then
-    #     content=$(ssh_cmd "cat $tag_file")
-    # else
-    #     content=$(cat "$tag_file")
-    # fi
     content=$(cat "$tag_file")
     while IFS= read -r line; do
         if [[ $line =~ msg:\ \"([^\"]+)\" ]]; then

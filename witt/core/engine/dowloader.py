@@ -18,9 +18,6 @@ class RecordDownloader:
         self.remote_user = self.ctx.config["remote"]["user"]
         self.remote_ip = self.ctx.config["remote"]["ip"]
 
-    # @property
-    # def mode(self):
-    #     return self.ctx.config["logic"]["mode"]
 
     @property
     def dest_root(self):
@@ -79,26 +76,12 @@ class RecordDownloader:
         src_dir = Path(file_infos[0][0]).parent
         v_src = src_dir / "version.json"
         v_dest = save_dir / "version.json"
-        # try:
-            # if self.mode == 3:
-            #     remote_src = f"{self.remote_user}@{self.remote_ip}:{v_src}"
-            #     down_cmd = ["scp", "-q", "-o", remote_src, v_dest]
-            #     env_c = os.environ.copy()
-            #     env_c["LC_ALL"] = "C"
-            #     result = subprocess.run(
-            #         down_cmd, env=env_c, capture_output=True, text=True
-            #     )
-            #     if result.returncode != 0:
-            #         ui.print_status(
-            #             f"拷贝 {task['name']}: version.json 文件失败: {result.stderr}",
-            #             "ERROR",
-            #         )
-            # else:
-        if os.path.exists(v_src):
-            shutil.copy2(v_src, v_dest)
-        # except Exception as e:
-        #     ui.print_status(f"拷贝 {task['name']}: version.json 文件失败", "ERROR")
-        #     raise e
+        try:
+            if os.path.exists(v_src):
+                shutil.copy2(v_src, v_dest)
+        except Exception as e:
+            ui.print_status(f"拷贝 {task['name']}: version.json 文件失败", "ERROR")
+            raise e
         # 生成 README
         v_content = v_dest.read_text() if v_dest.exists() else "N/A"
         records_str = " ".join([Path(f[1]).name for f in file_infos])
@@ -141,7 +124,6 @@ class RecordDownloader:
         blacklist = logic.get("blacklist")
         if blacklist:
             logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
-        # if self.ctx.config["logic"]["mode"] != 3:
         self.session.recorder.split(
             host_in=src,
             host_out=dest,
@@ -149,25 +131,7 @@ class RecordDownloader:
             end_dt=t_end,
             blacklist=blacklist,
         )
-        # else:
-        #     remote_out = f"{src}.split"
-        #     self.session.executor.remove(remote_out)
-        #     success = self.session.recorder.split(
-        #         host_in=src,
-        #         host_out=remote_out,
-        #         start_dt=t_start,
-        #         end_dt=t_end,
-        #         blacklist=blacklist,
-        #     )
-        #     if success:
-        #         self.session.executor.fetch_file(remote_out, dest)
-        #         self.session.executor.remove(remote_out)
-        #     else:
-        #         logging.error(f"[SSH] 切片失败: {src}")
 
-    def _get_task_save_dir(self, task, soc_name) -> Path:
-        """统一管理保存路径规则"""
-        return self.ctx.get_task_dir(task["id"], task["name"], soc_name)
 
     def download_record(self, task_list):
         """
@@ -179,7 +143,9 @@ class RecordDownloader:
             for soc_name, paths in task["soc_paths"].items():
                 if not paths:
                     continue
-                save_dir = self._get_task_save_dir(task, soc_name)
+                save_dir = self.ctx.get_task_dir(
+                    task["id"], task["name"], soc_name
+                )
                 if save_dir not in prepared_dirs:
                     self._prepare_dir(save_dir)
                     prepared_dirs.add(save_dir)

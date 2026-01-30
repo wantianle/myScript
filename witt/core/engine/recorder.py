@@ -18,7 +18,7 @@ class Recorder:
             stdout = self.session.executor.execute(f"cyber_recorder info {docker_path}")
             return parser.parse_record_info(stdout)
         except Exception as e:
-            logging.error(f"{docker_path} 异常，解析元数据失败: {e}")
+            ui.print_status(f"{docker_path} 异常，解析元数据失败", "ERROR")
             raise e
 
     def split(

@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import re
 import sys
@@ -16,7 +15,7 @@ from interface import ui
 from utils import parser
 
 
-def usage() -> None:
+def usage():
     README = Path(__file__).resolve().parents[1] / "docs" / "README.md"
     subprocess.run(["python3", "-m", "rich.markdown", README])
 
@@ -30,7 +29,7 @@ def get_user_input(prompt: str, default_value: str) -> str:
         raise
 
 
-def get_basic_params(config: dict) -> None:
+def get_basic_params(config: dict):
     ui.print_status("基本信息配置")
     config["logic"]["target_date"] = get_user_input(
         "日期", config["logic"]["target_date"]
@@ -38,7 +37,7 @@ def get_basic_params(config: dict) -> None:
     config["logic"]["vehicle"] = get_user_input("车辆名", config["logic"]["vehicle"])
 
 
-def get_split_params(config: dict) -> None:
+def get_split_params(config: dict):
     config["logic"]["before"] = int(
         get_user_input("tag 前多少秒", config["logic"]["before"])
     )
@@ -50,7 +49,7 @@ def get_split_params(config: dict) -> None:
     )
 
 
-def get_path_params(config: dict) -> None:
+def get_path_params(config: dict):
     soc_inx = get_user_input("选择 [1] soc1 [2] soc2", "all")
     if soc_inx == "all":
         soc_inx = ""
@@ -58,14 +57,6 @@ def get_path_params(config: dict) -> None:
     config["host"]["dest_root"] = get_user_input(
         "导出路径 (/media下)", config["host"]["dest_root"]
     )
-    # config["logic"]["mode"] = int(
-    #     # get_user_input("模式 [1] 本地 [2] NAS [3] SSH ", config["logic"]["mode"])
-    #     get_user_input("模式 [1] 本地 [2] NAS ", config["logic"]["mode"])
-    # )
-    # if config["logic"]["mode"] == 1:
-    #     config["host"]["data_root"] = get_user_input(
-    #         "数据根路径(/media下)", config["host"]["data_root"]
-    #     )
     config["host"]["data_root"] = get_user_input(
         "数据根路径(/media下)", config["host"]["data_root"]
     )
@@ -153,9 +144,7 @@ def get_confirm_input(prompt: str, default: bool = False) -> bool:
 
 
 def get_json_input() -> str:
-    """
-    获取 version.json 输入：支持路径拖拽和内容粘贴
-    """
+    """获取 version.json 输入：支持路径拖拽和内容粘贴"""
     while True:
         ui.print_status(
             "直接拖拽 or 输入 version.json 内容或文件路径 (回车 + Ctrl D 结束):"
@@ -212,6 +201,7 @@ def get_dragged_input() -> list:
         # 保留引号内路径的同时，正确分割一长串路径
         paths = re.findall(r'(?:[^\s"\']|["\'][^"\']*["\'])+', normalized)
         paths = [p.strip("'\"") for p in paths]
+
     record_files = []
     for p in paths:
         path_obj = Path(p)
@@ -227,13 +217,12 @@ def get_dragged_input() -> list:
     paths = parser.sort_records(list(set(record_files)))
     if not paths:
         ui.print_status("无效路径", "ERROR")
+    print("没有返回？")
     return paths
 
 
 def select_channels_wizard(channels: List[dict], prompt: str) -> List[str]:
-    """
-    勾选式频道选择器
-    """
+    """勾选式频道选择器"""
     choices = [
         Choice(
             title=f"{ch['name']:<20} (Msg Count: {ch.get('count', 0)})",
@@ -256,38 +245,35 @@ def select_channels_wizard(channels: List[dict], prompt: str) -> List[str]:
 
 
 def get_channels(session: "AppSession", tasks: List[dict]) -> List[dict]:
-    """
-    从多个 record 中提取频道并集，支持双 SOC 路径检查
-    """
+    """从多个 record 中提取频道并集，支持双 SOC 路径检查"""
     channels_map = {}
-    processed_socs = set()
+    socs = set()
     for t in tasks:
         path_list = t.get("paths", [])
-        cur_task_socs = {Path(p).parent.name[-4:] for p in path_list}
-        if cur_task_socs.issubset(processed_socs):
-            continue
-        info = session.recorder.get_info(t["path"])
-        channels = info.get("channels", [])
-        for ch in channels:
-            name = ch["name"]
-            if name not in channels_map:
-                channels_map[name] = ch.copy()
-                channels_map[name].setdefault("count", 0)
-            else:
-                channels_map[name]["count"] += ch.get("count", 0)
-        processed_socs.update(cur_task_socs)
+        for p in path_list:
+            soc = Path(p).parent.name[-4:]
+            if soc in socs:
+                continue
+            info = session.recorder.get_info(p)
+            channels = info.get("channels", [])
+            for ch in channels:
+                name = ch["name"]
+                if name not in channels_map:
+                    channels_map[name] = ch.copy()
+                    channels_map[name].setdefault("count", 0)
+                else:
+                    channels_map[name]["count"] += ch.get("count", 0)
+            socs.update(soc)
     return sorted(channels_map.values(), key=lambda x: x["name"])
 
 
-def get_tasks_channels(session: AppSession, records: List[dict]) -> List[str]:
-    """
-    [多文件并集] 过滤要播放的频道
-    """
+def get_tasks_channels(session: AppSession, tasks: List[dict]) -> List[str]:
+    """过滤要播放的频道"""
     if not get_confirm_input("是否过滤 Channel?"):
         return []
     try:
-        unique_channels = get_channels(session, records)
+        unique_channels = get_channels(session, tasks)
     except Exception as e:
-        logging.error(f"频道获取失败: {e}")
+        ui.print_status("频道获取失败", "ERROR")
         raise e
     return select_channels_wizard(unique_channels, prompt="请【选中】要删除的频道:")

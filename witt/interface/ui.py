@@ -1,6 +1,6 @@
 def print_banner() -> None:
     print("" + "=" * 42)
-    print("     witt ( What Is That Tag ? ）v1.4")
+    print("     witt ( What Is That Tag ? ）v1.5")
     print("" + "=" * 42)
 
 

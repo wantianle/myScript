@@ -42,8 +42,8 @@ def menu():
             style=questionary.Style(
                 [
                     ("qmark", "fg:yellow bold"),  # 问号颜色
-                    ("question", "bold"),  # 问题颜色
-                    ("pointer", "fg:cyan bold"),  # 指针颜色
+                    ("question", "bold"),
+                    ("pointer", "fg:cyan bold"),
                     ("highlighted", "fg:cyan bold"),  # 选中项颜色
                     ("selected", "fg:green"),  # 确认项颜色
                 ]

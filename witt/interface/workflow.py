@@ -7,7 +7,7 @@ from core.session import AppSession
 from utils import parser
 
 
-def full_progress(session: AppSession) -> None:
+def full_progress(session: AppSession):
     try:
         search_flow(session)
         task_list = parser.parse_manifest(session.ctx.manifest_path)
@@ -25,13 +25,13 @@ def full_progress(session: AppSession) -> None:
             prompter.get_tasks_channels(session, valid_tasks) or ""
         )
         session.downloader.download_record(valid_tasks)
-        if prompter.get_confirm_input("\n处理完成，是否立即回播数据?", default=True):
+        if prompter.get_confirm_input("\n处理完成，是否立即回播数据?", True):
             auto_play(session)
     except Exception as e:
         raise e
 
 
-def search_flow(session: AppSession) -> None:
+def search_flow(session: AppSession):
     prompter.get_basic_params(session.ctx.config)
     prompter.get_path_params(session.ctx.config)
     session.init_logging()
@@ -39,9 +39,10 @@ def search_flow(session: AppSession) -> None:
     session.runner.run_find_record()
 
 
-# def compress_flow(session: AppSession) -> None:
+# def compress_flow(session: AppSession):
 #     """Channel 过滤压缩"""
 #     target_path = Path(input("需要压缩的 record 文件完整路径: ").strip())
+#     # 未修复获取频道展示逻辑
 #     blacklist = prompter.get_tasks_channels(session, target_path)
 #     session.ctx.config["logic"]["blacklist"] = blacklist
 #     ui.print_status(f"执行数据压缩，删除 channels {len(blacklist)} 个")
@@ -50,7 +51,7 @@ def search_flow(session: AppSession) -> None:
 #     record_slice(session, target_path)
 
 
-# def slice_flow(session: AppSession) -> None:
+# def slice_flow(session: AppSession):
 #     prompter.get_basic_params(session.ctx.config)
 #     prompter.get_split_params(session.ctx.config)
 #     session.init_logging()
@@ -78,16 +79,16 @@ def search_flow(session: AppSession) -> None:
 #     )
 
 
-def restore_env_flow(session: AppSession, auto: bool = False) -> None:
+def restore_env_flow(session: AppSession, auto: bool = False):
     if not auto:
         session.ctx.config["logic"]["version_json"] = prompter.get_json_input()
     session.runner.run_restore_env()
-    if prompter.get_confirm_input("是否需要打开 Dreamview & Multiviz", False):
+    if prompter.get_confirm_input("是否需要打开 Dreamview & Multiviz"):
         session.runner.run_tools()
 
 
-def play_flow(session: AppSession) -> None:
-    manual = prompter.get_confirm_input("手动拖拽文件播放？", default=False)
+def play_flow(session: AppSession):
+    manual = prompter.get_confirm_input("手动拖拽文件播放？")
     if manual:
         manual_play(session)
     else:
@@ -100,7 +101,7 @@ def play_flow(session: AppSession) -> None:
         auto_play(session)
 
 
-def auto_play(session: AppSession) -> None:
+def auto_play(session: AppSession):
     """
     专门负责回播界面的展示和用户输入处理
     """
@@ -111,6 +112,7 @@ def auto_play(session: AppSession) -> None:
             manual_play(session)
             return
         ui.show_playback_library(library, session.ctx.vehicle, session.ctx.target_date)
+
         tag_idx = input("\n请选择播放序号 (回车取消): ").strip()
         if not tag_idx:
             break
@@ -120,42 +122,42 @@ def auto_play(session: AppSession) -> None:
             print(f"  [{i}] {s}")
         if len(socs) > 1:
             print(f"  [{len(socs) + 1}] All")
-        choice = input("选择 SOC (默认 1): ").strip() or "1"
+
         target_records = []
+        choice = input("选择 SOC (默认 1): ").strip() or "1"
         if choice.isdigit() and int(choice) <= len(socs):
             target_records = selected_tag["socs"][socs[int(choice) - 1]]
         else:
             for s in socs:
                 target_records.extend(selected_tag["socs"][s])
-        # selected_channels = prompter.get_tasks_channels(session, target_records)
+
         range_in = input("播放范围 (5 | 10-20 | 回车全播): ").strip()
-        start_s, end_s = parser.parse_range_logic(range_in)
-        session.player.play(target_records, start_s, end_s)
+        start, end = parser.parse_range_logic(range_in)
+        session.player.play(target_records, start, end)
 
 
-def manual_play(session: AppSession) -> None:
+def manual_play(session: AppSession):
     """
     手动播放循环：保留文件列表，支持多次调整时间播放
     """
     try:
         ui.show_manual_play_header()
         paths = prompter.get_dragged_input()
-        if paths:
+        if not paths:
             return
         info_start = session.recorder.get_info(str(paths[0]))
         info_end = session.recorder.get_info(str(paths[-1]))
-        g_start = info_start["begin"]
-        g_end = info_end["end"]
-        g_duration = int((g_end - g_start).total_seconds())
+        tag_start = info_start["begin"]
+        tag_end = info_end["end"]
+        tag_duration = int((tag_end - tag_start).total_seconds())
         current_records = [
-            {"path": str(p), "begin": g_start, "duration": g_duration} for p in paths
+            {"path": str(p), "begin": tag_start, "duration": tag_duration} for p in paths
         ]
         while True:
-            ui.print_status(f"已加载 {len(paths)} 个文件，总长 {g_duration}s")
-            # selected_channels = prompter.get_tasks_channels(session, current_records)
+            ui.print_status(f"已加载 {len(paths)} 个文件，总长 {tag_duration}s")
             range_in = input("输入播放范围 (如 0-60, 回车全播): ").strip()
-            s, e = parser.parse_range_logic(range_in)
-            session.player.play(current_records, s, e)
+            start, end = parser.parse_range_logic(range_in)
+            session.player.play(current_records, start, end)
             if not prompter.get_confirm_input("继续调整该组文件播放?"):
                 break
     except Exception as e:

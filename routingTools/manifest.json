@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Dreamview 坐标采集器",
+  "version": "1.2",
+  "description": "快捷记录仿真坐标并导出 waypoint 格式文件",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:8888/*"],
+      "js": ["content.js"]
+    }
+  ]
+}

@@ -6,7 +6,7 @@ from interface import ui, workflow
 
 
 class RecordPlayer:
-    def __init__(self, session) -> None:
+    def __init__(self, session):
         self.session = session
         self.ctx = session.ctx
         self.executor = session.executor
@@ -80,8 +80,7 @@ class RecordPlayer:
         records: List[Dict[str, Any]],
         start_sec: int = 0,
         end_sec: int = 0,
-        selected_channels=None,
-    ) -> None:
+    ):
         if not records:
             ui.print_status("播放列表为空", "ERROR")
             return
@@ -103,14 +102,11 @@ class RecordPlayer:
         cmd_parts.append(
             f'-e "{(global_start + timedelta(seconds=final_end)).strftime(fmt)}"'
         )
-        # if selected_channels:
-        #     for c in selected_channels:
-        #         cmd_parts.append(f'-k "{c}"')
+
         full_cmd = " ".join(cmd_parts)
         ui.show_playback_info(
             tag=Path(records[0]["path"]).name[:20] + "...",
             duration=total_duration,
-            # channels=selected_channels,
         )
         print(f"执行指令: \033[1;32m{full_cmd}\033[0m")
 

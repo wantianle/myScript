@@ -63,7 +63,7 @@ if [ "$(docker ps -a -q -f name=${CONTAINER})" ]; then
     docker restart ${CONTAINER} > /dev/null
 else
     log_warnning "docker 容器不存在, 尝试创建环境..."
-    bash ${DEV_START_SCRIPT} > /dev/null 2>&1
+    bash ${DEV_START_SCRIPT}
 fi
 
 if ! docker exec ${CONTAINER} /bin/bash -c "source /mdrive/mdrive/setup.sh && cyber_recorder --help" >/dev/null 2>&1; then

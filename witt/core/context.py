@@ -35,7 +35,7 @@ class TaskContext:
     config: dict = field(init=False)
     temp_dir: Path = field(init=False)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
         self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
         self.config["logic"]["target_date"] = datetime.now().strftime("%Y%m%d")
         self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
@@ -62,7 +62,7 @@ class TaskContext:
     def manifest_path(self) -> Path:
         return self.temp_dir / "tasks.list"
 
-    def _cleanup_temp(self) -> None:
+    def _cleanup_temp(self):
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
@@ -74,10 +74,7 @@ class TaskContext:
             path = path / soc
         return path
 
-    def setup_logger(self) -> None:
-        """
-        写日志时才创建文件。
-        """
+    def setup_logger(self):
         if self._logger_ready:
             return
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -135,7 +132,6 @@ class TaskContext:
             "SOC": self.config["logic"]["soc"],
             "BEFORE": self.config["logic"]["before"],
             "AFTER": self.config["logic"]["after"],
-            # "MODE": self.config["logic"]["mode"],
             "VERSION_JSON": self.config["logic"]["version_json"],
             "CONTAINER": self.config["docker"]["container"],
             "REMOTE_USER": self.config["remote"]["user"],

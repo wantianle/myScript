@@ -6,4 +6,3 @@ if __name__ == "__main__":
         cli.menu()
     except KeyboardInterrupt:
         sys.exit(0)
-
