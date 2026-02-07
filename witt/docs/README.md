@@ -63,7 +63,7 @@ dest_root/
             ├── meta.json      # 核心元数据（时间轴、SOC信息）
             ├── README.md      # 自动生成的 tag 说明
             ├── soc1/          # SOC1 数据片段
-            │   ├── version.json
+            │   ├── version.json / version.txt
             │   └── *.record.0000x
             └── soc2/          # SOC2 数据片段
                 └── ...

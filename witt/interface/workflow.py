@@ -81,7 +81,7 @@ def search_flow(session: AppSession):
 
 def restore_env_flow(session: AppSession, auto: bool = False):
     if not auto:
-        session.ctx.config["logic"]["version_json"] = prompter.get_json_input()
+        session.ctx.config["logic"]["version"] = prompter.get_json_input()
     session.runner.run_restore_env()
     if prompter.get_confirm_input("是否需要打开 Dreamview & Multiviz"):
         session.runner.run_tools()

@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import sys
@@ -146,24 +145,15 @@ def get_confirm_input(prompt: str, default: bool = False) -> bool:
 def get_json_input() -> str:
     """获取 version.json 输入：支持路径拖拽和内容粘贴"""
     while True:
-        ui.print_status(
-            "直接拖拽 or 输入 version.json 内容或文件路径 (回车 + Ctrl D 结束):"
-        )
         try:
-            raw_data = sys.stdin.read().strip()
+            raw_data = input("拖拽或粘贴输入 version 文件路径:").strip()
             if not raw_data:
-                ui.print_status("输入内容为空，请重新输入！", "WARN")
+                ui.print_status("输入为空，请重新输入！", "WARN")
                 continue
             proc_path = raw_data.strip("'\"").replace("file://", "")
             proc_path = urllib.parse.unquote(proc_path)
             if os.path.exists(proc_path):
                 return proc_path
-            try:
-                json_obj = json.loads(raw_data)
-                return json.dumps(json_obj)
-            except json.JSONDecodeError:
-                ui.print_status("非法 JSON 格式！", "WARN")
-                continue
         except KeyboardInterrupt:
             ui.print_status("已取消...")
             return ""

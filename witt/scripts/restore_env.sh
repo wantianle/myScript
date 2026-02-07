@@ -6,28 +6,39 @@ source "$DIR/utils.sh"
 trap 'failure ${BASH_SOURCE[0]} ${LINENO} "$BASH_COMMAND"' ERR
 VMC_SH="$MDRIVE_ROOT/vmc.sh"
 find_version() {
-    json_content=""
-    local input_data="${VERSION_JSON}"
-    if [[ "$input_data" =~ ^\\s*{.*\}$ ]]; then
-        log_info "使用指定的 JSON 数据..."
-        json_content="$input_data"
-    else
-        [[ -d $input_data ]] && input_data="$input_data/version.json"
-        log_info "使用指定的 version.json 文件: $input_data"
-        json_content=$(cat "$input_data")
-    fi
-
-    if [ -n "$json_content" ]; then
-        mdrive_ver=$(echo "$json_content" | jq -r .mdrive)
-        conf_ver=$(echo "$json_content" | jq -r .mdrive_conf)
-        model_ver=$(echo "$json_content" | jq -r .mdrive_model)
-        map_ver=$(echo "$json_content" | jq -r .mdrive_map)
-        vehicle_model_code=$(echo "$conf_ver" | cut -d'.' -f1)
-    else
-        log_error "未能获取有效的 JSON 内容"
+    content=""
+    local input_data="${VERSION}"
+    if [ ! -f "$input_data" ]; then
+        log_error "文件不存在: $input_data"
         exit 1
     fi
-    echo "$json_content" | jq .
+    if [[ "$input_data" =~ .*\.txt$ ]]; then
+        log_info "使用指定的 version.txt 文件: $input_data"
+        mdrive_ver=$(awk '$1=="mdrive" {print $2}' "$input_data")
+        conf_ver=$(awk '$1=="mdrive_conf" {print $2}' "$input_data")
+        model_ver=$(awk '$1=="mdrive_model" {print $2}' "$input_data")
+        map_ver=$(awk '$1=="mdrive_map" {print $2}' "$input_data")
+    else
+        log_info "使用指定的 version.json 文件: $input_data"
+        content=$(cat "$input_data")
+        mdrive_ver=$(echo "$content" | jq -r .mdrive)
+        conf_ver=$(echo "$content" | jq -r .mdrive_conf)
+        model_ver=$(echo "$content" | jq -r .mdrive_model)
+        map_ver=$(echo "$content" | jq -r .mdrive_map)
+    fi
+    vehicle_model_code=$(echo "$conf_ver" | cut -d'.' -f1)
+    echo "------------------------------------------"
+    echo "解析得到的版本信息:"
+    echo "mdrive:             $mdrive_ver"
+    echo "mdrive_conf:        $conf_ver"
+    echo "mdrive_model:       $model_ver"
+    echo "mdrive_map:         $map_ver"
+    echo "vehicle_model_code: $vehicle_model_code"
+    echo "------------------------------------------"
+    if [ -z "$mdrive_ver" ] || [ -z "$conf_ver" ]; then
+        log_error "未能从文件中解析出 mdrive 或 mdrive_conf 版本"
+        exit 1
+    fi
 }
 
 show_info() {

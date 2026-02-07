@@ -88,7 +88,7 @@ class RecordPlayer:
             return datetime.fromisoformat(val) if isinstance(val, str) else val
         global_start = ensure_dt(records[0]["begin"])
         total_duration = max(r["duration"] for r in records)
-        self.ctx.config["logic"]["version_json"] = Path(records[0]["path"]).parent
+        self.ctx.config["logic"]["version"] = Path(records[0]["path"]).parent
         # 构造指令
         docker_paths = [self.executor.map_path(r["path"]) for r in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]

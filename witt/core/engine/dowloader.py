@@ -18,7 +18,6 @@ class RecordDownloader:
         self.remote_user = self.ctx.config["remote"]["user"]
         self.remote_ip = self.ctx.config["remote"]["ip"]
 
-
     @property
     def dest_root(self):
         return Path(self.ctx.config["host"]["dest_root"])
@@ -69,25 +68,27 @@ class RecordDownloader:
         meta_path.write_text(json.dumps(contract, indent=4, ensure_ascii=False))
 
     def post_process_task(self, task, save_dir, file_infos):
-        """生成元数据文件、 README 和 version.json"""
+        """生成元数据、README 和 version"""
         # 生成元数据文件
         self.save_contract(task, save_dir, file_infos)
-        # 同步 version.json
+        # 同步 version
         src_dir = Path(file_infos[0][0]).parent
-        v_src = src_dir / "version.json"
-        v_dest = save_dir / "version.json"
-        try:
-            if os.path.exists(v_src):
-                shutil.copy2(v_src, v_dest)
-        except Exception as e:
-            ui.print_status(f"拷贝 {task['name']}: version.json 文件失败", "ERROR")
-            raise e
+        for v_src in src_dir.glob("version*"):
+            v_dest = save_dir / v_src.name
+            try:
+                if os.path.exists(v_src):
+                    shutil.copy2(v_src, v_dest)
+            except Exception as e:
+                ui.print_status(f"拷贝 {task['name']}: version 文件失败", "ERROR")
+                raise e
         # 生成 README
         v_content = v_dest.read_text() if v_dest.exists() else "N/A"
         records_str = " ".join([Path(f[1]).name for f in file_infos])
         nas_path = save_dir.relative_to(Path(self.ctx.config["host"]["dest_root"]))
-        duration = int(self.ctx.config["logic"]["before"]) + int(self.ctx.config["logic"]["after"])
-        readme_content = f"""- **tag：** {task["time"]} {task["name"]} {duration}s
+        before = int(self.ctx.config["logic"]["before"])
+        after = int(self.ctx.config["logic"]["after"])
+        play_start = (before - 15) if (before - 15) > 0 else 0
+        readme_content = f"""- **tag：** {task["time"]} {task["name"]} duration: {before + after}s
 - **问题描述：**
 > 填写补充描述
 - **预期结果：**
@@ -98,11 +99,11 @@ class RecordDownloader:
 ```
 - **数据路径：**
 ```bash
-{self.ctx.config["host"]["nas_root"]}/{nas_path}
+cd {self.ctx.config["host"]["nas_root"]}/{nas_path}
 ```
 - **数据时刻：**
 ```bash
-{records_str}
+cyber_recorder play -s {play_start} -f {records_str}
 ```
 """
         readme_path = save_dir / "README.md"
@@ -132,7 +133,6 @@ class RecordDownloader:
             blacklist=blacklist,
         )
 
-
     def download_record(self, task_list):
         """
         负责高层调度和进度条
@@ -143,9 +143,7 @@ class RecordDownloader:
             for soc_name, paths in task["soc_paths"].items():
                 if not paths:
                     continue
-                save_dir = self.ctx.get_task_dir(
-                    task["id"], task["name"], soc_name
-                )
+                save_dir = self.ctx.get_task_dir(task["id"], task["name"], soc_name)
                 if save_dir not in prepared_dirs:
                     self._prepare_dir(save_dir)
                     prepared_dirs.add(save_dir)
@@ -182,7 +180,9 @@ class RecordDownloader:
                     (str(item["src"]), str(item["dest"]), item["soc_name"])
                 )
 
-                check_soc = ( i == len(download_queue) - 1 ) or ( download_queue[i + 1]["soc_name"] != item["soc_name"] )
+                check_soc = (i == len(download_queue) - 1) or (
+                    download_queue[i + 1]["soc_name"] != item["soc_name"]
+                )
                 if check_soc:
                     self.post_process_task(task, item["save_dir"], processed_files)
                     processed_files = []

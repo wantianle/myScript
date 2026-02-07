@@ -25,7 +25,7 @@ logic:
   vehicle: "XZB600013" # 临时测试
   target_date: "20260101"
   # mode: 1
-  version_json: ""
+  version: ""
   soc: "soc"
   before: 15
   after: 0
