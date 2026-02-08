@@ -40,7 +40,7 @@ INTERNAL_DEVICES=(
     "192.168.21.10:GNSS/INS"
     "172.168.16.100:MCU"
     "192.168.10.21:OBU"
-    "192.168.10.22:TailScreen"
+    "192.168.10.22:RearScreen"
 )
 # 包配置
 REMOTE_CONFIG="$HOME/.md_remotes"
@@ -69,6 +69,12 @@ fi
 
 #region ===================== UTILS ======================
 
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_ok()  { echo -e "${GREEN}[ok]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_err() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+
 # run_node() {
 #     local node=$1; shift
 #     local cmd="$*"
@@ -89,26 +95,25 @@ usage() {
         local prefix="md "
     fi
     echo -e "${BLUE}Usage:${NC}"
-    echo -e "  $prefix<c(ommand)> [a(rguments)]"
+    echo -e "  $prefix<c(ommand)> [a(rguments)] <>代表必选 []代表可选 ()代表可简写"
     echo -e "${BLUE}Commands:${NC}"
     echo -e "  -----------------------------------------------------------------------"
-    printf "  ${YELLOW}%-25s${NC}  ${YELLOW}%s${NC}\n" "init"  "第一次使用工具需要初始化免密并安装工具到系统"
-    printf "  %-25s  %s\n" "check"                             "检查车辆状态"
-    printf "  %-25s  %s\n" "stop/start/restart/status"         "同时管理 soc1&2 服务，stop disk 安全弹出硬盘"
-    printf "  %-25s  %s\n" "remote <add|del|list>"             "管理本地包对应的远程分支"
-    printf "  %-25s  %s\n" ""                                  "  remote add <name> <branch> [platform]"
-    printf "  %-25s  %s\n" ""                                  "  remote del <name>"
-    printf "  %-25s  %s\n" "upgrade"                           "自动升级最新包版本"
-    printf "  %-25s  %s\n" "install [version]"                 "手动升级指定版本"
-    printf "  %-25s  %s\n" "log <(soc)1|(soc)2>"               "查看5分钟内 soc1/soc2 服务日志"
-    printf "  %-25s  %s\n" "c(hannel) [(soc)1|(soc)2]"         "查看 soc1/soc2 channel 消息"
-    printf "  %-25s  %s\n" "m(odule)"                          "管理 soc1&2 模块，查看对应模块日志和开发日志"
-    printf "  %-25s  %s\n" "record [on]|<off>"                 "开启关闭 soc1&2 的Recorder和TestTool"
+    printf "  ${YELLOW}%-25s${NC}  ${YELLOW}%s${NC}\n" "init"      "第一次使用工具需要初始化免密并安装工具到系统"
+    printf "  %-25s  %s\n" "check [service|disk|time|network|dev]" "检查车辆状态"
+    printf "  %-25s  %s\n" "umount"                                "安全弹出硬盘"
+    printf "  %-25s  %s\n" "upgrade"                               "自检并升级最新包版本"
+    printf "  %-25s  %s\n" "install [version]"                     "手动升级多个组件版本，也可通过参数升级单个组件版本"
+    printf "  %-25s  %s\n" "stop/start/restart/status [soc1|soc2]" "同时管理 soc1&2 服务，也可以通过参数指定单端"
+    printf "  %-25s  %s\n" "log <(soc)1|(soc)2>"                   "查看 5 分钟内 soc1/soc2 服务日志"
+    printf "  %-25s  %s\n" "c(hannel) [(soc)1|(soc)2]"             "查看 soc1/soc2 channel 消息"
+    printf "  %-25s  %s\n" "m(odule)"                              "管理 soc1&2 模块，查看对应模块日志和开发日志"
+    printf "  %-25s  %s\n" "record [on]|<off>"                     "开启关闭 soc1&2 的Recorder和TestTool"
+    printf "  %-25s  %s\n" "remote <add|del|list>"                 "管理本地包对应的远程分支"
+    printf "  %-25s  %s\n" ""                                      "  remote add <name> [branch|'-'] [platform]"
+    printf "  %-25s  %s\n" ""                                      "  remote del <name>"
 
     # printf "  %-25s | %s\n" "push <src> [dst]"          "推送文件到宿主机 (默认 $DEST_ROOT)"
     # printf "  %-25s | %s\n" "pull <src> [dst]"          "从宿主机拉取文件到指定路径 (默认 $DEST_ROOT)"
-    # printf "  %-25s | %s\n" "cl / clear"                "清空终端屏幕"
-    # printf "  %-25s | %s\n" "q / exit"                  "退出交互模式"
     echo -e "  -----------------------------------------------------------------------"
     echo ""
 }
@@ -227,40 +232,44 @@ sys::pull(){
 
 # 查看服务运行标识
 svc::check() {
-    if systemctl is-active --quiet mdrive.service; then
-        echo -e "[soc1]服务状态: ${GREEN}Running${NC}"
-    else
-        echo -e "[soc1]服务状态: ${RED}Stopped or Failed${NC}"
-    fi
-    ssh $SSH_OPTS "$REMOTE_IP" "systemctl is-active --quiet mdrive.service"
-    local status=$?
-    if [[ $status -eq 0 ]]; then
-        echo -e "[soc2]服务状态: ${GREEN}Running${NC}"
-    elif [[ $status -ne 255 ]]; then
-        echo -e "[soc2]服务状态: ${RED}Stopped or Failed${NC}"
-    fi
-}
-
-
-# 详细查看服务状态
-svc::status(){
-    if [[ $1 == "soc1" || $1 == "" ]]; then
-        systemctl status mdrive.service
-    elif [[ $1 == "soc2" ]]; then
-        ssh $SSH_OPTS -t "$REMOTE_IP" "systemctl status mdrive.service"
-    fi
+    case "$1" in
+        "soc1")
+            if systemctl is-active --quiet mdrive.service; then
+                echo -e "[soc1]服务状态: ${GREEN}Running${NC}"
+            else
+                echo -e "[soc1]服务状态: ${RED}Stopped or Failed${NC}"
+            fi
+            ;;
+        "soc2")
+            ssh $SSH_OPTS "$REMOTE_IP" "systemctl is-active --quiet mdrive.service"
+            local status=$?
+            if [[ $status -eq 0 ]]; then
+                echo -e "[soc2]服务状态: ${GREEN}Running${NC}"
+            elif [[ $status -ne 255 ]]; then
+                echo -e "[soc2]服务状态: ${RED}Stopped or Failed${NC}"
+            fi
+            ;;
+    esac
 }
 
 
 # 管理服务
 svc::manage(){
     local action=$1
-    log_info "$action mdrive service..."
-    sudo systemctl $action mdrive.service
-    ssh $SSH_OPTS "$REMOTE_IP" "timeout 15 sudo systemctl $action mdrive.service"
-    svc::check
-}
+    case "$2" in
+        "soc1")
+            log_info "$action soc1 mdrive service..."
+            sudo systemctl $action mdrive.service
+            svc::check soc1
+            ;;
+        "soc2")
+            log_info "$action soc2 mdrive service..."
+            ssh $SSH_OPTS "$REMOTE_IP" "timeout 15 sudo systemctl $action mdrive.service"
+            svc::check soc2
+            ;;
+    esac
 
+}
 
 # 查看日志
 svc::log(){
@@ -271,34 +280,28 @@ svc::log(){
         "soc2"|"2")
             ssh $SSH_OPTS -t "$REMOTE_IP" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys"'
             ;;
-        *)
-            echo "usage: log <soc1|soc2>"
-            ;;
     esac
 }
 
 
 # recorder
 svc::recorder(){
-    if disk::check; then
-        if [[ $1 == "on" || $1 == "" ]]; then
-            local avail
-            avail=$(df -BG "$MOUNT_ROOT" | awk 'NR==2 {print $4}' | tr -d 'G')
-            if [[ "$avail" -lt 300 ]]; then
-                log_warn "数据盘剩余空间不足 300GB (当前: ${avail}GB)！确定要录制吗？(y/n)"
-                read -r confirm
-                [[ "$confirm" != "y" ]] && return
-            fi
-            supervisorctl start Recorder
-            supervisorctl start TestTool
-            ssh $SSH_OPTS "$REMOTE_IP" "supervisorctl start Recorder"
-        elif [[ $1 == "off" ]]; then
-            supervisorctl stop Recorder
-            supervisorctl stop TestTool
-            ssh $SSH_OPTS "$REMOTE_IP" "supervisorctl stop Recorder"
-        else
-            usage
-        fi
+    disk::check
+    local avail
+    avail=$(df -BG "$MOUNT_ROOT" | awk 'NR==2 {print $4}' | tr -d 'G')
+    if [[ "$avail" -lt 200 ]]; then
+        log_warn "数据盘剩余空间不足 200GB (当前: ${avail}GB)！"
+    fi
+    if [[ $1 == "on" || $1 == "" ]]; then
+        supervisorctl start Recorder
+        supervisorctl start TestTool
+        ssh $SSH_OPTS "$REMOTE_IP" "supervisorctl start Recorder"
+    elif [[ $1 == "off" ]]; then
+        supervisorctl stop Recorder
+        supervisorctl stop TestTool
+        ssh $SSH_OPTS "$REMOTE_IP" "supervisorctl stop Recorder"
+    else
+        usage
     fi
 }
 
@@ -310,9 +313,6 @@ svc::channel(){
             ;;
         "soc2"|"2")
             ssh $SSH_OPTS -t "$REMOTE_IP" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && cyber_monitor"
-            ;;
-        *)
-            echo "usage: md c(hannel) (soc)1|(soc)2"
             ;;
     esac
 }
@@ -351,6 +351,119 @@ svc::mod_handler() {
     esac
 }
 
+
+# 智能搜索日志文件路径
+log_get_path() {
+    local soc=$1
+    local mod=$2
+    local type=$3
+    local conf_dir="$CONF_DIR_SOC1"
+    [[ "$soc" == "soc2" ]] && conf_dir="$CONF_DIR_SOC2"
+
+    local conf_file=""
+    set -- "$conf_dir"/"$mod".conf
+    [[ -f "$1" ]] && conf_file="$1"
+    [[ -z "$conf_file" ]] && return
+    local raw_cmd=""
+    local sv_log=""
+    while read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^stdout_logfile= ]]; then
+            sv_log="${line#*=}"
+            sv_log="${sv_log%%;*}"
+            sv_log="${sv_log//[[:space:]]/}"
+        elif [[ "$line" =~ /mdrive/(bin|scripts) ]]; then
+            raw_cmd="$line"
+        fi
+    done < "$conf_file"
+    # 情况 A: SV 日志直接返回
+    if [[ "$type" == "sv" ]]; then
+        echo "$sv_log"; return
+    fi
+
+    # 情况 B: Glog 探测
+    local bin_name=""
+    local bin_path
+    bin_path=$(echo "$raw_cmd" | grep -oP '/mdrive/(bin|scripts)/[^ ]+')
+    bin_name="${bin_path##*/}"
+    bin_name="${mod#mdrive_}"
+    bin_name="${mod,,}"
+    # 构造搜索优先级数组
+    local base_name="${bin_name#mdrive_}"
+    local mod_lower="${mod,,}"
+    local mod_clean="${mod_lower#mdrive_}"
+
+    # 按优先级探测软链接 (.INFO)
+    # 优先级顺序：二进制名 > 去掉前缀名 > 小写模块名 > 小写模块去掉前缀名
+    local candidates=(
+        "${bin_name}.INFO"
+        "${base_name}.INFO"
+        "${mod_lower}.INFO"
+        "${mod_clean}.INFO"
+    )
+    for c in "${candidates[@]}"; do
+        if [[ -L "$LOG_ROOT/$c" || -f "$LOG_ROOT/$c" ]]; then
+            echo "$LOG_ROOT/$c"
+            return
+        fi
+    done
+    # 模糊搜索 (针对 TestTool 这种前面加了 tools_ 的情况)
+    # 在日志目录寻找包含 mod_clean 且以 .INFO 结尾的最新的文件
+    local fuzzy
+    fuzzy=$(find "$LOG_ROOT" -maxdepth 1 -name "*${mod_clean}*.INFO" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n 1)
+    if [[ -n "$fuzzy" ]]; then
+        echo "$fuzzy"
+        return
+    fi
+
+}
+
+
+# 获取并格式化双端状态
+# 输出格式：[颜色代码] [soc1] 模块名   RUNNING   pid 123, uptime 1:23 [重置代码]
+# - RUNNING 且 uptime > 10s (0:00:1x) -> 绿色
+# - RUNNING 且 uptime < 10s (0:00:0x) -> 黄色 (疑似重启中)
+# - 其他 (STOPPED, FATAL, BACKOFF, EXITED) -> 红色
+fetch_combined() {
+    local s1 s2
+    s1=$(sudo supervisorctl status | awk '{print "soc1 " $0}')
+    s2=$(ssh $SSH_OPTS "$REMOTE_IP" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc2 " $0}')
+    printf "%s\n" "$s1" "$s2" | while read -r line; do
+        local clean_line soc mod state tail
+        clean_line=$(echo "$line" | tr -s ' ')
+        read -r soc mod state tail <<< "$clean_line"
+        if [[ "$state" == "RUNNING" ]]; then
+            if echo "$tail" | grep -q "uptime 0:00:0"; then
+                printf "${YELLOW}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
+            else
+                printf "${GREEN}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
+            fi
+        else
+            printf "${RED}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
+        fi
+    done
+}
+export -f fetch_combined svc::mod_handler log_get_path
+export CONF_DIR_SOC1 CONF_DIR_SOC2 LOG_ROOT SSH_OPTS REMOTE_IP RED GREEN YELLOW BLUE NC
+
+svc::module() {
+    if ! command -v fzf &> /dev/null; then
+        log_warn "请先安装 fzf..."
+        return 1
+    fi
+    fetch_combined | fzf \
+        --ansi \
+        --height 95% \
+        --reverse \
+        --header "操作: Enter:模块日志 | Alt-Enter:研发日志 | Alt-S:启动 | Alt-X:停止 | Alt-R:重启 | Ctrl-R:刷新" \
+        --bind "enter:execute(svc::mod_handler {} sv)" \
+        --bind "alt-enter:execute(svc::mod_handler {} glog)" \
+        --bind "alt-s:execute(svc::mod_handler {} start)+reload(fetch_combined)" \
+        --bind "alt-x:execute(svc::mod_handler {} stop)+reload(fetch_combined)" \
+        --bind "alt-r:execute(svc::mod_handler {} restart)+reload(fetch_combined)" \
+        --bind "ctrl-r:reload(fetch_combined)" \
+        --bind "esc:abort"
+}
+
 #endregion
 
 #region ------------------- disk 硬盘层 ------------------
@@ -377,7 +490,7 @@ disk::check(){
     if ssh $SSH_OPTS "$REMOTE_IP" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
         echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
     else
-        echo -e "[soc2]硬盘: ${RED}Umounted/Error${NC}"
+        echo -e "[soc2]硬盘: ${RED}Umounted or Error${NC}"
     fi
 }
 
@@ -404,7 +517,7 @@ disk::usage() {
 
 
 # 安全卸载
-disk::eject(){
+disk::umount(){
     sync && sync
     while mountpoint -q /media/data; do
         sudo umount -l /media/data 2>/dev/null
@@ -441,13 +554,13 @@ disk::diagnose(){
         return 3
     fi
 
-    if ! timeout 2 stat -t "$MOUNT_ROOT" >/dev/null 2>&1; then
-        log_err "挂载目录无法访问 $MOUNT_ROOT"
+    if ! timeout 2 stat -t "$MOUNT_ROOT/data" >/dev/null 2>&1; then
+        log_err "挂载目录内容无法访问 $MOUNT_ROOT"
         return 4
     fi
 
-    if ! ssh $SSH_OPTS "$REMOTE_IP" "timeout 2 stat -t $MOUNT_ROOT >/dev/null 2>&1"; then
-        log_err "挂载目录无法访问 $MOUNT_ROOT"
+    if ! ssh $SSH_OPTS "$REMOTE_IP" "timeout 2 stat -t $MOUNT_ROOT/data >/dev/null 2>&1"; then
+        log_err "挂载目录内容无法访问 $MOUNT_ROOT"
         return 4
     fi
 
@@ -493,12 +606,14 @@ disk::fix(){
         return 1
         ;;
         "2"|"3")
-        disk::eject
+        disk::umount
+        sudo mount $dev $MOUNT_ROOT
+        ssh $SSH_OPTS "$REMOTE_IP" "sudo systemctl restart media-data.mount"
         log_ok "挂载清理完成！"
         ;;
         "4"|"5")
         disk::usage "data" $MOUNT_ROOT
-        disk::eject
+        disk::umount
         log_info "正在尝试修复硬盘: $dev ..."
         sudo e2fsck -yf "$dev"
         local res=$?
@@ -520,26 +635,6 @@ disk::fix(){
     return 0
 }
 
-
-# 注释掉 /etc/udev/rules.d/99-nv_usb-automount_default.rules
-disk::fix_nvmount(){
-    local target_file
-    target_file="/etc/udev/rules.d/99-nv_usb-automount_default.rules"
-    if [[ ! -f "$target_file" ]]; then
-        log_err "找不到文件 $target_file"
-        return 1
-    fi
-    log_info "创建备份文件 ${target_file}.bak..."
-    cp "$target_file" "${target_file}.bak"
-    # ^[^#] 匹配所有开头不是 # 的行
-    # s/^/#/ 在行首插入 #
-    # -i 直接修改文件
-    if sudo sed -i 's/^[^#]/#/g' "$target_file"; then
-        sudo udevadm control --reload-rules
-        sudo udevadm trigger
-        log_ok "nvidia 自动挂载服务已禁用。"
-    fi
-}
 #endregion
 
 #region -------------------  vmc 包管理 ------------------
@@ -686,8 +781,6 @@ vmc::upgrade() {
 
     # 安装
     [[ ${#final_queue[@]} -eq 0 ]] && { log_warn "未选择任何安装项"; return 0; }
-    log_info "可升级列表:"
-    for q in "${final_queue[@]}"; do echo "$q" | tr ':' ' => '; done
     read -r -p "确定执行升级? [Y/n]: " confirm
     [[ "$confirm" == "n" || "$confirm" == "N" ]] && return 0
     svc::manage stop
@@ -755,7 +848,7 @@ vmc::install(){
     vmc list
     log_info "是否查看模块状态？('y'或回车继续，其他键退出)"
     read -r ans
-    [[ "$ans" == "y" || "$ans" == "" ]] && fzf_module || return 0
+    [[ "$ans" == "y" || "$ans" == "" ]] && svc::module || return 0
 }
 
 
@@ -778,131 +871,6 @@ vmc::finstall() {
 
 #endregion
 
-#region -------------------- log 日志层 ------------------
-
-log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_ok()  { echo -e "${GREEN}[ok]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
-log_err() { echo -e "${RED}[ERROR]${NC} $1"; }
-
-# 智能搜索日志文件路径 (零子进程, 极速响应)
-log_get_path() {
-    local soc=$1
-    local mod=$2
-    local type=$3
-    local target_file=""
-    local conf_dir="$CONF_DIR_SOC1"
-    [[ "$soc" == "soc2" ]] && conf_dir="$CONF_DIR_SOC2"
-
-    local conf_file=""
-    set -- "$conf_dir"/"$mod".conf
-    [[ -f "$1" ]] && conf_file="$1"
-    [[ -z "$conf_file" ]] && return
-    local raw_cmd=""
-    local sv_log=""
-    while read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^stdout_logfile= ]]; then
-            sv_log="${line#*=}"
-            sv_log="${sv_log%%;*}"
-            sv_log="${sv_log//[[:space:]]/}"
-        elif [[ "$line" =~ /mdrive/bin ]]; then
-            raw_cmd="$line"
-        fi
-    done < "$conf_file"
-    # --- 情况 A: SV 日志直接返回 ---
-    if [[ "$type" == "sv" ]]; then
-        echo "$sv_log"; return
-    fi
-
-    # --- 情况 B: Glog 智能探测 ---
-    local bin_name=""
-    local bin_path
-    bin_path=$(echo "$raw_cmd" | grep -oP '/mdrive/(bin|scripts)/[^ ]+')
-    bin_name="${bin_path##*/}"
-    bin_name="${mod#mdrive_}"
-    bin_name="${mod,,}"
-    # 构造搜索优先级数组
-    local base_name="${bin_name#mdrive_}" # 去掉 mdrive_ 前缀
-    local mod_lower="${mod,,}"
-    local mod_clean="${mod_lower#mdrive_}"
-
-    # 按优先级探测软链接 (.INFO)
-    # 优先级顺序：二进制名 > 去掉前缀名 > 模块名 > 模块去掉前缀名
-    local candidates=(
-        "${bin_name}.INFO"
-        "${base_name}.INFO"
-        "${mod_lower}.INFO"
-        "${mod_clean}.INFO"
-    )
-    for c in "${candidates[@]}"; do
-        if [[ -L "$LOG_ROOT/$c" || -f "$LOG_ROOT/$c" ]]; then
-            echo "$LOG_ROOT/$c"
-            return
-        fi
-    done
-    # 模糊搜索 (针对 TestTool 这种前面加了 tools_ 的情况)
-    # 在日志目录寻找包含 mod_clean 且以 .INFO 结尾的最新的文件
-    local fuzzy
-    fuzzy=$(find "$LOG_ROOT" -maxdepth 1 -name "*${mod_clean}*.INFO" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n 1)
-    if [[ -n "$fuzzy" ]]; then
-        echo "$fuzzy"
-        return
-    fi
-
-}
-
-#endregion
-
-#region -------------------   ui 交互层 ------------------
-
-# 获取并格式化双端状态
-# 输出格式：[颜色代码] [soc1] 模块名   RUNNING   pid 123, uptime 1:23 [重置代码]
-# - RUNNING 且 uptime > 10s (0:00:1x) -> 绿色
-# - RUNNING 且 uptime < 10s (0:00:0x) -> 黄色 (疑似重启中)
-# - 其他 (STOPPED, FATAL, BACKOFF, EXITED) -> 红色
-fetch_combined() {
-    local s1 s2
-    s1=$(sudo supervisorctl status | awk '{print "soc1 " $0}')
-    s2=$(ssh $SSH_OPTS "$REMOTE_IP" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc2 " $0}')
-    printf "%s\n" "$s1" "$s2" | while read -r line; do
-        local clean_line soc mod state tail
-        clean_line=$(echo "$line" | tr -s ' ')
-        read -r soc mod state tail <<< "$clean_line"
-        if [[ "$state" == "RUNNING" ]]; then
-            if echo "$tail" | grep -q "uptime 0:00:0"; then
-                printf "${YELLOW}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
-            else
-                printf "${GREEN}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
-            fi
-        else
-            printf "${RED}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
-        fi
-    done
-}
-export -f fetch_combined svc::mod_handler log_get_path
-export CONF_DIR_SOC1 CONF_DIR_SOC2 LOG_ROOT SSH_OPTS REMOTE_IP RED GREEN YELLOW BLUE NC
-
-fzf_module() {
-    if ! command -v fzf &> /dev/null; then
-        log_warn "请先安装 fzf..."
-        return 1
-    fi
-    fetch_combined | fzf \
-        --ansi \
-        --height 95% \
-        --reverse \
-        --header "操作: Enter:模块日志 | Alt-Enter:研发日志 | Alt-S:启动 | Alt-X:停止 | Alt-R:重启 | Ctrl-R:刷新" \
-        --bind "enter:execute(svc::mod_handler {} sv)" \
-        --bind "alt-enter:execute(svc::mod_handler {} glog)" \
-        --bind "alt-s:execute(svc::mod_handler {} start)+reload(fetch_combined)" \
-        --bind "alt-x:execute(svc::mod_handler {} stop)+reload(fetch_combined)" \
-        --bind "alt-r:execute(svc::mod_handler {} restart)+reload(fetch_combined)" \
-        --bind "ctrl-r:reload(fetch_combined)" \
-        --bind "esc:abort"
-}
-
-#endregion
-
 #region ==================== WORKFLOW ====================
 
 flow::pre() {
@@ -918,7 +886,7 @@ flow::pre() {
     fi
 
     printf "%-41s" "[网络] $SERVER_IP :"
-    if ping -c 1 -W 2 $SERVER_IP &> /dev/null; then
+    if ping -c 1 -W 1 $SERVER_IP &> /dev/null; then
         echo -e "${GREEN}正常${NC}"
     else
         echo -e "${RED}断开${NC}"
@@ -927,7 +895,7 @@ flow::pre() {
 
     log_info "----------- Device Check ------------"
     local temp_dir
-    temp_dir=$(mktemp -d) # 创建临时目录存放结果
+    temp_dir=$(mktemp -d)
     for device in "${INTERNAL_DEVICES[@]}"; do
         # 异步启动任务
         {
@@ -1013,7 +981,8 @@ flow::pre() {
         [[ "$ans" == "y" || "$ans" == "" ]] && disk::fix $res || check_pass=false
     fi
     echo "--------------------------------------------"
-    svc::check
+    svc::check soc1
+    svc::check soc2
     if $check_pass; then
         log_ok "环境自检通过..."
         return 0
@@ -1039,31 +1008,15 @@ dispatch() {
         "check")
             flow::pre
             ;;
-        "status")
-            svc::check
-            ;;
-        "details")
-            svc::status "$@"
-            ;;
-        "start")
-            svc::manage start
-            ;;
-        "stop")
-            if [[ $1 == "disk" ]]; then
-                svc::manage stop
-                disk::eject
-            else
-                svc::manage stop
-            fi
-            ;;
-        "restart")
-            svc::manage restart
+        "start"|"stop"|"restart"|"status")
+            [[ -z "$1" || "$1" == "soc1" ]] && svc::manage "$cmd" "soc1"
+            [[ -z "$1" || "$1" == "soc2" ]] && svc::manage "$cmd" "soc2"
             ;;
         "log")
             svc::log "$@"
             ;;
         "module"|"m")
-            fzf_module
+            svc::module
             ;;
         "channel"|"c")
             svc::channel "$@"
@@ -1087,6 +1040,11 @@ dispatch() {
             fi
             vmc list
             ;;
+        "umount")
+            svc::manage stop soc1
+            svc::manage stop soc2
+            disk::umount
+            ;;
         "push")
             sys::push "$@"
             ;;
@@ -1105,8 +1063,9 @@ main(){
     INSIDE_MD="false"
     if [[ -z $1 ]]; then
         usage
+    else
+        dispatch "$@"
     fi
-    dispatch "$@"
 }
 
 main "$@"

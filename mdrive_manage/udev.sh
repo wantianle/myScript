@@ -36,7 +36,8 @@ export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DEV_NAME=$1
 DEVICE="/dev/$DEV_NAME"
 MOUNT_POINT="/media/data"
-SSH_QUICK="-o ConnectTimeout=2 -o ServerAliveInterval=2 -o ServerAliveCountMax=1 -o BatchMode=yes"
+SSH_OPTS="-o ConnectTimeout=2 -o ServerAliveInterval=2 -o ServerAliveCountMax=1 -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+IDENTITY="-i /home/nvidia/.ssh/id_ed25519"
 REMOTE_HOST="nvidia@192.168.10.3"
 
 exec >> /var/log/disk_auto_repair.log 2>&1
@@ -55,15 +56,16 @@ if [[ -d "$MOUNT_POINT" ]]; then
     findmnt -n -o SOURCE "$MOUNT_ROOT"
     echo -e "正在清理挂载点..."
     while mountpoint -q $MOUNT_POINT; do
-        sudo umount -l $MOUNT_POINT
+        umount -l $MOUNT_POINT
     done
 else
     mkdir -p "$MOUNT_POINT"
 fi
 
 if /bin/mount "$DEVICE" "$MOUNT_POINT"; then
-    ssh $SSH_QUICK -n "$REMOTE_HOST" "sudo umount -fl /media/data; sudo systemctl restart media-data.mount" &
-    echo "挂载成功: $MOUNT_POINT"
+    if ssh $SSH_OPTS $IDENTITY "$REMOTE_HOST" "sudo umount -fl /media/data; sudo systemctl restart media-data.mount"; then
+        echo "soc1&soc2挂载成功: $MOUNT_POINT"
+    fi
 else
     echo "挂载失败"
 fi
