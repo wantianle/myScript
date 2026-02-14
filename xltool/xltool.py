@@ -26,7 +26,7 @@ def parse_seconds(t_val):
 
 
 def format_duration(seconds):
-    return f"{int(seconds // 3600)}小时{int((seconds % 3600) // 60)}分钟"
+    return f"{int(seconds // 3600)}:{int((seconds % 3600) // 60)}:{int(seconds % 60):02d}"
 
 
 def get_cleansed_df(path, is_ext):
@@ -134,6 +134,8 @@ def aggregate_with_totals(df, is_ext):
                 }
                 output_list.append(row)
                 for k in ["cnt", "val", "inv", "ev", "gd", "s1", "sa", "sr"]:
+                    if name == "冯颖颖" and k == "sr":
+                        print(f"调试：{day} {t} {name} {k}={row[k]}秒")
                     sub_m[k] += row[k]
 
             sub_m["fte"] = type_fte

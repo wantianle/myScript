@@ -371,7 +371,7 @@ log_get_path() {
             sv_log="${line#*=}"
             sv_log="${sv_log%%;*}"
             sv_log="${sv_log//[[:space:]]/}"
-        elif [[ "$line" =~ /mdrive/(bin|scripts) ]]; then
+        elif [[ "$line" =~ /mdrive/bin ]]; then
             raw_cmd="$line"
         fi
     done < "$conf_file"
@@ -381,13 +381,12 @@ log_get_path() {
     fi
 
     # 情况 B: Glog 探测
-    local bin_name=""
+    local bin_name
     local bin_path
-    bin_path=$(echo "$raw_cmd" | grep -oP '/mdrive/(bin|scripts)/[^ ]+')
+    bin_path=$(echo "$raw_cmd" | grep -oP '/mdrive/bin/[^ ]+')
     bin_name="${bin_path##*/}"
-    bin_name="${mod#mdrive_}"
+    # bin_name="${mod#mdrive_}"
     bin_name="${mod,,}"
-    # 构造搜索优先级数组
     local base_name="${bin_name#mdrive_}"
     local mod_lower="${mod,,}"
     local mod_clean="${mod_lower#mdrive_}"
@@ -400,29 +399,26 @@ log_get_path() {
         "${mod_lower}.INFO"
         "${mod_clean}.INFO"
     )
+    echo "Searching log for candidates: ${candidates[*]}"
     for c in "${candidates[@]}"; do
-        if [[ -L "$LOG_ROOT/$c" || -f "$LOG_ROOT/$c" ]]; then
+        if [[ -L "$LOG_ROOT/$c" ]]; then
             echo "$LOG_ROOT/$c"
             return
         fi
     done
     # 模糊搜索 (针对 TestTool 这种前面加了 tools_ 的情况)
     # 在日志目录寻找包含 mod_clean 且以 .INFO 结尾的最新的文件
-    local fuzzy
-    fuzzy=$(find "$LOG_ROOT" -maxdepth 1 -name "*${mod_clean}*.INFO" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n 1)
-    if [[ -n "$fuzzy" ]]; then
-        echo "$fuzzy"
-        return
-    fi
+    # local fuzzy
+    # fuzzy=$(find "$LOG_ROOT" -maxdepth 1 -name "*${mod_clean}*.INFO" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n 1)
+    # if [[ -n "$fuzzy" ]]; then
+    #     echo "$fuzzy"
+    #     return
+    # fi
 
 }
 
 
 # 获取并格式化双端状态
-# 输出格式：[颜色代码] [soc1] 模块名   RUNNING   pid 123, uptime 1:23 [重置代码]
-# - RUNNING 且 uptime > 10s (0:00:1x) -> 绿色
-# - RUNNING 且 uptime < 10s (0:00:0x) -> 黄色 (疑似重启中)
-# - 其他 (STOPPED, FATAL, BACKOFF, EXITED) -> 红色
 fetch_combined() {
     local s1 s2
     s1=$(sudo supervisorctl status | awk '{print "soc1 " $0}')
@@ -454,7 +450,7 @@ svc::module() {
         --ansi \
         --height 95% \
         --reverse \
-        --header "操作: Enter:模块日志 | Alt-Enter:研发日志 | Alt-S:启动 | Alt-X:停止 | Alt-R:重启 | Ctrl-R:刷新" \
+        --header "操作: Enter:模块日志 | Alt-Enter:开发日志 | Alt-S:启动 | Alt-X:停止 | Alt-R:重启 | Ctrl-R:刷新" \
         --bind "enter:execute(svc::mod_handler {} sv)" \
         --bind "alt-enter:execute(svc::mod_handler {} glog)" \
         --bind "alt-s:execute(svc::mod_handler {} start)+reload(fetch_combined)" \
@@ -598,7 +594,8 @@ disk::fix(){
     local dev
     dev=$(disk::_get_dev)
     local err_code=$1
-    svc::manage stop
+    svc::manage stop soc1
+    svc::manage stop soc2
     log_info "开始执行修复程序 (Error Code: $err_code)..."
     case "$err_code" in
         "1")
@@ -783,7 +780,8 @@ vmc::upgrade() {
     [[ ${#final_queue[@]} -eq 0 ]] && { log_warn "未选择任何安装项"; return 0; }
     read -r -p "确定执行升级? [Y/n]: " confirm
     [[ "$confirm" == "n" || "$confirm" == "N" ]] && return 0
-    svc::manage stop
+    svc::manage stop soc1
+    svc::manage stop soc2
     for q in "${final_queue[@]}"; do
         local n v
         n=$(echo "$q" | cut -d':' -f1)
@@ -792,7 +790,8 @@ vmc::upgrade() {
         vmc install -n "$n" -v "$v" && log_ok "[$n] 成功"
     done
     vmc list
-    svc::manage start
+    svc::manage start soc1
+    svc::manage start soc2
 }
 
 
@@ -844,7 +843,8 @@ vmc::install(){
             return 1
         fi
     done
-    svc::manage start
+    svc::manage start soc1
+    svc::manage start soc2
     vmc list
     log_info "是否查看模块状态？('y'或回车继续，其他键退出)"
     read -r ans
@@ -1031,7 +1031,8 @@ dispatch() {
             vmc::upgrade
             ;;
         "install")
-            svc::manage stop
+            svc::manage stop soc1
+            svc::manage stop soc2
             sys::clean
             if [[ -n "$1" ]]; then
                 vmc::finstall "$1"
