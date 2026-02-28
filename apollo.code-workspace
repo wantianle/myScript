@@ -1,8 +1,8 @@
 {
-	"folders": [
-		{
-			"path": "apollo"
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "path": "../apollo"
+    }
+  ],
+  "settings": {},
 }

@@ -29,7 +29,7 @@ fi
 
 if ! command -v vmc >/dev/null 2>&1; then
     log_warnning "未检测到 vmc 工具，尝试安装..."
-    bash "${BASH_SOURCE[0]%/*}/vmc_deploy.sh"
+    bash "$DIR/vmc_deploy.sh"
     source ~/.bashrc
 fi
 
