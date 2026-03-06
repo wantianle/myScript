@@ -1,8 +1,8 @@
 {
-	"folders": [
-		{
-			"path": "myScript/witt"
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "path": "witt"
+    }
+  ],
+  "settings": {},
 }

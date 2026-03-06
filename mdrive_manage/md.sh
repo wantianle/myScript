@@ -70,7 +70,7 @@ fi
 #region ===================== UTILS ======================
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_ok()  { echo -e "${GREEN}[ok]${NC} $1"; }
+log_ok()  { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_err() { echo -e "${RED}[ERROR]${NC} $1"; }
 
@@ -95,26 +95,25 @@ usage() {
         local prefix="md "
     fi
     echo -e "${BLUE}Usage:${NC}"
-    echo -e "  $prefix<c(ommand)> [a(rguments)] <>代表必选 []代表可选 ()代表可简写"
+    echo -e "  $prefix<c(command)> [a(arguments)] <>代表必选 []代表可选 ()代表可简写"
     echo -e "${BLUE}Commands:${NC}"
-    echo -e "  -----------------------------------------------------------------------"
-    printf "  ${YELLOW}%-25s${NC}  ${YELLOW}%s${NC}\n" "init"      "第一次使用工具需要初始化免密并安装工具到系统"
-    printf "  %-25s  %s\n" "check [service|disk|time|network|dev]" "检查车辆状态"
-    printf "  %-25s  %s\n" "umount"                                "安全弹出硬盘"
-    printf "  %-25s  %s\n" "upgrade"                               "自检并升级最新包版本"
-    printf "  %-25s  %s\n" "install [version]"                     "手动升级多个组件版本，也可通过参数升级单个组件版本"
-    printf "  %-25s  %s\n" "stop/start/restart/status [soc1|soc2]" "同时管理 soc1&2 服务，也可以通过参数指定单端"
-    printf "  %-25s  %s\n" "log <(soc)1|(soc)2>"                   "查看 5 分钟内 soc1/soc2 服务日志"
-    printf "  %-25s  %s\n" "c(hannel) [(soc)1|(soc)2]"             "查看 soc1/soc2 channel 消息"
-    printf "  %-25s  %s\n" "m(odule)"                              "管理 soc1&2 模块，查看对应模块日志和开发日志"
-    printf "  %-25s  %s\n" "record [on]|<off>"                     "开启关闭 soc1&2 的Recorder和TestTool"
-    printf "  %-25s  %s\n" "remote <add|del|list>"                 "管理本地包对应的远程分支"
-    printf "  %-25s  %s\n" ""                                      "  remote add <name> [branch|'-'] [platform]"
-    printf "  %-25s  %s\n" ""                                      "  remote del <name>"
+    printf "  ${YELLOW}%-45s${NC}  ${YELLOW}%s${NC}\n" "init"            "第一次使用工具需要初始化免密并安装工具到系统"
+    printf "  %-45s  %s\n" "check"                                       "检查车辆状态"
+    printf "  %-45s  %s\n" "umount"                                      "安全弹出硬盘"
+    printf "  %-45s  %s\n" "upgrade"                                     "自检并升级最新包版本"
+    printf "  %-45s  %s\n" "install [version]"                           "手动升级多个组件版本，也可通过参数升级单个组件版本"
+    printf "  %-45s  %s\n" "rb(rollback) [version_keyword]"              "根据 remote 文件或指定关键字回滚升级任意版本的包"
+    printf "  %-45s  %s\n" "stop/start/restart/status [1(soc1)|2(soc2)]" "同时管理 soc1&2 服务，也可以通过参数指定单端"
+    printf "  %-45s  %s\n" "log <1(soc1)|2(soc)>"                        "查看 5 分钟内 soc1/soc2 服务日志"
+    printf "  %-45s  %s\n" "c(channel) [1(soc1)|2(soc2)]"                "查看 soc1/soc2 channel 消息"
+    printf "  %-45s  %s\n" "m(module)"                                   "管理 soc1&2 模块，查看对应模块日志和开发日志"
+    printf "  %-45s  %s\n" "record [on]|<off>"                           "开启关闭 soc1&2 的Recorder和TestTool"
+    printf "  %-45s  %s\n" "remote <add|del|list>"                       "管理本地包对应的远程分支"
+    printf "  %-45s  %s\n" ""                                            "  remote add <name> [branch|'-'] [platform]"
+    printf "  %-45s  %s\n" ""                                            "  remote del <name>"
 
-    # printf "  %-25s | %s\n" "push <src> [dst]"          "推送文件到宿主机 (默认 $DEST_ROOT)"
-    # printf "  %-25s | %s\n" "pull <src> [dst]"          "从宿主机拉取文件到指定路径 (默认 $DEST_ROOT)"
-    echo -e "  -----------------------------------------------------------------------"
+    # printf "  %-45s | %s\n" "push <src> [dst]"          "推送文件到宿主机 (默认 $DEST_ROOT)"
+    # printf "  %-45s | %s\n" "pull <src> [dst]"          "从宿主机拉取文件到指定路径 (默认 $DEST_ROOT)"
     echo ""
 }
 
@@ -179,9 +178,9 @@ sys::clean(){
     local avail
     avail=$(df -BG "$CACHE" | awk 'NR==2 {print $4}' | tr -d 'G')
     if [[ "$avail" -lt 5 ]]; then
-        log_warn "系统剩余空间不足 5GB (当前: ${avail}GB)，过低会影响 OTA 版本升级，是否需要清理？(y/n)"
+        log_warn "系统剩余空间不足 5GB (当前: ${avail}GB)，过低会影响 OTA 版本升级，是否需要清理？(Y/n)"
         read -r confirm
-        [[ "$confirm" != "y" ]] && return
+        [[ "$confirm" == "n" || "$confirm" == "N" ]] && return
         log_info "正在清理缓存：$CACHE "
         sudo rm -rf "$CACHE"/*
     fi
@@ -332,12 +331,26 @@ svc::mod_handler() {
         "glog"|"sv")
             local path
             path=$(log_get_path "$soc" "$mod" "$action")
-            if [[ -f "$path" ]]; then
-                sudo less -R -S --follow-name +F "$path"
-            else
-                echo -e "找不到日志文件 $path"
-                read -r -n 1 -p "按任意键继续..."
+            if [[ "$action" == "glog" ]]; then
+                local exists=false
+                if [[ -L "$path" ]]; then
+                    exists=true
+                fi
+                if [[ "$exists" == "false" ]]; then
+                    echo -e "${YELLOW}未匹配到精准日志，请手动选择:${NC}"
+                    local list_cmd="find $LOG_ROOT -maxdepth 1 -type l -name '*.INFO*' -printf '%f\n'"
+                    local picked
+                    picked=$(eval "$list_cmd" | fzf \
+                        --height=100% \
+                        --layout=reverse \
+                        --border \
+                        --header "--- 日志列表 ---" \
+                        --info=inline)
+                    [[ -z "$picked" ]] && return
+                    path="$LOG_ROOT/$picked"
+                fi
             fi
+            sudo less -R -S --follow-name +F "$path"
             ;;
         "start"|"stop"|"restart")
             echo -e "正在对 [$soc] $mod 执行 $action..."
@@ -360,8 +373,8 @@ log_get_path() {
     local conf_dir="$CONF_DIR_SOC1"
     [[ "$soc" == "soc2" ]] && conf_dir="$CONF_DIR_SOC2"
 
-    local conf_file=""
-    set -- "$conf_dir"/"$mod".conf
+    local conf_file="$conf_dir"/"$mod".conf
+    set -- "$conf_file"
     [[ -f "$1" ]] && conf_file="$1"
     [[ -z "$conf_file" ]] && return
     local raw_cmd=""
@@ -375,46 +388,36 @@ log_get_path() {
             raw_cmd="$line"
         fi
     done < "$conf_file"
-    # 情况 A: SV 日志直接返回
+
     if [[ "$type" == "sv" ]]; then
-        echo "$sv_log"; return
+        # 情况 A: SV 日志直接返回
+        echo "$sv_log"
+    else
+        # 情况 B: Glog 探测
+        local bin_name
+        local bin_path
+        bin_path=$(echo "$raw_cmd" | grep -oP '/mdrive/bin/[^ ]+')
+        bin_name="${bin_path##*/}"
+        bin_name="${mod,,}"
+        local base_name="${bin_name#mdrive_}"
+        local mod_lower="${mod,,}"
+        local mod_clean="${mod_lower#mdrive_}"
+
+        # 按优先级探测软链接 (.INFO)
+        # 优先级顺序：二进制名 > 去掉前缀名 > 小写模块名 > 小写模块去掉前缀名
+        local candidates=(
+            "${bin_name}.INFO"
+            "${base_name}.INFO"
+            "${mod_lower}.INFO"
+            "${mod_clean}.INFO"
+        )
+        for c in "${candidates[@]}"; do
+            if [[ -L "$LOG_ROOT/$c" ]]; then
+                echo "$LOG_ROOT/$c"
+                return
+            fi
+        done
     fi
-
-    # 情况 B: Glog 探测
-    local bin_name
-    local bin_path
-    bin_path=$(echo "$raw_cmd" | grep -oP '/mdrive/bin/[^ ]+')
-    bin_name="${bin_path##*/}"
-    # bin_name="${mod#mdrive_}"
-    bin_name="${mod,,}"
-    local base_name="${bin_name#mdrive_}"
-    local mod_lower="${mod,,}"
-    local mod_clean="${mod_lower#mdrive_}"
-
-    # 按优先级探测软链接 (.INFO)
-    # 优先级顺序：二进制名 > 去掉前缀名 > 小写模块名 > 小写模块去掉前缀名
-    local candidates=(
-        "${bin_name}.INFO"
-        "${base_name}.INFO"
-        "${mod_lower}.INFO"
-        "${mod_clean}.INFO"
-    )
-    echo "Searching log for candidates: ${candidates[*]}"
-    for c in "${candidates[@]}"; do
-        if [[ -L "$LOG_ROOT/$c" ]]; then
-            echo "$LOG_ROOT/$c"
-            return
-        fi
-    done
-    # 模糊搜索 (针对 TestTool 这种前面加了 tools_ 的情况)
-    # 在日志目录寻找包含 mod_clean 且以 .INFO 结尾的最新的文件
-    # local fuzzy
-    # fuzzy=$(find "$LOG_ROOT" -maxdepth 1 -name "*${mod_clean}*.INFO" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n 1)
-    # if [[ -n "$fuzzy" ]]; then
-    #     echo "$fuzzy"
-    #     return
-    # fi
-
 }
 
 
@@ -429,12 +432,12 @@ fetch_combined() {
         read -r soc mod state tail <<< "$clean_line"
         if [[ "$state" == "RUNNING" ]]; then
             if echo "$tail" | grep -q "uptime 0:00:0"; then
-                printf "${YELLOW}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
+                printf "${YELLOW}[%-4s] %-45s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
             else
-                printf "${GREEN}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
+                printf "${GREEN}[%-4s] %-45s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
             fi
         else
-            printf "${RED}[%-4s] %-25s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
+            printf "${RED}[%-4s] %-45s %-8s %s${NC}\n" "$soc" "$mod" "$state" "$tail"
         fi
     done
 }
@@ -524,7 +527,7 @@ disk::umount(){
 
 
 disk::diagnose(){
-    # return 1 无硬盘 2 未挂载 3 挂载残留 4 挂载点访问超时 5 I/O错误（盘满或损坏）6 软链接路径指向错误
+    # return 1 无硬盘 2 未挂载 3 挂载残留 4 挂载点访问超时 5 I/O错误（盘满或损坏）6 软链接路径指向错误 7 内盘空间不足
     local dev mnt
     dev=$(disk::_get_dev)
     mnt=$(disk::_get_mnt_dev)
@@ -590,7 +593,7 @@ disk::diagnose(){
 
 # 修复硬盘损坏
 disk::fix(){
-    # return 1 无硬盘 2 未挂载 3 挂载残留 4 挂载点访问超时 5 I/O错误（盘满或损坏）
+    # return 1 无硬盘 2 未挂载 3 挂载残留 4 挂载点访问超时 5 I/O错误（盘满或损坏）6 软链接路径指向错误 7 内盘空间不足
     local dev
     dev=$(disk::_get_dev)
     local err_code=$1
@@ -697,7 +700,7 @@ vmc::_get_current_ver() {
 
 vmc::check_updates() {
     log_info "正在扫描配置并获取版本状态..."
-    upgradable=() # 候选列表
+    upgradable=()
 
     if [[ ! -f "$REMOTE_CONFIG" ]]; then
         log_err "配置文件不存在，请先添加分支"
@@ -787,7 +790,7 @@ vmc::upgrade() {
         n=$(echo "$q" | cut -d':' -f1)
         v=$(echo "$q" | cut -d':' -f2)
         log_info "正在安装 [$n] $v ..."
-        vmc install -n "$n" -v "$v" && log_ok "[$n] 成功"
+        vmc install -n "$n" -v "$v" && log_ok "[$n] 安装成功"
     done
     vmc list
     svc::manage start soc1
@@ -860,7 +863,7 @@ vmc::finstall() {
     if [[ -n "$pkg_name" ]]; then
         log_info "下载安装 [${pkg_name}] ${version}..."
         if vmc install -n "$pkg_name" -v "$version"; then
-            log_ok "升级成功，手动重启服务或继续升级..."
+            log_ok "安装成功，手动重启服务或继续升级..."
         fi
     else
         log_err "未找到适用于 Orin 平台的包，请检查版本号是否正确！"
@@ -868,6 +871,72 @@ vmc::finstall() {
     fi
 }
 
+
+# 回滚版本
+vmc::rollback() {
+    local pkg_name=""
+    local search_v=""
+    if [[ -z $1 ]]; then
+        if [[ ! -f "$REMOTE_CONFIG" ]]; then
+            log_err "未找到远程配置文件 $REMOTE_CONFIG，请先使用 md remote add 添加配置"
+            return 1
+        fi
+        local choice
+        choice=$(cat "$REMOTE_CONFIG" | fzf --header "选择要回滚的分支源:" --height=20% --layout=reverse)
+        [[ -z "$choice" ]] && return
+        read -r pkg_name branch_name _ <<< "$choice"
+        # 处理分支名为 "-" 的情况
+        search_v="$branch_name"
+        [[ "$branch_name" == "-" ]] && search_v=""
+    else
+        search_v=$1
+    fi
+
+    log_info "正在搜索历史版本..."
+    local versions_list
+    versions_list=$(vmc fsearch ${pkg_name:+-n "$pkg_name"} ${search_v:+-v "$search_v"} -i 100 --verbose | awk '
+        /^\[Index:/ {
+            if (version) print time " | " version " | " platform;
+            version=""; time=""; platform="";
+        }
+        /Platform:/ {
+            $1=""; sub(/^[ \t]+/, "", $0); platform=$0
+        }
+        /Version:/ {
+            $1=""; sub(/^[ \t]+/, "", $0); version=$0
+        }
+        /ReleaseTime:/ {
+            $1=""; sub(/^[ \t]+/, "", $0);
+            t=$0; sub(/T/, " ", t); time=substr(t, 1, 19);
+        }
+        END { if (version) print time " | " version " | " platform; }
+    ' | sort -r)
+
+    if [[ -z "$versions_list" ]]; then
+        log_err "[$search_v] 未搜索到任何远程版本"
+        return 1
+    fi
+    local selected_line
+    selected_line=$(echo "$versions_list" | grep -E "orin_dsv|any" | fzf \
+        --ansi \
+        --header "发布时间            |  远程版本号 (搜索关键字: $search_v)" \
+        --layout=reverse \
+        --height=100%)
+
+    [[ -z "$selected_line" ]] && { log_warn "取消回滚"; return; }
+    local selected_ver
+    selected_ver=$(echo "$selected_line" | awk -F ' \| ' '{print $2}' | tr -d '[:space:]')
+
+    log_warn "确定回滚 [$pkg_name] 到版本: $selected_ver ?"
+    read -r -p "确认执行? [Y/n]: " confirm
+    [[ "$confirm" == "n" || "$confirm" == "N" ]] && return
+
+    # 停止服务
+    svc::manage stop soc1
+    svc::manage stop soc2
+    sys::clean
+    vmc::finstall "$selected_ver"
+}
 
 #endregion
 
@@ -1008,9 +1077,25 @@ dispatch() {
         "check")
             flow::pre
             ;;
-        "start"|"stop"|"restart"|"status")
-            [[ -z "$1" || "$1" == "soc1" ]] && svc::manage "$cmd" "soc1"
-            [[ -z "$1" || "$1" == "soc2" ]] && svc::manage "$cmd" "soc2"
+        "start"|"stop"|"restart")
+            if [[ "$1" == "soc1" || "$1" == "1" ]]; then
+                svc::manage "$cmd" soc1
+            elif [[ "$1" == "soc2" || "$1" == "2" ]]; then
+                svc::manage "$cmd" soc2
+            else
+                svc::manage "$cmd" soc1
+                svc::manage "$cmd" soc2
+            fi
+            ;;
+        "status")
+            if [[ "$1" == "soc1" || "$1" == "1" ]]; then
+                svc::check soc1
+            elif [[ "$1" == "soc2" || "$1" == "2" ]]; then
+                svc::check soc2
+            else
+                svc::check soc1
+                svc::check soc2
+            fi
             ;;
         "log")
             svc::log "$@"
@@ -1029,6 +1114,9 @@ dispatch() {
             ;;
         "upgrade")
             vmc::upgrade
+            ;;
+        "rb"|"rollback")
+            vmc::rollback "$@"
             ;;
         "install")
             svc::manage stop soc1
