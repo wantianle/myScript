@@ -1,6 +1,7 @@
 from core.context import TaskContext
 from core.runner import ScriptRunner
-from core.docker import DockerAdapter
+from core.adapter.docker import DockerAdapter
+from core.adapter.ssh import SSHAdapter
 from core.engine.dowloader import RecordDownloader
 from core.engine.player import RecordPlayer
 from core.engine.recorder import Recorder
@@ -19,8 +20,14 @@ class AppSession:
         self.runner = ScriptRunner(self.ctx)
         self.recorder = Recorder(self)
         self.downloader = RecordDownloader(self)
-        self.executor = DockerAdapter(self.ctx)
         self.player = RecordPlayer(self)
 
+    @property
+    def executor(self):
+        return (
+            DockerAdapter(self.ctx)
+            if self.ctx.config["logic"].get("mode") != 3
+            else SSHAdapter(self.ctx.config)
+        )
     def init_logging(self):
         self.ctx.setup_logger()

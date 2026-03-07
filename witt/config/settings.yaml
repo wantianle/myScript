@@ -24,7 +24,7 @@ docker:
 logic:
   vehicle: "XZB600013" # 临时测试
   target_date: "20260101"
-  # mode: 1
+  mode: 1
   version: ""
   soc: "soc"
   before: 15

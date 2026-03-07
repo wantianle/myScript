@@ -56,9 +56,13 @@ def get_path_params(config: dict):
     config["host"]["dest_root"] = get_user_input(
         "导出路径 (/media下)", config["host"]["dest_root"]
     )
-    config["host"]["data_root"] = get_user_input(
-        "数据根路径(/media下)", config["host"]["data_root"]
+    config["logic"]["mode"] = int(
+        get_user_input("模式 [1] 本地 [2] NAS [3] SSH ", config["logic"]["mode"])
     )
+    if config["logic"]["mode"] == 1:
+        config["host"]["data_root"] = get_user_input(
+            "数据根路径(/media下)", config["host"]["data_root"]
+        )
     get_split_params(config)
     # bash 调试
     # config["env"]["debug"] = get_user_input("bash 调试模式", config["env"]["debug"])

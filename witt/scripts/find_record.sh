@@ -6,7 +6,21 @@ source "$DIR/utils.sh"
 trap 'failure ${BASH_SOURCE[0]} $LINENO "$BASH_COMMAND"' ERR
 
 # ================= 确定查询模式 =================
-if findmnt -nt cifs "$DATA_ROOT" > /dev/null; then
+if [[ $MODE == "3" ]]; then
+    data_root="$REMOTE_DATA_ROOT"
+    log_info "远程模式: $REMOTE_USER@$REMOTE_IP:$data_root"
+    ssh_cmd() {
+        mkdir -p /tmp/ssh_mux
+        LC_ALL=C LANG=C ssh -o ConnectTimeout=3 \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR \
+            -o ControlMaster=auto \
+            -o ControlPath=/tmp/ssh_mux/%r@%h:%p \
+            -o ControlPersist=5m \
+            "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
+}
+elif [[ $MODE == "2" ]]; then
     data_root="${NAS_ROOT}/${TARGET_DATE:0:8}/${VEHICLE}"
     log_info "NAS 模式: $data_root"
 else
@@ -17,12 +31,14 @@ fi
 declare -A records
 shopt -s nullglob
 find_cmd="find \"$data_root\" -type f \( \( -path '*${SOC}*' -name '${TARGET_DATE}*record*' \) -o -name 'tag_${TARGET_DATE}*.pb.txt' \) 2>/dev/null"
-
-raw_files=$(eval "$find_cmd")
+if [[ $MODE == "3" ]]; then
+    raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
+else
+    raw_files=$(eval "$find_cmd")
+fi
 [[ -z $raw_files ]] && { log_error "$data_root 目录下找不到相关的文件！"; exit 1; }
 record_list=$(echo "$raw_files" | grep record)
 tag_list=$(echo "$raw_files" | grep tag)
-
 # ${bash_dir}/20251220-112907.record.00000.112907
 while read -r record_path; do
     record_time="${record_path##*.}"
@@ -32,7 +48,6 @@ while read -r record_path; do
         ss=${record_time:4:2}
         seconds=$(( 10#$hh * 3600 + 10#$mm * 60 + 10#$ss ))
         minutes=$(( 10#$hh * 60 + 10#$mm ))
-
         # 存储格式: "总秒数|路径"
         if [[ -v records[$minutes] ]]; then
             records[$minutes]="${records[$minutes]} ${seconds}|${record_path}"
@@ -41,14 +56,15 @@ while read -r record_path; do
         fi
     fi
 done <<< "$record_list"
-
-
 # ================= 处理 Tag 文件 =================
 all_tasks=()
 [[ -z "$tag_list" ]] && { log_error "$data_root 找不到对应的 tag 文件！"; exit 1; }
-
 for tag_file in $tag_list; do
-    content=$(cat "$tag_file")
+    if [[ $MODE == "3" ]]; then
+        content=$(ssh_cmd "cat $tag_file")
+    else
+        content=$(cat "$tag_file")
+    fi
     while IFS= read -r line; do
         if [[ $line =~ msg:\ \"([^\"]+)\" ]]; then
             msg="${BASH_REMATCH[1]//\\n/}"
@@ -66,10 +82,7 @@ for tag_file in $tag_list; do
             formatted_time=$(printf '%04d-%02d-%02d %02d:%02d:%02d' \
                     $((10#$yyyy)) $((10#$month)) $((10#$dd)) \
                     $((10#$hh)) $((10#$mm)) $((10#$ss)))
-
             msg_seconds=$(( 10#$hh * 3600 + 10#$mm * 60 + 10#$ss ))
-            msg_minutes=$(( 10#$hh * 60 + 10#$mm ))
-
             start_sec=$((msg_seconds - BEFORE))
             end_sec=$((msg_seconds + AFTER))
             start_min=$(((start_sec - 60) / 60))
@@ -90,11 +103,9 @@ for tag_file in $tag_list; do
                     [[ -z "$line" ]] && continue
                     f_sec="${line%%|*}"
                     f_path="${line#*|}"
-
                     if (( f_sec >= end_sec )); then
                         continue
                     fi
-
                     current_soc="unknown"
                     if [[ "$f_path" == *"soc1"* ]]; then
                         current_soc="soc1"
@@ -127,7 +138,6 @@ if [[ ${#all_tasks[@]} -gt 0 ]]; then
     all_tasks=()
     error_tasks=()
     count=0
-
     for task_line in "${sorted_tasks[@]}"; do
         tag_time="${task_line%%|*}"
         tmp="${task_line#*|}"
@@ -137,13 +147,8 @@ if [[ ${#all_tasks[@]} -gt 0 ]]; then
         all_tasks+=("${tag_time}|${tag_name}|${tag_paths}")
         read -r -a t_paths <<< "${tag_paths}"
         if [[ ${#t_paths[@]} -gt 0 ]]; then
-            # t_dir="${t_paths[0]%/*}"
-            # t_files=""
-            # for f in "${t_paths[@]}"; do t_files+=" ${f##*/}"; done
             found_socs=$(echo "${tag_paths}" | grep -o "soc[12]" | sort -u | xargs)
             echo -e "${GREEN}[$count] $tag_name : $tag_time [$found_socs]${NC}"
-            # echo "[目录]: $t_dir"
-            # echo "[文件]: ${t_files# }"
             echo "cyber_recorder play -l -f ${tag_paths}"
             echo "------------------------------------------------"
         else

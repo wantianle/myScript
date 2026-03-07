@@ -3,9 +3,10 @@ import os
 from pathlib import Path
 from typing import Union
 from interface import ui
+from .base import BaseAdapter
 
 
-class DockerAdapter():
+class DockerAdapter(BaseAdapter):
     """负责在 Docker 容器内执行命令并处理路径映射"""
 
     def __init__(self, ctx):
@@ -18,6 +19,13 @@ class DockerAdapter():
     def wrap_env(self, cmd: str) -> str:
         base_env = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
         return f"{base_env} && source {self.setup_env} && {cmd}"
+
+    def fetch_file(self, remote_path: str, local_dest: Path) -> None:
+        """
+        Docker 模式下因为有挂载，文件已经在宿主机了。
+        如果路径不一致，可以执行 shutil.move，通常情况下什么都不用做。
+        """
+        pass
 
     def remove(self, path: str):
         if os.path.exists(path):

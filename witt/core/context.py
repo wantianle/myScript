@@ -132,6 +132,7 @@ class TaskContext:
             "SOC": self.config["logic"]["soc"],
             "BEFORE": self.config["logic"]["before"],
             "AFTER": self.config["logic"]["after"],
+            "MODE": self.config["logic"]["mode"],
             "VERSION": self.config["logic"]["version"],
             "CONTAINER": self.config["docker"]["container"],
             "REMOTE_USER": self.config["remote"]["user"],

@@ -75,19 +75,6 @@ log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_err() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 
-# run_node() {
-#     local node=$1; shift
-#     local cmd="$*"
-#     case "$node" in
-#         "soc1") eval "$cmd" ;;
-#         "soc2") ssh $SSH_OPTS "$REMOTE_USER@$REMOTE_IP" "$cmd" ;;
-#         "all")
-#             eval "$cmd"
-#             ssh $SSH_OPTS "$REMOTE_USER@$REMOTE_IP" "$cmd"
-#             ;;
-#     esac
-# }
-
 usage() {
     if [[ "$INSIDE_MD" == "true" ]]; then
         local prefix=""
@@ -223,6 +210,65 @@ sys::pull(){
     else
         scp -r "$LOCAL_USER@$host_ip:$src_path" "${dest_path:-$DEST_ROOT}"
     fi
+}
+
+
+# 获取当前 SSH 客户端的 IP
+sys::_get_local_ip() {
+    echo "$SSH_CONNECTION" | awk '{print $1}'
+}
+
+
+sys::export() {
+    local root_dir="/mdrive_data"
+    local local_ip=$(sys::_get_local_ip)
+    local target_path="~/Documents/mdrive_export/$(date +%m%d_%H%M)"
+
+    if [[ -z "$local_ip" ]]; then
+        log_err "无法检测到本地 IP，请确保是通过 SSH 登录的"
+        return 1
+    fi
+
+    log_info "正在通过 $local_ip 探查数据，本地存储路径: $target_path"
+
+    # 使用 find 预搜索 2 层深度（兼顾速度和覆盖面）
+    # -m: 开启多选 (Tab 选单个，或者使用快捷键)
+    local selections
+    selections=$(find "$root_dir" -maxdepth 2 -not -path '*/.*' 2>/dev/null | \
+        fzf --multi \
+            --ansi \
+            --layout=reverse \
+            --header-first \
+            --header "Tab:勾选/取消 | Ctrl-A:全选 | Ctrl-D:取消全选 | Enter:开始导出" \
+            --prompt "搜索文件/文件夹 > " \
+            --preview "[[ -d {} ]] && ls -F --color=always {} | head -20 || head -n 50 {}" \
+            --preview-window="right:50%:wrap")
+
+    [[ -z "$selections" ]] && { log_warn "未选择任何内容"; return; }
+
+    # 计算总数
+    local count=$(echo "$selections" | wc -l)
+    log_info "准备导出 $count 项内容到 $LOCAL_USER@$local_ip..."
+
+    # 在本地创建目录
+    ssh "$LOCAL_USER@$local_ip" "mkdir -p $target_path"
+
+    # 开始推送
+    local success=0
+    local fail=0
+    while IFS= read -r item; do
+        log_info "正在推送: $(basename "$item")"
+        if rsync -avzP "$item" "$LOCAL_USER@$local_ip:$target_path/"; then
+            ((success++))
+        else
+            log_err "推送失败: $item"
+            ((fail++))
+        fi
+    done <<< "$selections"
+
+    echo "-----------------------------------------------"
+    log_ok "任务完成！成功: $success, 失败: $fail"
+    log_info "本地路径: $local_ip:$target_path"
 }
 
 #endregion

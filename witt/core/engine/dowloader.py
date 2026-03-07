@@ -2,6 +2,7 @@ import logging
 import json
 import os
 import shutil
+import subprocess
 from alive_progress import alive_bar
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,6 +18,10 @@ class RecordDownloader:
         self.recorder = session.recorder
         self.remote_user = self.ctx.config["remote"]["user"]
         self.remote_ip = self.ctx.config["remote"]["ip"]
+
+    @property
+    def mode(self):
+        return self.ctx.config["logic"]["mode"]
 
     @property
     def dest_root(self):
@@ -76,8 +81,17 @@ class RecordDownloader:
         for v_src in src_dir.glob("version*"):
             v_dest = save_dir / v_src.name
             try:
-                if os.path.exists(v_src):
-                    shutil.copy2(v_src, v_dest)
+                if self.mode == 3:
+                    remote_src = f"{self.remote_user}@{self.remote_ip}:{v_src}"
+                    down_cmd = ["scp", "-q", "-o", remote_src, v_dest]
+                    env_c = os.environ.copy()
+                    env_c["LC_ALL"] = "C"
+                    subprocess.run(
+                        down_cmd, env=env_c, capture_output=True, text=True
+                    )
+                else:
+                    if os.path.exists(v_src):
+                        shutil.copy2(v_src, v_dest)
             except Exception as e:
                 ui.print_status(f"拷贝 {task['name']}: version 文件失败", "ERROR")
                 raise e
@@ -125,13 +139,26 @@ cyber_recorder play -s {play_start} -f {records_str}
         blacklist = logic.get("blacklist")
         if blacklist:
             logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
-        self.session.recorder.split(
-            host_in=src,
-            host_out=dest,
-            start_dt=t_start,
-            end_dt=t_end,
-            blacklist=blacklist,
-        )
+        if self.ctx.config["logic"]["mode"] != 3:
+            self.session.recorder.split(
+                host_in=src,
+                host_out=dest,
+                start_dt=t_start,
+                end_dt=t_end,
+                blacklist=blacklist,
+            )
+        else:
+            remote_out = f"{src}.split"
+            self.session.executor.remove(remote_out)
+            self.session.recorder.split(
+                host_in=src,
+                host_out=remote_out,
+                start_dt=t_start,
+                end_dt=t_end,
+                blacklist=blacklist,
+            )
+            self.session.executor.fetch_file(remote_out, dest)
+            self.session.executor.remove(remote_out)
 
     def download_record(self, task_list):
         """
@@ -174,16 +201,21 @@ cyber_recorder play -s {play_start} -f {records_str}
             for i, item in enumerate(download_queue):
                 task = item["task"]
                 bar.text = f"-> [Tag: {task['name'][:15]}]"
-
                 self._sync_file(item["src"], item["dest"], task)
                 processed_files.append(
                     (str(item["src"]), str(item["dest"]), item["soc_name"])
                 )
+                is_last_in_queue = i == len(download_queue) - 1
 
-                check_soc = (i == len(download_queue) - 1) or (
-                    download_queue[i + 1]["soc_name"] != item["soc_name"]
-                )
-                if check_soc:
+                if is_last_in_queue:
+                    should_post_process = True
+                else:
+                    next_item = download_queue[i + 1]
+                    should_post_process = (next_item["task"]["id"] != task["id"]) or (
+                        next_item["soc_name"] != item["soc_name"]
+                    )
+
+                if should_post_process:
                     self.post_process_task(task, item["save_dir"], processed_files)
                     processed_files = []
                 bar()
