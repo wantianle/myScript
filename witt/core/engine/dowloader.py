@@ -77,24 +77,35 @@ class RecordDownloader:
         # 生成元数据文件
         self.save_contract(task, save_dir, file_infos)
         # 同步 version
-        src_dir = Path(file_infos[0][0]).parent
-        for v_src in src_dir.glob("version*"):
-            v_dest = save_dir / v_src.name
+        remote_src_dir = str(Path(file_infos[0][0]).parent)
+
+        if self.mode == 3:
+            find_cmd = f"ls {remote_src_dir}/version* 2>/dev/null || true"
             try:
-                if self.mode == 3:
-                    remote_src = f"{self.remote_user}@{self.remote_ip}:{v_src}"
-                    down_cmd = ["scp", "-q", "-o", remote_src, v_dest]
-                    env_c = os.environ.copy()
-                    env_c["LC_ALL"] = "C"
-                    subprocess.run(
-                        down_cmd, env=env_c, capture_output=True, text=True
-                    )
+                result_str = self.session.executor.execute(find_cmd).strip()
+                if result_str:
+                    # 获取远程文件列表（处理可能存在的多个版本文件）
+                    remote_version_files = result_str.split()
+                    for remote_v_path in remote_version_files:
+                        v_name = Path(remote_v_path).name
+                        v_dest = save_dir / v_name
+                        self.session.executor.fetch_file(remote_v_path, v_dest)
+                        logging.info(f"[SYNC_VERSION] 成功同步远程文件: {v_name}")
                 else:
-                    if os.path.exists(v_src):
-                        shutil.copy2(v_src, v_dest)
+                    logging.warning(
+                        f"[SYNC_VERSION] 远程目录未发现任何 version* 文件: {remote_src_dir}"
+                    )
             except Exception as e:
-                ui.print_status(f"拷贝 {task['name']}: version 文件失败", "ERROR")
-                raise e
+                logging.debug(f"远程版本文件检测发生异常: {e}")
+        else:
+            # --- 本地/NAS 模式：可以使用 glob ---
+            src_dir = Path(file_infos[0][0]).parent
+            for v_src in src_dir.glob("version*"):
+                v_dest = save_dir / v_src.name
+                try:
+                    shutil.copy2(v_src, v_dest)
+                except Exception as e:
+                    ui.print_status(f"拷贝本地版本文件失败: {e}", "ERROR")
         # 生成 README
         v_content = v_dest.read_text() if v_dest.exists() else "N/A"
         records_str = " ".join([Path(f[1]).name for f in file_infos])

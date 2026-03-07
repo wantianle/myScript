@@ -51,13 +51,6 @@ packages=(
         "mdrive_dep:mdrive_dep|dep"
         "mdrive_model:mdrive_model|model"
 )
-# 历史记录
-export HISTFILE="$HOME/.md_history"
-touch "$HISTFILE"
-export HISTSIZE=1000
-export HISTFILESIZE=1000
-shopt -s histappend
-export PROMPT_COMMAND="history -a; history -n; history -c; history -r;${PROMPT_COMMAND:-}"
 # rsync
 if command -v rsync &> /dev/null; then
     SYNC_TOOL="rsync"
@@ -95,6 +88,7 @@ usage() {
     printf "  %-45s  %s\n" "c(channel) [1(soc1)|2(soc2)]"                "查看 soc1/soc2 channel 消息"
     printf "  %-45s  %s\n" "m(module)"                                   "管理 soc1&2 模块，查看对应模块日志和开发日志"
     printf "  %-45s  %s\n" "record [on]|<off>"                           "开启关闭 soc1&2 的Recorder和TestTool"
+    printf "  %-45s  %s\n" "e(export)"                                   "交互式选择需要导出的 bag/log 文件或文件夹"
     printf "  %-45s  %s\n" "remote <add|del|list>"                       "管理本地包对应的远程分支"
     printf "  %-45s  %s\n" ""                                            "  remote add <name> [branch|'-'] [platform]"
     printf "  %-45s  %s\n" ""                                            "  remote del <name>"
@@ -116,7 +110,7 @@ sys::nopasswd(){
     if [ ! -f "$KEY_PATH" ]; then
         echo "未发现密钥，正在生成默认密钥..."
         ssh-keygen -t ed25519 -f "$KEY_PATH" -N ""
-        echo "推送公钥到车端：$REMOTE_USER@$REMOTE_IP..."
+        echo "推送公钥到soc2：$REMOTE_USER@$REMOTE_IP..."
         ssh-copy-id -i "${KEY_PATH}.pub" "$REMOTE_USER@$REMOTE_IP"
     fi
     if ! grep -q "Host soc2" "$CONFIG_PATH"; then
@@ -143,12 +137,24 @@ EOF
 
 # 初始化命令行工具
 sys::init(){
+    # 1. 安装二进制命令
     if sudo cp "$HOME"/md.sh /usr/local/bin/md &>/dev/null && sudo chmod +x /usr/local/bin/md; then
-        log_ok "初始化完成！现在可以通过 md [command] [arguments] 对 mdrive 进行管理"
-        echo -e "试试输入: ${GREEN}md check${NC}"
+        log_ok "工具已安装到 /usr/local/bin/md"
     else
         log_err "初始化失败，请检查 $HOME/md.sh 是否存在！"
+        return 1
     fi
+
+    # 2. 安装自动补全脚本
+    local completion_file="/etc/bash_completion.d/md"
+    echo "正在安装自动补全..."
+    sudo bash -c "cat << 'EOF' > $completion_file
+$(declare -f _md_completions)
+complete -F _md_completions md
+EOF"
+
+    log_ok "初始化完成！请执行 'source $completion_file' 或重启终端生效。"
+    echo -e "试试输入: ${GREEN}md [TAB][TAB]${NC}"
 }
 
 
@@ -213,62 +219,54 @@ sys::pull(){
 }
 
 
-# 获取当前 SSH 客户端的 IP
-sys::_get_local_ip() {
-    echo "$SSH_CONNECTION" | awk '{print $1}'
-}
-
-
 sys::export() {
+    # 1. 自动探查与免密打通
     local root_dir="/mdrive_data"
-    local local_ip=$(sys::_get_local_ip)
-    local target_path="~/Documents/mdrive_export/$(date +%m%d_%H%M)"
+    local local_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}' | tr -d '\r')
+    local timestamp=$(date +%m%d_%H%M)
+    local local_dest="~/Documents/mdrive_export/${timestamp}"
 
     if [[ -z "$local_ip" ]]; then
-        log_err "无法检测到本地 IP，请确保是通过 SSH 登录的"
+        log_err "未检测到本地 SSH 连接 IP"
         return 1
     fi
 
-    log_info "正在通过 $local_ip 探查数据，本地存储路径: $target_path"
+    # 判断是否已经配置过免密 (BatchMode=yes 如果需要输密码会直接报错退出)
+    if ! ssh -q -o BatchMode=yes -o ConnectTimeout=1 "$LOCAL_USER@$local_ip" exit 2>/dev/null; then
+        log_warn "检测 $local_ip 未配置免密，正在配置..."
+        ssh-copy-id "$LOCAL_USER@$local_ip" || { log_err "免密配置失败，请检查笔记本是否开启 SSH 服务"; return 1; }
+        log_ok "免密配置成功！"
+    fi
 
-    # 使用 find 预搜索 2 层深度（兼顾速度和覆盖面）
-    # -m: 开启多选 (Tab 选单个，或者使用快捷键)
+    # 2. 文件扫描与交互选择
+    log_info "正在扫描 $root_dir/{bag,log} 目录..."
+
     local selections
-    selections=$(find "$root_dir" -maxdepth 2 -not -path '*/.*' 2>/dev/null | \
-        fzf --multi \
-            --ansi \
-            --layout=reverse \
-            --header-first \
-            --header "Tab:勾选/取消 | Ctrl-A:全选 | Ctrl-D:取消全选 | Enter:开始导出" \
-            --prompt "搜索文件/文件夹 > " \
-            --preview "[[ -d {} ]] && ls -F --color=always {} | head -20 || head -n 50 {}" \
-            --preview-window="right:50%:wrap")
+    selections=$(cd "$root_dir" && find -L bag log -maxdepth 1 -not -path '*/.*' 2>/dev/null | sort | fzf \
+        --multi \
+        --ansi \
+        --layout=reverse \
+        --height=95% \
+        --header "Tab:勾选 | Ctrl-A:全选 | Enter:确认并导出" \
+        --bind "ctrl-a:toggle-all")
 
-    [[ -z "$selections" ]] && { log_warn "未选择任何内容"; return; }
+    [[ -z "$selections" ]] && { log_warn "已取消操作"; return; }
 
-    # 计算总数
     local count=$(echo "$selections" | wc -l)
-    log_info "准备导出 $count 项内容到 $LOCAL_USER@$local_ip..."
+    log_info "开始传输 $count 项内容到 $local_dest"
 
-    # 在本地创建目录
-    ssh "$LOCAL_USER@$local_ip" "mkdir -p $target_path"
+    ssh "$LOCAL_USER@$local_ip" "mkdir -p $local_dest"
 
-    # 开始推送
-    local success=0
-    local fail=0
     while IFS= read -r item; do
-        log_info "正在推送: $(basename "$item")"
-        if rsync -avzP "$item" "$LOCAL_USER@$local_ip:$target_path/"; then
-            ((success++))
-        else
-            log_err "推送失败: $item"
-            ((fail++))
+        [[ -z "$item" ]] && continue
+        (cd "$root_dir" && rsync -avzPL -R -e "ssh -o StrictHostKeyChecking=no" "$item" "$LOCAL_USER@$local_ip:$local_dest/")
+
+        if [[ $? -ne 0 ]]; then
+            log_err "传输中断: $item"
         fi
     done <<< "$selections"
 
-    echo "-----------------------------------------------"
-    log_ok "任务完成！成功: $success, 失败: $fail"
-    log_info "本地路径: $local_ip:$target_path"
+    log_ok "导出完成！本地路径: $local_ip:$local_dest"
 }
 
 #endregion
@@ -1110,6 +1108,52 @@ flow::pre() {
 
 #endregion
 
+#region ==================== COMPLETION ====================
+
+_md_completions() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # 一级命令
+    opts="init check umount upgrade install rollback rb stop start restart status log c channel m module record remote export e push pull"
+
+    case "$prev" in
+        stop|start|restart|status|log|c|channel)
+            COMPREPLY=( $(compgen -W "soc1 soc2 1 2" -- "$cur") )
+            return 0
+            ;;
+        remote)
+            COMPREPLY=( $(compgen -W "add del list" -- "$cur") )
+            return 0
+            ;;
+        record)
+            COMPREPLY=( $(compgen -W "on off" -- "$cur") )
+            return 0
+            ;;
+        remote)
+            COMPREPLY=( $(compgen -W "add del list" -- "$cur") )
+            return 0
+            ;;
+        rollback|rb)
+            # 如果配置了远程分支，自动补全包名
+            if [[ -f "$REMOTE_CONFIG" ]]; then
+                local pkgs=$(awk '{print $1}' "$REMOTE_CONFIG")
+                COMPREPLY=( $(compgen -W "$pkgs" -- "$cur") )
+            fi
+            return 0
+            ;;
+    esac
+
+    if [[ $COMP_CWORD -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+        return 0
+    fi
+}
+
+#endregion
+
 #region ====================== CORE ======================
 
 dispatch() {
@@ -1179,6 +1223,9 @@ dispatch() {
             svc::manage stop soc1
             svc::manage stop soc2
             disk::umount
+            ;;
+        "export"|"e")
+            sys::export
             ;;
         "push")
             sys::push "$@"

@@ -2,7 +2,7 @@
 remote:
   user: "nvidia"
   ip: "192.168.10.2"
-  data_root: "/mdrive_data/bag"
+  data_root: "/media/data/data/bag"
 
 # 宿主机路径管理
 host:
