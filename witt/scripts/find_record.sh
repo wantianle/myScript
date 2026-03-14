@@ -18,7 +18,7 @@ if [[ $MODE == "3" ]]; then
             -o ControlMaster=auto \
             -o ControlPath=/tmp/ssh_mux/%r@%h:%p \
             -o ControlPersist=5m \
-            "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C $@"
+            "$REMOTE_USER@$REMOTE_IP" "LC_ALL=C" "$@"
 }
 elif [[ $MODE == "2" ]]; then
     data_root="${NAS_ROOT}/${TARGET_DATE:0:8}/${VEHICLE}"
@@ -50,9 +50,9 @@ while read -r record_path; do
         minutes=$(( 10#$hh * 60 + 10#$mm ))
         # 存储格式: "总秒数|路径"
         if [[ -v records[$minutes] ]]; then
-            records[$minutes]="${records[$minutes]} ${seconds}|${record_path}"
+            records[$minutes]="${records[$minutes]} $seconds|$record_path"
         else
-            records[$minutes]="${seconds}|${record_path}"
+            records[$minutes]="$seconds|$record_path"
         fi
     fi
 done <<< "$record_list"
@@ -91,7 +91,7 @@ for tag_file in $tag_list; do
             matched_files=""
             for (( m=start_min; m<=end_min; m++ )); do
                 if [[ -n "${records[$m]:-}" ]]; then
-                    matched_files="${matched_files} ${records[$m]}"
+                    matched_files="$matched_files ${records[$m]}"
                 fi
             done
             # 精确筛选
@@ -114,21 +114,21 @@ for tag_file in $tag_list; do
                     fi
 
                     if (( f_sec >= start_sec )); then
-                        final_list="${final_list} ${f_path}"
+                        final_list="$final_list $f_path"
                     else
                         last_before_soc[$current_soc]="$f_path"
                     fi
                 done <<< "$sorted_candidates"
                 merged_last_files=""
                 for soc in "${!last_before_soc[@]}"; do
-                    merged_last_files="${merged_last_files} ${last_before_soc[$soc]}"
+                    merged_last_files="$merged_last_files ${last_before_soc[$soc]}"
                 done
-                result="${merged_last_files} ${final_list}"
+                result="$merged_last_files $final_list"
                 result=$(echo "$result" | xargs)
             else
                 result=""
             fi
-            all_tasks+=("${formatted_time}|${tag}|${result}")
+            all_tasks+=("$formatted_time|$tag|$result")
         fi
     done <<< "$content"
 done
@@ -144,12 +144,12 @@ if [[ ${#all_tasks[@]} -gt 0 ]]; then
         tag_name="${tmp%%|*}"
         tag_paths="${tmp#*|}"
         count=$((count + 1))
-        all_tasks+=("${tag_time}|${tag_name}|${tag_paths}")
-        read -r -a t_paths <<< "${tag_paths}"
+        all_tasks+=("$tag_time|$tag_name|$tag_paths")
+        read -r -a t_paths <<< "$tag_paths"
         if [[ ${#t_paths[@]} -gt 0 ]]; then
-            found_socs=$(echo "${tag_paths}" | grep -o "soc[12]" | sort -u | xargs)
+            found_socs=$(echo "$tag_paths" | grep -o "soc[12]" | sort -u | xargs)
             echo -e "${GREEN}[$count] $tag_name : $tag_time [$found_socs]${NC}"
-            echo "cyber_recorder play -l -f ${tag_paths}"
+            echo "cyber_recorder play -l -f $tag_paths"
             echo "------------------------------------------------"
         else
             error_tasks+=("[$count] $tag_name : $tag_time")

@@ -35,6 +35,6 @@ export MDRIVE_VEHICLE_ID="${MDRIVE_VEHICLE_ID}"
 ${VMC_CMD} install --name mdrive --version ${MDRIVE_VERSION}
 ${VMC_CMD} install --name mdrive_conf  --version ${MDRIVE_CONF_VERSION}
 ${VMC_CMD} install --name mdrive_model --version ${MDRIVE_MODEL_VERSION}
-${VMC_CMD} install --name mdrive_map  --version ${MDRIVE_MAP_VERSION}
+${VMC_CMD} install --name mdrive_map  --version ${MDRIVE_MAP_VERSION} --deps
 
 bash ${VMC_SOFTWARE}/mdrive/docker/dev_start.sh  --remove

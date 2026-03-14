@@ -222,9 +222,19 @@ sys::pull(){
 sys::export() {
     # 1. 自动探查与免密打通
     local root_dir="/mdrive_data"
-    local local_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}' | tr -d '\r')
     local timestamp=$(date +%m%d_%H%M)
     local local_dest="~/Documents/mdrive_export/${timestamp}"
+
+    # 检查是否存在反向隧道 (监听在车端本地的 2222 端口)
+    if netstat -tuln | grep -q ":2222 "; then
+        log_info "检测到 SSH 反向隧道，启用公网回传模式..."
+        local_ip="127.0.0.1"
+        ssh_port=2222
+    else
+        # 如果没有隧道，走原有的局域网探测逻辑
+        local_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}' | tr -d '\r')
+        log_info "走局域网直连模式 (Target: $local_ip)..."
+    fi
 
     if [[ -z "$local_ip" ]]; then
         log_err "未检测到本地 SSH 连接 IP"
@@ -232,22 +242,21 @@ sys::export() {
     fi
 
     # 判断是否已经配置过免密 (BatchMode=yes 如果需要输密码会直接报错退出)
-    if ! ssh -q -o BatchMode=yes -o ConnectTimeout=1 "$LOCAL_USER@$local_ip" exit 2>/dev/null; then
-        log_warn "检测 $local_ip 未配置免密，正在配置..."
-        ssh-copy-id "$LOCAL_USER@$local_ip" || { log_err "免密配置失败，请检查笔记本是否开启 SSH 服务"; return 1; }
+    if ! ssh -q -p $ssh_port -o BatchMode=yes -o ConnectTimeout=1 "$LOCAL_USER@$local_ip" exit 2>/dev/null; then
+        ssh-copy-id -p $ssh_port "$LOCAL_USER@$local_ip" || { log_err "免密配置失败，请检查笔记本是否开启 SSH 服务"; return 1; }
         log_ok "免密配置成功！"
     fi
 
     # 2. 文件扫描与交互选择
-    log_info "正在扫描 $root_dir/{bag,log} 目录..."
+    log_info "正在扫描 $root_dir/{bag,log,core,crash_log,perf} 目录..."
 
     local selections
-    selections=$(cd "$root_dir" && find -L bag log -maxdepth 1 -not -path '*/.*' 2>/dev/null | sort | fzf \
+    selections=$(cd "$root_dir" && find -L bag log core crash_log perf -maxdepth 2 -not -path '*/.*' 2>/dev/null | sort | fzf \
         --multi \
         --ansi \
         --layout=reverse \
         --height=95% \
-        --header "Tab:勾选 | Ctrl-A:全选 | Enter:确认并导出" \
+        --header "模式: $([[ $ssh_port == 2222 ]] && echo "公网隧道" || echo "局域网") | Tab:勾选 | Ctrl-A:全选 | Enter:确认并导出" \
         --bind "ctrl-a:toggle-all")
 
     [[ -z "$selections" ]] && { log_warn "已取消操作"; return; }
@@ -255,11 +264,11 @@ sys::export() {
     local count=$(echo "$selections" | wc -l)
     log_info "开始传输 $count 项内容到 $local_dest"
 
-    ssh "$LOCAL_USER@$local_ip" "mkdir -p $local_dest"
+    ssh -p $ssh_port "$LOCAL_USER@$local_ip" "mkdir -p $local_dest"
 
     while IFS= read -r item; do
         [[ -z "$item" ]] && continue
-        (cd "$root_dir" && rsync -avzPL -R -e "ssh -o StrictHostKeyChecking=no" "$item" "$LOCAL_USER@$local_ip:$local_dest/")
+        (cd "$root_dir" && rsync -avzPL -R -e "ssh -p $ssh_port -o StrictHostKeyChecking=no" "$item" "$LOCAL_USER@$local_ip:$local_dest/")
 
         if [[ $? -ne 0 ]]; then
             log_err "传输中断: $item"

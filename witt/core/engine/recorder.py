@@ -11,14 +11,12 @@ class Recorder:
         self.session = session
 
     def get_info(self, docker_path: str) -> Dict[str, Any]:
-        """
-        获取 record 的时间、时长、排序后的频道列表
-        """
+        """获取 record 的时间、时长、排序后的频道列表"""
         try:
             stdout = self.session.executor.execute(f"cyber_recorder info {docker_path}")
             return parser.parse_record_info(stdout)
         except Exception as e:
-            ui.print_status(f"{docker_path} 异常，解析元数据失败", "ERROR")
+            ui.print_status(f"{docker_path} 损坏，解析元数据失败！", "ERROR")
             raise e
 
     def split(
@@ -29,9 +27,7 @@ class Recorder:
         end_dt: Optional[str],
         blacklist: Optional[List[str]] = None,
     ):
-        """
-        执行 record 切片
-        """
+        """执行 record 切片，生成 .split 文件"""
         logging.info(f"[RECORDER_SLICE] File: {Path(host_in).name}")
         logging.info(f"  Range: {start_dt} -> {end_dt}")
 
@@ -49,5 +45,8 @@ class Recorder:
         try:
             self.session.executor.execute(split_cmd)
         except Exception as e:
-            ui.print_status(f"文件损坏(已跳过): {host_in}", "WARN")
-            logging.debug(f"{host_in} 文件损坏: {e}")
+            ui.print_status(
+                f"切片异常，跳过 {host_in} 请检查文件：1.存在？ 2.权限？ 3.损坏？",
+                "WARN",
+            )
+            logging.debug(f"{host_in} 切片异常: {e}")

@@ -49,4 +49,4 @@ mkdir -p "$MDRIVE_ROOT"
 cp "$DIR/vmc.sh" "$MDRIVE_ROOT/vmc.sh"
 chmod +x "$MDRIVE_ROOT/vmc.sh"
 
-log_info "部署完成! 请运行 'source ~/.zshrc' 和 'source ~/.bashrc' 使补全生效。"
+log_info "vmc部署完成! 请运行 'source ~/.zshrc' 和 'source ~/.bashrc' 使补全生效。"

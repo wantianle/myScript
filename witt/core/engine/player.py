@@ -88,7 +88,6 @@ class RecordPlayer:
             return datetime.fromisoformat(val) if isinstance(val, str) else val
         global_start = ensure_dt(records[0]["begin"])
         total_duration = max(r["duration"] for r in records)
-        self.ctx.config["logic"]["version"] = next(Path(records[0]["path"]).parent.glob('version*'), None)
         # 构造指令
         docker_paths = [self.executor.map_path(r["path"]) for r in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]
@@ -110,5 +109,12 @@ class RecordPlayer:
         )
         print(f"执行指令: \033[1;32m{full_cmd}\033[0m")
 
-        workflow.restore_env_flow(self.session, True)
+        self.ctx.config["logic"]["version"] = next(
+            Path(records[0]["path"]).parent.glob("version*"),
+            self.ctx.config["logic"]["version"]
+        )
+        if self.ctx.config["logic"]["version"]:
+            workflow.restore_env_flow(self.session, True)
+        else:
+            workflow.restore_env_flow(self.session)
         self.executor.execute_interactive(full_cmd)

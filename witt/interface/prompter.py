@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-import subprocess
 import select
 import urllib.parse
 import questionary
@@ -14,12 +13,7 @@ from interface import ui
 from utils import parser
 
 
-def usage():
-    README = Path(__file__).resolve().parents[1] / "docs" / "README.md"
-    subprocess.run(["python3", "-m", "rich.markdown", README])
-
-
-def get_user_input(prompt: str, default_value: str) -> str:
+def get_user_input(prompt: str, default_value: str):
     try:
         val = input(f"\033[32m{prompt}\033[0m (默认 {default_value}): ").strip()
         return val if val else default_value
@@ -28,41 +22,64 @@ def get_user_input(prompt: str, default_value: str) -> str:
         raise
 
 
+def choose_option(prompt: str, options: list[str], index: bool = False):
+    for i, opt in enumerate(options, 1):
+        print(f"[{i}] {opt}  ", end="")
+    while True:
+        val = input(f"\033[32m{prompt}: \033[0m").strip()
+        if val.isdigit() and 1 <= int(val) <= len(options):
+            return int(val) if index else options[int(val) - 1]
+        ui.print_status("输入无效，请重新选择", "WARN")
+
+
 def get_basic_params(config: dict):
     ui.print_status("基本信息配置")
     config["logic"]["target_date"] = get_user_input(
-        "日期", config["logic"]["target_date"]
+        "数据日期", config["logic"]["target_date"]
     )
-    config["logic"]["vehicle"] = get_user_input("车辆名", config["logic"]["vehicle"])
+    config["logic"]["vehicle"] = get_vehicle_name()
+
+
+def get_vehicle_name():
+    prefix = choose_option("\n选择车辆类型", ["XZB6", "XZT5"])
+    while True:
+        num = input("\033[32m输入车辆号: \033[0m").strip()
+        if not num:
+            num = "00000"
+        if num.isdigit() and 0 <= int(num) <= 99999:
+            num = num.zfill(5)
+            break
+        ui.print_status("编号必须是 0-99999", "ERROR")
+    vehicle = f"{prefix}{num}"
+    print(f"\033[1;33m@{vehicle}\033[0m")
+    return vehicle
 
 
 def get_split_params(config: dict):
     config["logic"]["before"] = int(
-        get_user_input("tag 前多少秒", config["logic"]["before"])
+        get_user_input("切片 tag 前多少秒", config["logic"]["before"])
     )
     config["logic"]["after"] = int(
         get_user_input(
-            "tag 后多少秒",
+            "切片 tag 后多少秒",
             config["logic"]["after"],
         )
     )
 
 
 def get_path_params(config: dict):
-    soc_inx = get_user_input("选择 [1] soc1 [2] soc2", "all")
-    if soc_inx == "all":
-        soc_inx = ""
-    config["logic"]["soc"] = f"soc{soc_inx}"
-    config["host"]["dest_root"] = get_user_input(
-        "导出路径 (/media下)", config["host"]["dest_root"]
-    )
-    config["logic"]["mode"] = int(
-        get_user_input("模式 [1] 本地 [2] NAS [3] SSH ", config["logic"]["mode"])
-    )
+    # soc_inx = get_user_input("选择 [1] soc1 [2] soc2", "all")
+    # if soc_inx == "all":
+    #     soc_inx = ""
+    # config["logic"]["soc"] = f"soc{soc_inx}"
+    config["logic"]["mode"] = int(choose_option("\n数据输入模式", ["本地", "NAS", "车端"], True))
     if config["logic"]["mode"] == 1:
         config["host"]["data_root"] = get_user_input(
-            "数据根路径(/media下)", config["host"]["data_root"]
+            "原始数据路径 (限/media下)", config["host"]["data_root"]
         )
+    config["host"]["dest_root"] = get_user_input(
+        "切片导出路径 (限/media下)", config["host"]["dest_root"]
+    )
     get_split_params(config)
     # bash 调试
     # config["env"]["debug"] = get_user_input("bash 调试模式", config["env"]["debug"])
@@ -81,7 +98,7 @@ def get_selected_indices(all_tasks: list, prompt="请输入要处理的序号") 
         return []
 
     while True:
-        raw_input = input(f"{prompt}\neg. 1,3; 2-6; 0(全选); 0 5 7-15(排除): ").strip()
+        raw_input = input(f"{prompt}\n单选 1,3，5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0: ").strip()
         # 预清洗：只保留数字、横杠、逗号、空白、换行
         clean_input = re.sub(r"[^\d\-,\s\n]", "", raw_input)
         # 分词
@@ -174,7 +191,6 @@ def get_dragged_input() -> list:
     4. 过滤出 .record 文件或目录
     5. 去重并进行排序：根据 record 序列号 (.00001) 排序
     """
-    ui.print_status("请拖入任意文件/目录:")
     lines = [sys.stdin.readline()]
     while select.select([sys.stdin], [], [], 0.1)[0]:
         line = sys.stdin.readline()
@@ -211,7 +227,6 @@ def get_dragged_input() -> list:
     paths = parser.sort_records(list(set(record_files)))
     if not paths:
         ui.print_status("无效路径", "ERROR")
-    print("没有返回？")
     return paths
 
 
@@ -242,22 +257,26 @@ def get_channels(session: "AppSession", tasks: List[dict]) -> List[dict]:
     """从多个 record 中提取频道并集，支持双 SOC 路径检查"""
     channels_map = {}
     socs = set()
-    for t in tasks:
-        path_list = t.get("paths", [])
-        for p in path_list:
-            soc = Path(p).parent.name[-4:]
-            if soc in socs:
-                continue
-            info = session.recorder.get_info(p)
-            channels = info.get("channels", [])
-            for ch in channels:
-                name = ch["name"]
-                if name not in channels_map:
-                    channels_map[name] = ch.copy()
-                    channels_map[name].setdefault("count", 0)
-                else:
-                    channels_map[name]["count"] += ch.get("count", 0)
-            socs.update(soc)
+    try:
+        for t in tasks:
+            path_list = t.get("paths", [])
+            for p in path_list:
+                soc = Path(p).parent.name[-4:]
+                if soc in socs:
+                    continue
+                info = session.recorder.get_info(p)
+                channels = info.get("channels", [])
+                for ch in channels:
+                    name = ch["name"]
+                    if name not in channels_map:
+                        channels_map[name] = ch.copy()
+                        channels_map[name].setdefault("count", 0)
+                    else:
+                        channels_map[name]["count"] += ch.get("count", 0)
+                socs.update(soc)
+    except Exception as e:
+        ui.print_status("频道获取失败", "ERROR")
+        raise e
     return sorted(channels_map.values(), key=lambda x: x["name"])
 
 

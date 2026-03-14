@@ -9,21 +9,6 @@ class BaseAdapter(ABC):
     def __init__(self, setup_env: str) -> None:
         self.setup_env = setup_env
 
-    def wrap_env(self, cmd: str) -> str:
-        """统一包装环境变量"""
-        base_env = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
-        return f"{base_env} && source {self.setup_env} && {cmd}"
-
-    @abstractmethod
-    def remove(self, path: str) -> None:
-        """删除执行环境中的中间文件"""
-        pass
-
-    @abstractmethod
-    def fetch_file(self, remote_path: str, local_dest: Path) -> None:
-        """将执行环境中的文件拉取到宿主机。本地/Docker模式下通常是 move 或 pass"""
-        pass
-
     @abstractmethod
     def map_path(self, host_path: Union[str, Path]) -> str:
         """
@@ -36,6 +21,19 @@ class BaseAdapter(ABC):
         """
         非交互式执行命令，返回 stdout 字符串
         """
+        pass
+
+    def wrap_env(self, cmd: str) -> str:
+        """统一包装环境变量"""
+        base_env = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
+        return f"{base_env} && source {self.setup_env} && {cmd}"
+
+    def remove(self, path: str) -> None:
+        """删除执行环境中的中间文件"""
+        pass
+
+    def fetch_file(self, remote_path: str, local_dest: Path) -> None:
+        """将执行环境中的文件拉取到宿主机。本地/Docker模式下通常是 move 或 pass"""
         pass
 
     def execute_interactive(self, cmd: str) -> None:

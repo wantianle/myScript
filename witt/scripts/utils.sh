@@ -21,8 +21,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 
-if [ ! -t 1 ]; then
-    RED= GREEN= YELLOW= BLUE= NC=
+if [[ ! -t 1 ]]; then
+    RED="" GREEN="" YELLOW="" BLUE="" NC=""
 fi
 
 # -------- 日志级别 --------
@@ -51,4 +51,3 @@ failure() {
     log_error "${script}退出状态码: $?"
     log_error "命令在第 ${lineno} 行发生错误: ${msg}"
 }
-

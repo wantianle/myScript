@@ -17,8 +17,6 @@ class SSHAdapter(BaseAdapter):
         self.ip = config["remote"]["ip"]
         self.setup_env = config["docker"]["setup_env"]
         self.remote_addr = f"{self.user}@{self.ip}"
-
-        # 远程环境预设指令
         self.env_setup_cmd = (
             "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8 && "
             "export GLOG_log_dir=/tmp && export MDRIVE_ROOT_DIR='/mdrive' && "
@@ -49,11 +47,12 @@ class SSHAdapter(BaseAdapter):
             return result.stdout
         except subprocess.CalledProcessError as e:
             detail = e.stderr.strip() or e.stdout.strip()
-            # 终端提示
             ui.print_status(f"{error_msg}: {detail}", "ERROR")
-            # 日志记录审计
             logger.error(f"CMD FAILED: {' '.join(cmd)} | DETAIL: {detail}")
             raise e
+
+    def remove(self, path: str) -> None:
+        self.execute(f"rm -f {path}")
 
     def map_path(self, host_path: Union[str, Path]) -> str:
         return str(host_path)
@@ -69,9 +68,7 @@ class SSHAdapter(BaseAdapter):
 
     def execute(self, cmd: str) -> str:
         """在远程执行 Shell 命令"""
-        # 组装完整的远程命令
         full_remote_cmd = f"{self.env_setup_cmd} && source {self.setup_env} && {cmd}"
-
         ssh_cmd = (
             ["ssh"]
             + self._get_common_opts()
@@ -87,10 +84,3 @@ class SSHAdapter(BaseAdapter):
             ]
         )
         return self._call(ssh_cmd, "SSH 执行失败")
-
-    def get_size(self, path: str) -> int:
-        res = self.execute(f"stat -c %s {path}")
-        return int(res.strip()) if res else 0
-
-    def remove(self, path: str) -> None:
-        self.execute(f"rm -f {path}")

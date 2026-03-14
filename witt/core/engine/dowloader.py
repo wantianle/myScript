@@ -1,8 +1,6 @@
 import logging
 import json
-import os
 import shutil
-import subprocess
 from alive_progress import alive_bar
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -35,8 +33,8 @@ class RecordDownloader:
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_contract(self, task, save_dir, file_infos):
-        """保存元数据，实现信息透传"""
+    def _save_contract(self, task, save_dir, file_infos):
+        """保存元数据，实现数据信息缓存，减少底层重复计算，并为回播提供必要的上下文信息"""
         tag_dir = save_dir.parent
         meta_path = tag_dir / "meta.json"
         dt_tag = parser.str_to_time(task["time"])
@@ -72,15 +70,14 @@ class RecordDownloader:
         )
         meta_path.write_text(json.dumps(contract, indent=4, ensure_ascii=False))
 
-    def post_process_task(self, task, save_dir, file_infos):
+    def _post_process_task(self, task, save_dir, file_infos):
         """生成元数据、README 和 version"""
         # 生成元数据文件
-        self.save_contract(task, save_dir, file_infos)
+        self._save_contract(task, save_dir, file_infos)
         # 同步 version
-        remote_src_dir = str(Path(file_infos[0][0]).parent)
-
+        src_dir = Path(file_infos[0][0]).parent
         if self.mode == 3:
-            find_cmd = f"ls {remote_src_dir}/version* 2>/dev/null || true"
+            find_cmd = f"ls {src_dir}/version* 2>/dev/null || true"
             try:
                 result_str = self.session.executor.execute(find_cmd).strip()
                 if result_str:
@@ -93,26 +90,28 @@ class RecordDownloader:
                         logging.info(f"[SYNC_VERSION] 成功同步远程文件: {v_name}")
                 else:
                     logging.warning(
-                        f"[SYNC_VERSION] 远程目录未发现任何 version* 文件: {remote_src_dir}"
+                        f"[SYNC_VERSION] 远程目录未发现任何 version* 文件: {src_dir}"
                     )
             except Exception as e:
                 logging.debug(f"远程版本文件检测发生异常: {e}")
         else:
-            # --- 本地/NAS 模式：可以使用 glob ---
-            src_dir = Path(file_infos[0][0]).parent
+            # 本地/NAS 模式：可以使用 glob
             for v_src in src_dir.glob("version*"):
                 v_dest = save_dir / v_src.name
-                try:
-                    shutil.copy2(v_src, v_dest)
-                except Exception as e:
-                    ui.print_status(f"拷贝本地版本文件失败: {e}", "ERROR")
+                shutil.copy2(v_src, v_dest)
+
         # 生成 README
-        v_content = v_dest.read_text() if v_dest.exists() else "N/A"
-        records_str = " ".join([Path(f[1]).name for f in file_infos])
+        if not v_dest.exists():
+            logging.warning(
+                f"[SYNC_VERSION] {src_dir} 未找到 version 文件，影响回播的版本同步！"
+            )
+        else:
+            v_content = v_dest.read_text() if v_dest.exists() else "N/A"
         nas_path = save_dir.relative_to(Path(self.ctx.config["host"]["dest_root"]))
         before = int(self.ctx.config["logic"]["before"])
         after = int(self.ctx.config["logic"]["after"])
         play_start = (before - 15) if (before - 15) > 0 else 0
+        records_str = " ".join([Path(f[1]).name for f in file_infos])
         readme_content = f"""- **tag：** {task["time"]} {task["name"]} duration: {before + after}s
 - **问题描述：**
 > 填写补充描述
@@ -137,12 +136,7 @@ cyber_recorder play -s {play_start} -f {records_str}
         logging.info(f"  Files: {[Path(f[1]).name for f in file_infos]}")
 
     def _sync_file(self, src, dest, task):
-        """
-        同步的核心逻辑：
-        1. 生成 .split 文件，全量覆盖
-        2. 清理中间文件
-        """
-        # 环境准备
+        """生成 .split 文件，全量覆盖，最后清理中间文件"""
         logic = self.ctx.config["logic"]
         tag_dt = parser.str_to_time(task["time"])
         t_start = tag_dt - timedelta(seconds=int(logic["before"]))
@@ -151,23 +145,11 @@ cyber_recorder play -s {play_start} -f {records_str}
         if blacklist:
             logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
         if self.ctx.config["logic"]["mode"] != 3:
-            self.session.recorder.split(
-                host_in=src,
-                host_out=dest,
-                start_dt=t_start,
-                end_dt=t_end,
-                blacklist=blacklist,
-            )
+            self.session.recorder.split(src, dest, t_start, t_end, blacklist)
         else:
             remote_out = f"{src}.split"
             self.session.executor.remove(remote_out)
-            self.session.recorder.split(
-                host_in=src,
-                host_out=remote_out,
-                start_dt=t_start,
-                end_dt=t_end,
-                blacklist=blacklist,
-            )
+            self.session.recorder.split(src, remote_out, t_start, t_end, blacklist)
             self.session.executor.fetch_file(remote_out, dest)
             self.session.executor.remove(remote_out)
 
@@ -227,7 +209,7 @@ cyber_recorder play -s {play_start} -f {records_str}
                     )
 
                 if should_post_process:
-                    self.post_process_task(task, item["save_dir"], processed_files)
+                    self._post_process_task(task, item["save_dir"], processed_files)
                     processed_files = []
                 bar()
 

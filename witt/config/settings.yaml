@@ -6,15 +6,14 @@ remote:
 
 # 宿主机路径管理
 host:
-  nas_root: "/media/nas/00.raw"
-  dest_root: "/media/road_test"
   mdrive_root: "/home/mini/project"
+  nas_root: "/media/nas/00.raw"
   data_root: "/media/mini/data"
+  dest_root: "/media/road_test"
 
 # Docker 内部路径管理
 docker:
   container: "mdrive_dev_vmc_minieye"
-  workspace: "/mdrive"
   host_mount: "/media"
   docker_mount: "/media"
   docker_scripts: "/home/mini/project/mdrive/docker"
@@ -23,7 +22,7 @@ docker:
 # 业务逻辑配置
 logic:
   vehicle: "XZB600013" # 临时测试
-  target_date: "20260101"
+  target_date: ""
   mode: 1
   version: ""
   soc: "soc"
