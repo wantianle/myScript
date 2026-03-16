@@ -30,7 +30,7 @@ fi
 # ================= 建立 Record 索引 =================
 declare -A records
 shopt -s nullglob
-find_cmd="find \"$data_root\" -type f \( \( -path '*${SOC}*' -name '${TARGET_DATE}*record*' \) -o -name 'tag_${TARGET_DATE}*.pb.txt' \) 2>/dev/null"
+find_cmd="find \"$data_root\" -type f \( \( -ipath '*${SOC}*' -name '${TARGET_DATE}*record*' \) -o -name '*tag*' -name '*${TARGET_DATE}*' \) 2>/dev/null"
 if [[ $MODE == "3" ]]; then
     raw_files=$(ssh_cmd "$find_cmd") || { log_error "无法连接车机或找不到对应record 文件！"; exit 1; }
 else

@@ -220,10 +220,9 @@ sys::pull(){
 
 
 sys::export() {
-    # 1. 自动探查与免密打通
     local root_dir="/mdrive_data"
     local timestamp=$(date +%m%d_%H%M)
-    local local_dest="~/Documents/mdrive_export/${timestamp}"
+    local local_dest="/media/mdrive_export/${timestamp}"
 
     # 检查是否存在反向隧道 (监听在车端本地的 2222 端口)
     if netstat -tuln | grep -q ":2222 "; then
