@@ -1,3 +1,6 @@
+import os
+import sys
+import termios
 from . import prompter
 from . import ui
 from core.session import AppSession
@@ -43,7 +46,7 @@ def restore_env_flow(session: AppSession, auto: bool = False):
 
 
 def play_flow(session: AppSession):
-    manual = prompter.get_confirm_input("手动拖拽文件播放？")
+    manual = prompter.get_confirm_input("手动选择文件播放？")
     if manual:
         manual_play(session)
     else:
@@ -83,10 +86,12 @@ def auto_play(session: AppSession):
         else:
             for s in socs:
                 target_records.extend(selected_tag["socs"][s])
-
-        range_in = input("调整播放 (改变起点 5 | 限制范围 5-10 | 回车全播): ").strip()
-        start, end = parser.parse_range_logic(range_in)
-        session.player.play(target_records, start, end)
+        while True:
+            range_in = input("调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播): ").strip()
+            start, end = parser.parse_range_logic(range_in)
+            session.player.play(target_records, start, end)
+            if not prompter.get_confirm_input("继续调整播放时间?"):
+                break
 
 
 def manual_play(session: AppSession):
@@ -98,22 +103,26 @@ def manual_play(session: AppSession):
         paths = prompter.get_dragged_input()
         if not paths:
             return
+        # 清空缓冲区，避免污染
+        if os.name == "posix":
+            termios.tcflush(sys.stdin, termios.TCIFLUSH)
         info_start = session.recorder.get_info(str(paths[0]))
         info_end = session.recorder.get_info(str(paths[-1]))
         tag_start = info_start["begin"]
         tag_end = info_end["end"]
         tag_duration = int((tag_end - tag_start).total_seconds())
         current_records = [
-            {"path": str(p), "begin": tag_start, "duration": tag_duration} for p in paths
+            {"path": str(p), "begin": tag_start, "duration": tag_duration}
+            for p in paths
         ]
         while True:
             ui.print_status(f"已加载 {len(paths)} 个文件，总长 {tag_duration}s")
             range_in = input(
-                "调整播放 (改变起点 5 | 限制范围 5-10 | 回车全播): "
+                "调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播): "
             ).strip()
             start, end = parser.parse_range_logic(range_in)
             session.player.play(current_records, start, end)
-            if not prompter.get_confirm_input("继续调整播放?"):
+            if not prompter.get_confirm_input("继续调整播放时间?"):
                 break
     except Exception as e:
         raise e

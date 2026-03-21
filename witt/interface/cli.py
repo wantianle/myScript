@@ -15,9 +15,9 @@ def menu():
         # Choice(title="[仅查询] 查询 tag 对应 record", value="2"),
         # Choice(title="[仅压缩] 指定文件过滤 Channel", value="3"),
         # Choice(title="[仅切片] 指定目录时间进行切片", value="4"),
-        # Choice(title="[仅同步] 同步本地 docker 环境", value="3"),
-        Choice(title="[仅回播] 手动或者自动回播数据", value="2"),
-        Choice(title="[进容器] 交互式进 docker bash", value="3"),
+        Choice(title="[仅回播] 手动选择/自动扫描回播", value="2"),
+        Choice(title="[仅同步] 同步本地 mdrive 版本", value="3"),
+        Choice(title="[进容器] 交互式进 docker bash", value="4"),
         Choice(title="[ 退出 ]", value="q"),
     ]
     menu_map = {
@@ -25,9 +25,9 @@ def menu():
         # "2": lambda: workflow.search_flow(session),
         # "3": lambda: workflow.compress_flow(session),
         # "4": lambda: workflow.slice_flow(session),
-        # "5": lambda: workflow.restore_env_flow(session),
         "2": lambda: workflow.play_flow(session),
-        "3": lambda: session.runner.into_docker(),
+        "3": lambda: workflow.restore_env_flow(session),
+        "4": lambda: session.runner.into_docker(),
     }
 
     while True:

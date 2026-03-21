@@ -1,6 +1,6 @@
 def print_banner() -> None:
     print("" + "=" * 42)
-    print("     witt ( What Is That Tag ? ）v1.5.5")
+    print("     witt ( What Is That Tag ? ）v1.5.6")
     print("" + "=" * 42)
 
 
@@ -25,7 +25,7 @@ def show_playback_library(library, vehicle, target_date) -> None:
 
 def show_manual_play_header() -> None:
     print("" + "=" * 14 + " 手动回播模式 " + "=" * 14)
-    print("将 record 文件/目录拖入终端 | 'q' 返回")
+    print("将 record 文件/目录粘贴或拖入终端 | 'q' 返回")
 
 
 def show_playback_info(tag, duration, channels=None) -> None:
