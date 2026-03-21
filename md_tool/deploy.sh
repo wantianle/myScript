@@ -9,7 +9,7 @@ DEB_FILES=(
     "rsync_3.1.3-8ubuntu0.9_arm64.deb" "fzf_0.29.0-1ubuntu0.1_arm64.deb"
 )
 # 代码内预设端口 (如果为空则运行时提示输入)
-PRESET_PORTS=(6163 6165)
+PRESET_PORTS=()
 # PRESET_PORTS=()
 
 # 颜色定义

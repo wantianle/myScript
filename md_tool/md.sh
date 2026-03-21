@@ -77,7 +77,7 @@ usage() {
     echo -e "${BLUE}Usage:${NC}"
     echo -e "  $prefix<c(command)> [a(arguments)] <>代表必选 []代表可选 ()代表可简写"
     echo -e "${BLUE}Commands:${NC}"
-    printf "  ${YELLOW}%-45s${NC}  ${YELLOW}%s${NC}\n" "init"            "第一次使用工具需要初始化免密并安装工具到系统"
+    printf "  ${YELLOW}%-45s${NC}  ${YELLOW}%s${NC}\n" "init"            "每次部署工具需要初始化免密并安装工具到系统"
     printf "  %-45s  %s\n" "check"                                       "检查车辆状态"
     printf "  %-45s  %s\n" "umount"                                      "安全弹出硬盘"
     printf "  %-45s  %s\n" "upgrade"                                     "自检并升级最新包版本"
@@ -137,7 +137,7 @@ EOF
 
 # 初始化命令行工具
 sys::init(){
-    # 1. 安装二进制命令
+    # 安装二进制命令
     if sudo cp "$HOME"/md.sh /usr/local/bin/md &>/dev/null && sudo chmod +x /usr/local/bin/md; then
         log_ok "工具已安装到 /usr/local/bin/md"
     else
@@ -145,7 +145,7 @@ sys::init(){
         return 1
     fi
 
-    # 2. 安装自动补全脚本
+    # 安装自动补全脚本
     local completion_file="/etc/bash_completion.d/md"
     echo "正在安装自动补全..."
     sudo bash -c "cat << 'EOF' > $completion_file
@@ -223,7 +223,8 @@ sys::export() {
     local root_dir="/mdrive_data"
     local timestamp=$(date +%m%d_%H%M)
     local local_dest="/media/mdrive_export/${timestamp}"
-
+    local ssh_port=22
+    local local_ip=""
     # 检查是否存在反向隧道 (监听在车端本地的 2222 端口)
     if netstat -tuln | grep -q ":2222 "; then
         log_info "检测到 SSH 反向隧道，启用公网回传模式..."
@@ -242,8 +243,13 @@ sys::export() {
 
     # 判断是否已经配置过免密 (BatchMode=yes 如果需要输密码会直接报错退出)
     if ! ssh -q -p $ssh_port -o BatchMode=yes -o ConnectTimeout=1 "$LOCAL_USER@$local_ip" exit 2>/dev/null; then
-        ssh-copy-id -p $ssh_port "$LOCAL_USER@$local_ip" || { log_err "免密配置失败，请检查笔记本是否开启 SSH 服务"; return 1; }
-        log_ok "免密配置成功！"
+        log_info "未检测到免密授权，准备配置 (Target: $LOCAL_USER@$local_ip:$ssh_port)..."
+        ssh-copy-id -o StrictHostKeyChecking=no -p $ssh_port "$LOCAL_USER@$local_ip"
+        if ! ssh -q -p "$ssh_port" -o BatchMode=yes -o ConnectTimeout=1 "$LOCAL_USER@$local_ip" exit 2>/dev/null; then
+            log_err "免密配置未生效（可能是密码错误或笔记本 SSH 未开启）"
+            return 1
+        fi
+        log_ok "免密验证通过！"
     fi
 
     # 2. 文件扫描与交互选择
@@ -695,7 +701,6 @@ vmc::remote() {
     local action=$1
     case "$action" in
         "add")
-            # 用法: md remote add [name] [branch] [platform]
             # sed -i -E "/^$2[[:space:]]+/d" "$REMOTE_CONFIG" 2>/dev/null
             local new_entry="$2 $3 $4"
             if [[ -f "$REMOTE_CONFIG" ]] && grep -Fxq "$new_entry" "$REMOTE_CONFIG"; then
@@ -706,7 +711,6 @@ vmc::remote() {
             fi
             ;;
         "del")
-            # 用法: md remote del [name]
             if [[ -z "$2" ]]; then
                 log_err "请指定要删除的包名"
                 return 1

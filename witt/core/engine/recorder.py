@@ -46,7 +46,7 @@ class Recorder:
             self.session.executor.execute(split_cmd)
         except Exception as e:
             ui.print_status(
-                f"切片异常，跳过 {host_in} 请检查文件：1.存在？ 2.权限？ 3.损坏？",
+                f"切片异常，跳过 {host_in} 请检查文件是否存在，是否有权限，是否损坏",
                 "WARN",
             )
             logging.debug(f"{host_in} 切片异常: {e}")

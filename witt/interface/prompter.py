@@ -22,7 +22,7 @@ def get_user_input(prompt: str, default_value: str):
         raise
 
 
-def choose_option(prompt: str, options: list[str], index: bool = False):
+def choose_option(prompt: str, options: List[str], index: bool = False):
     for i, opt in enumerate(options, 1):
         print(f"[{i}] {opt}  ", end="")
     while True:
