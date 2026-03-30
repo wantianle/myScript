@@ -273,7 +273,7 @@ sys::export() {
 
     while IFS= read -r item; do
         [[ -z "$item" ]] && continue
-        (cd "$root_dir" && rsync -avzPL -R -e "ssh -p $ssh_port -o StrictHostKeyChecking=no" "$item" "$LOCAL_USER@$local_ip:$local_dest/")
+        (cd "$root_dir" && rsync -avPL -R -e "ssh -p $ssh_port -o StrictHostKeyChecking=no" "$item" "$LOCAL_USER@$local_ip:$local_dest/")
 
         if [[ $? -ne 0 ]]; then
             log_err "传输中断: $item"
@@ -576,10 +576,10 @@ disk::usage() {
 # 安全卸载
 disk::umount(){
     sync && sync
-    while mountpoint -q /media/data; do
-        sudo umount -l /media/data 2>/dev/null
+    while mountpoint -q $MOUNT_ROOT; do
+        sudo umount -l $MOUNT_ROOT 2>/dev/null
     done
-    ssh $SSH_OPTS $REMOTE_IP "sudo umount -l /media/data 2>/dev/null"
+    ssh $SSH_OPTS $REMOTE_IP "sudo umount -l $MOUNT_ROOT 2>/dev/null"
     log_ok "硬盘卸载成功..."
 }
 
@@ -670,7 +670,7 @@ disk::fix(){
         log_ok "挂载清理完成！"
         ;;
         "4"|"5")
-        disk::usage "data" $MOUNT_ROOT
+        disk::usage data $MOUNT_ROOT
         disk::umount
         log_info "正在尝试修复硬盘: $dev ..."
         sudo e2fsck -yf "$dev"
@@ -846,7 +846,11 @@ vmc::upgrade() {
         n=$(echo "$q" | cut -d':' -f1)
         v=$(echo "$q" | cut -d':' -f2)
         log_info "正在安装 [$n] $v ..."
-        vmc install -n "$n" -v "$v" && log_ok "[$n] 安装成功"
+        if [[ $n == "mdrive_map" ]]; then
+            vmc install -n "$n" -v "$v" --deps && log_ok "[$n] 安装成功"
+        else
+            vmc install -n "$n" -v "$v" && log_ok "[$n] 安装成功"
+        fi
     done
     vmc list
     svc::manage start soc1
@@ -897,9 +901,10 @@ vmc::install(){
         fi
         echo ""
         log_info "正在安装 [$name] 版本: $version ..."
-        if ! vmc install -n "$name" -v "$version"; then
-            log_err "[$name] 安装过程中出现错误！"
-            return 1
+        if [[ $name == "mdrive_map" ]]; then
+            vmc install -n "$name" -v "$version" --deps && log_ok "[$name] 安装成功"
+        else
+            vmc install -n "$name" -v "$version" && log_ok "[$name] 安装成功"
         fi
     done
     svc::manage start soc1
@@ -918,8 +923,10 @@ vmc::finstall() {
     pkg_name=$(vmc fsearch -v "$version" | tail -n 1 | awk -F'name: |, version:' '{print $2}')
     if [[ -n "$pkg_name" ]]; then
         log_info "下载安装 [${pkg_name}] ${version}..."
-        if vmc install -n "$pkg_name" -v "$version"; then
-            log_ok "安装成功，手动重启服务或继续升级..."
+        if [[ $pkg_name == "mdrive_map" ]]; then
+            vmc install -n "$pkg_name" -v "$version" --deps && log_ok "安装成功，手动重启服务或继续升级..."
+        else
+            vmc install -n "$pkg_name" -v "$version" && log_ok "安装成功，手动重启服务或继续升级..."
         fi
     else
         log_err "未找到适用于 Orin 平台的包，请检查版本号是否正确！"
@@ -1029,7 +1036,7 @@ flow::pre() {
             name=$(echo "$name" | tr '/ ' '_')
             local result_file="$temp_dir/$name"
             local ping_res
-            ping_res=$(ping -c 5 -W 1 "$ip" 2>&1)
+            ping_res=$(ping -c 3 -W 2 -i 0.2 "$ip" 2>&1)
             local exit_code=$?
             if [[ $exit_code -eq 0 ]]; then
                 local loss loss_display avg_ms

@@ -19,6 +19,7 @@ find_version() {
         conf_ver=$(awk '$1=="mdrive_conf" {print $2}' "$input_data")
         model_ver=$(awk '$1=="mdrive_model" {print $2}' "$input_data")
         map_ver=$(awk '$1=="mdrive_map" {print $2}' "$input_data")
+        localization_ver=$(awk '$1=="mdrive_map_localization" {print $2}' "$input_data")
     else
         log_info "使用指定的 version.json 文件: $input_data"
         content=$(cat "$input_data")
@@ -26,6 +27,7 @@ find_version() {
         conf_ver=$(echo "$content" | jq -r .mdrive_conf)
         model_ver=$(echo "$content" | jq -r .mdrive_model)
         map_ver=$(echo "$content" | jq -r .mdrive_map)
+        localization_ver=$(echo "$content" | jq -r .mdrive_map_localization)
     fi
     vehicle_model=$(echo "$conf_ver" | cut -d'.' -f1)
     echo "------------------------------------------"
@@ -34,6 +36,7 @@ find_version() {
     echo "mdrive_conf:        $conf_ver"
     echo "mdrive_model:       $model_ver"
     echo "mdrive_map:         $map_ver"
+    echo "mdrive_map_localization: $localization_ver"
     echo "vehicle_model:      $vehicle_model"
     echo "------------------------------------------"
     if [ -z "$mdrive_ver" ] || [ -z "$conf_ver" ]; then

@@ -52,7 +52,7 @@ deploy_script() {
         return 1
     fi
     scp -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${REMOTE_HOST}:~/" && \
-    ssh -p "$port" "${REMOTE_USER}@${REMOTE_HOST}" "chmod +x ~/md.sh && ~/md.sh init"
+    ssh -p "$port" -t "${REMOTE_USER}@${REMOTE_HOST}" "chmod +x ~/md.sh && ~/md.sh init"
     return $?
 }
 

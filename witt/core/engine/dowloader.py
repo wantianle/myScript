@@ -182,7 +182,6 @@ cyber_recorder play -s {play_start} -f {records_str}
             ui.print_status("下载队列为空", "WARN")
             return
         ui.print_status(f"准备同步 {len(download_queue)} 个 Record 片段...")
-        # 执行下载流水线
         with alive_bar(
             len(download_queue),
             title="Progress",

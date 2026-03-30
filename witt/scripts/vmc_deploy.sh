@@ -17,6 +17,8 @@ chmod 755 "$VMC_EXEC"
 setup_shell_env() {
     local shell_name=$1
     local rc_file=$2
+    grep -qF "export VMC_PLATFORM=amd64" "$rc_file" || echo "export VMC_PLATFORM=amd64" >> "$rc_file"
+
     if ! grep -q "$VMC_BIN_DIR" "$rc_file"; then
         echo "export PATH=\"$VMC_BIN_DIR:\$PATH\"" >> "$rc_file"
     fi

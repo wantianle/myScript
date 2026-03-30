@@ -46,12 +46,12 @@ if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
     eval "$install_cmd"
 fi
 
-if [[ ! -w "/media" ]]; then
+if [[ ! -O "/media" ]]; then
     log_warnning "/media 没有读写权限，尝试更改..."
     sudo chown $USER:$USER /media
 fi
 
-if [[ -d $DATA_ROOT && ! -w $DATA_ROOT ]]; then
+if [[ ! -O $DATA_ROOT ]]; then
     log_warnning "$DATA_ROOT 没有读写权限，尝试更改..."
     sudo chown -R $USER:$USER $DATA_ROOT
 else
