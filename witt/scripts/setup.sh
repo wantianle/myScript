@@ -42,7 +42,11 @@ fi
 if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
     log_warnning "未检测到 mdrive 环境，尝试安装..."
     export VMC_SOFTWARE=$MDRIVE_ROOT
-    install_cmd=$(vmc fsearch -n mdrive -l amd64 -i 1 --verbose | awk -F': ' '/Install/ {print $2}')
+    install_cmd=$(vmc fsearch -n mdrive -l amd64 -i 1 | awk -F', ' '{print $1,$2}')
+    if [ -z "$install_cmd" ]; then
+        log_error "未找到 amd64 平台的 mdrive 安装包！"
+        exit 1
+    fi
     eval "$install_cmd"
 fi
 

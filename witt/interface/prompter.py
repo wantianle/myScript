@@ -98,7 +98,7 @@ def get_selected_indices(all_tasks: list, prompt="请输入要处理的序号") 
         return []
 
     while True:
-        raw_input = input(f"{prompt}\n单选 1,3，5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0: ").strip()
+        raw_input = input(f"{prompt}\n单选 1,3,5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0: ").strip()
         # 预清洗：只保留数字、横杠、逗号、空白、换行
         clean_input = re.sub(r"[^\d\-,\s\n]", "", raw_input)
         # 分词
