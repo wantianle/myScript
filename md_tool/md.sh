@@ -193,7 +193,7 @@ sys::push(){
     log_info "正在推送 ${src_path} ==> $LOCAL_USER@$host_ip:${dest_path:-$DEST_ROOT}"
     if [[ "$SYNC_TOOL" == "rsync" ]]; then
     echo "rsync"
-        rsync -rlptvzP "$src_path" "$LOCAL_USER@$host_ip:${dest_path:-$DEST_ROOT}"
+        rsync -rlptvP "$src_path" "$LOCAL_USER@$host_ip:${dest_path:-$DEST_ROOT}"
     else
         scp -r "$src_path" "$LOCAL_USER@$host_ip:${dest_path:-$DEST_ROOT}"
     fi
@@ -212,7 +212,7 @@ sys::pull(){
     fi
     log_info "正在拉取 $LOCAL_USER@$host_ip:${src_path} ==> ${dest_path:-$DEST_ROOT}"
     if [[ "$SYNC_TOOL" == "rsync" ]]; then
-        rsync -rlptvzP --protect-args "$LOCAL_USER@$host_ip:$src_path" "${dest_path:-$DEST_ROOT}"
+        rsync -rlptvP --protect-args "$LOCAL_USER@$host_ip:$src_path" "${dest_path:-$DEST_ROOT}"
     else
         scp -r "$LOCAL_USER@$host_ip:$src_path" "${dest_path:-$DEST_ROOT}"
     fi
@@ -924,10 +924,12 @@ vmc::finstall() {
     if [[ -n "$pkg_name" ]]; then
         log_info "下载安装 [${pkg_name}] ${version}..."
         if [[ $pkg_name == "mdrive_map" ]]; then
-            vmc install -n "$pkg_name" -v "$version" --deps && log_ok "安装成功，手动重启服务或继续升级..."
+            vmc install -n "$pkg_name" -v "$version" --deps
         else
-            vmc install -n "$pkg_name" -v "$version" && log_ok "安装成功，手动重启服务或继续升级..."
+            vmc install -n "$pkg_name" -v "$version"
         fi
+        vmc list
+        log_ok "安装成功，手动重启服务或继续升级..."
     else
         log_err "未找到适用于 Orin 平台的包，请检查版本号是否正确！"
         return 1
