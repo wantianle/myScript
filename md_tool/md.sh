@@ -15,19 +15,11 @@ CONFIG_PATH="$HOME/.ssh/config"
 # 路径配置
 DISK_LABEL="data"
 MOUNT_ROOT="/media/data"
-DEST_ROOT="$HOME"
-PROJECT="/data/project"
-CACHE="$PROJECT/.cache/data"
-# VMC_CACHE="$PROJECT/.vmc/cache"
-VMC_SOFTWARE="/mdrive"
-DATA_SL="$PROJECT/data"
 CONF_DIR_SOC1="/mdrive/mdrive_conf/supervisor/soc1/conf"
 CONF_DIR_SOC2="/mdrive/mdrive_conf/supervisor/soc2/conf"
-LOG_ROOT="/mdrive_data/log"
 # 网络配置
-REMOTE_USER="nvidia"
-LOCAL_USER="mini"
-REMOTE_IP="192.168.10.3"
+PC_USER="mini"
+SOC2_IP="192.168.10.3"
 SSH_OPTS="-o ConnectTimeout=2 -o ServerAliveInterval=2 -o ServerAliveCountMax=2"
 SERVER_IP="ad.minieye.tech"
 INTERNAL_DEVICES=(
@@ -51,12 +43,6 @@ packages=(
         "mdrive_dep:mdrive_dep|dep"
         "mdrive_model:mdrive_model|model"
 )
-# rsync
-if command -v rsync &> /dev/null; then
-    SYNC_TOOL="rsync"
-else
-    SYNC_TOOL="scp"
-fi
 
 #endregion
 
@@ -110,16 +96,16 @@ sys::nopasswd(){
     if [ ! -f "$KEY_PATH" ]; then
         echo "未发现密钥，正在生成默认密钥..."
         ssh-keygen -t ed25519 -f "$KEY_PATH" -N ""
-        echo "推送公钥到soc2：$REMOTE_USER@$REMOTE_IP..."
-        ssh-copy-id -i "${KEY_PATH}.pub" "$REMOTE_USER@$REMOTE_IP"
+        echo "推送公钥到soc2：$USER@$SOC2_IP..."
+        ssh-copy-id -i "${KEY_PATH}.pub" "$USER@$SOC2_IP"
     fi
     if ! grep -q "Host soc2" "$CONFIG_PATH"; then
         echo "配置 soc2 快捷登录：ssh soc2"
         cat << EOF >> "$CONFIG_PATH"
 # Orin SOC2 快捷登录
 Host soc2
-    HostName $REMOTE_IP
-    User $REMOTE_USER
+    HostName $SOC2_IP
+    User $USER
 EOF
         chmod 600 "$CONFIG_PATH"
     fi
@@ -129,8 +115,8 @@ EOF
         echo 'nvidia ALL=(ALL) NOPASSWD: ALL' | sudo tee "$SUDO_PATH"
         sudo chmod 0440 "$SUDO_PATH"
         echo "配置 soc2 免密 sudo..."
-        ssh $SSH_OPTS -t "$REMOTE_IP" "echo 'nvidia ALL=(ALL) NOPASSWD: ALL' | sudo tee $SUDO_PATH"
-        ssh $SSH_OPTS "$REMOTE_IP" "sudo chmod 0440 $SUDO_PATH"
+        ssh $SSH_OPTS -t "$SOC2_IP" "echo 'nvidia ALL=(ALL) NOPASSWD: ALL' | sudo tee $SUDO_PATH"
+        ssh $SSH_OPTS "$SOC2_IP" "sudo chmod 0440 $SUDO_PATH"
     fi
 }
 
@@ -162,65 +148,25 @@ sys::date(){
     echo -n "[soc1]date: "
     date
     echo -n "[soc2]date: "
-    ssh $SSH_OPTS "$REMOTE_IP" "date"
+    ssh $SSH_OPTS "$SOC2_IP" "date"
 }
 
 
 # 清理内盘数据
 sys::clean(){
     local avail
-    avail=$(df -BG "$CACHE" | awk 'NR==2 {print $4}' | tr -d 'G')
+    avail=$(df -BG $MDRIVE_CACHE | awk 'NR==2 {print $4}' | tr -d 'G')
     if [[ "$avail" -lt 5 ]]; then
         log_warn "系统剩余空间不足 5GB (当前: ${avail}GB)，过低会影响 OTA 版本升级，是否需要清理？(Y/n)"
         read -r confirm
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && return
-        log_info "正在清理缓存：$CACHE "
-        sudo rm -rf "$CACHE"/*
-    fi
-}
-
-
-# 推送数据到电脑
-sys::push(){
-    local src_path=$1
-    local dest_path=$2
-    local host_ip
-    host_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}')
-    if [[ -z "$src_path" ]]; then
-        echo "usage: push <src_path> [dest_path]"
-        return
-    fi
-    log_info "正在推送 ${src_path} ==> $LOCAL_USER@$host_ip:${dest_path:-$DEST_ROOT}"
-    if [[ "$SYNC_TOOL" == "rsync" ]]; then
-    echo "rsync"
-        rsync -rlptvP "$src_path" "$LOCAL_USER@$host_ip:${dest_path:-$DEST_ROOT}"
-    else
-        scp -r "$src_path" "$LOCAL_USER@$host_ip:${dest_path:-$DEST_ROOT}"
-    fi
-}
-
-
-# 拉取数据到车机端
-sys::pull(){
-    local src_path=$1
-    local dest_path=$2
-    local host_ip
-    host_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}')
-    if [[ -z "$dest_path" ]]; then
-        echo "usage: pull [src_path] [dest_path]"
-        return
-    fi
-    log_info "正在拉取 $LOCAL_USER@$host_ip:${src_path} ==> ${dest_path:-$DEST_ROOT}"
-    if [[ "$SYNC_TOOL" == "rsync" ]]; then
-        rsync -rlptvP --protect-args "$LOCAL_USER@$host_ip:$src_path" "${dest_path:-$DEST_ROOT}"
-    else
-        scp -r "$LOCAL_USER@$host_ip:$src_path" "${dest_path:-$DEST_ROOT}"
+        log_info "正在清理缓存：$MDRIVE_CACHE "
+        sudo rm -rf $MDRIVE_CACHE/data/*
     fi
 }
 
 
 sys::export() {
-    local root_dir="/mdrive_data"
     local timestamp=$(date +%m%d_%H%M)
     local local_dest="/media/mdrive_export/${timestamp}"
     local ssh_port=22
@@ -242,10 +188,10 @@ sys::export() {
     fi
 
     # 判断是否已经配置过免密 (BatchMode=yes 如果需要输密码会直接报错退出)
-    if ! ssh -q -p $ssh_port -o BatchMode=yes -o ConnectTimeout=1 "$LOCAL_USER@$local_ip" exit 2>/dev/null; then
-        log_info "未检测到免密授权，准备配置 (Target: $LOCAL_USER@$local_ip:$ssh_port)..."
-        ssh-copy-id -o StrictHostKeyChecking=no -p $ssh_port "$LOCAL_USER@$local_ip"
-        if ! ssh -q -p "$ssh_port" -o BatchMode=yes -o ConnectTimeout=1 "$LOCAL_USER@$local_ip" exit 2>/dev/null; then
+    if ! ssh -q -p $ssh_port -o BatchMode=yes -o ConnectTimeout=1 "$PC_USER@$local_ip" exit 2>/dev/null; then
+        log_info "未检测到免密授权，准备配置 (Target: $PC_USER@$local_ip:$ssh_port)..."
+        ssh-copy-id -o StrictHostKeyChecking=no -p $ssh_port "$PC_USER@$local_ip"
+        if ! ssh -q -p "$ssh_port" -o BatchMode=yes -o ConnectTimeout=1 "$PC_USER@$local_ip" exit 2>/dev/null; then
             log_err "免密配置未生效（可能是密码错误或笔记本 SSH 未开启）"
             return 1
         fi
@@ -253,10 +199,10 @@ sys::export() {
     fi
 
     # 2. 文件扫描与交互选择
-    log_info "正在扫描 $root_dir/{bag,log,core,crash_log,perf} 目录..."
+    log_info "正在扫描 $MDRIVE_DATA_ROOT/{bag,log,core,crash_log,perf} 目录..."
 
     local selections
-    selections=$(cd "$root_dir" && find -L bag log core crash_log perf -maxdepth 2 -not -path '*/.*' 2>/dev/null | sort | fzf \
+    selections=$(cd "$MDRIVE_DATA_ROOT" && find -L bag log core crash_log perf -maxdepth 2 -not -path '*/.*' 2>/dev/null | sort | fzf \
         --multi \
         --ansi \
         --layout=reverse \
@@ -269,11 +215,11 @@ sys::export() {
     local count=$(echo "$selections" | wc -l)
     log_info "开始传输 $count 项内容到 $local_dest"
 
-    ssh -p $ssh_port "$LOCAL_USER@$local_ip" "mkdir -p $local_dest"
+    ssh -p $ssh_port "$PC_USER@$local_ip" "mkdir -p $local_dest"
 
     while IFS= read -r item; do
         [[ -z "$item" ]] && continue
-        (cd "$root_dir" && rsync -avPL -R -e "ssh -p $ssh_port -o StrictHostKeyChecking=no" "$item" "$LOCAL_USER@$local_ip:$local_dest/")
+        (cd "$MDRIVE_DATA_ROOT" && rsync -avPL -R -e "ssh -p $ssh_port -o StrictHostKeyChecking=no" "$item" "$PC_USER@$local_ip:$local_dest/")
 
         if [[ $? -ne 0 ]]; then
             log_err "传输中断: $item"
@@ -298,7 +244,7 @@ svc::check() {
             fi
             ;;
         "soc2")
-            ssh $SSH_OPTS "$REMOTE_IP" "systemctl is-active --quiet mdrive.service"
+            ssh $SSH_OPTS "$SOC2_IP" "systemctl is-active --quiet mdrive.service"
             local status=$?
             if [[ $status -eq 0 ]]; then
                 echo -e "[soc2]服务状态: ${GREEN}Running${NC}"
@@ -321,7 +267,7 @@ svc::manage(){
             ;;
         "soc2")
             log_info "$action soc2 mdrive service..."
-            ssh $SSH_OPTS "$REMOTE_IP" "timeout 15 sudo systemctl $action mdrive.service"
+            ssh $SSH_OPTS "$SOC2_IP" "timeout 15 sudo systemctl $action mdrive.service"
             svc::check soc2
             ;;
     esac
@@ -335,7 +281,7 @@ svc::log(){
             sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys"
             ;;
         "soc2"|"2")
-            ssh $SSH_OPTS -t "$REMOTE_IP" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys"'
+            ssh $SSH_OPTS -t "$SOC2_IP" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys"'
             ;;
     esac
 }
@@ -352,11 +298,11 @@ svc::recorder(){
     if [[ $1 == "on" || $1 == "" ]]; then
         supervisorctl start Recorder
         supervisorctl start TestTool
-        ssh $SSH_OPTS "$REMOTE_IP" "supervisorctl start Recorder"
+        ssh $SSH_OPTS "$SOC2_IP" "supervisorctl start Recorder"
     elif [[ $1 == "off" ]]; then
         supervisorctl stop Recorder
         supervisorctl stop TestTool
-        ssh $SSH_OPTS "$REMOTE_IP" "supervisorctl stop Recorder"
+        ssh $SSH_OPTS "$SOC2_IP" "supervisorctl stop Recorder"
     else
         usage
     fi
@@ -369,7 +315,7 @@ svc::channel(){
             cyber_monitor
             ;;
         "soc2"|"2")
-            ssh $SSH_OPTS -t "$REMOTE_IP" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && cyber_monitor"
+            ssh $SSH_OPTS -t "$SOC2_IP" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && cyber_monitor"
             ;;
     esac
 }
@@ -396,16 +342,16 @@ svc::mod_handler() {
                 fi
                 if [[ "$exists" == "false" ]]; then
                     echo -e "${YELLOW}未匹配到精准日志，请手动选择:${NC}"
-                    local list_cmd="find $LOG_ROOT -maxdepth 1 -type l -name '*.INFO*' -printf '%f\n'"
+                    local list_cmd="find $GLOG_log_dir -maxdepth 1 -type l -name '*.INFO*' -printf '%f\n'"
                     local picked
-                    picked=$(eval "$list_cmd" | fzf \
+                    picked=$(eval "$list_cmd" | sort | fzf \
                         --height=100% \
                         --layout=reverse \
                         --border \
                         --header "--- 日志列表 ---" \
                         --info=inline)
                     [[ -z "$picked" ]] && return
-                    path="$LOG_ROOT/$picked"
+                    path="$GLOG_log_dir/$picked"
                 fi
             fi
             sudo less -R -S --follow-name +F "$path"
@@ -415,7 +361,7 @@ svc::mod_handler() {
             if [[ "$soc" == "soc1" ]]; then
                 sudo supervisorctl "$action" "$mod"
             else
-                ssh $SSH_OPTS "$REMOTE_IP" "sudo supervisorctl $action $mod"
+                ssh $SSH_OPTS "$SOC2_IP" "sudo supervisorctl $action $mod"
             fi
             sleep 1
             ;;
@@ -428,28 +374,28 @@ log_get_path() {
     local soc=$1
     local mod=$2
     local type=$3
-    local conf_dir="$CONF_DIR_SOC1"
-    [[ "$soc" == "soc2" ]] && conf_dir="$CONF_DIR_SOC2"
+    local conf_dir=$CONF_DIR_SOC1
+    [[ $soc == "soc2" ]] && conf_dir=$CONF_DIR_SOC2
 
-    local conf_file="$conf_dir"/"$mod".conf
+    local conf_file=$conf_dir/$mod.conf
     set -- "$conf_file"
     [[ -f "$1" ]] && conf_file="$1"
-    [[ -z "$conf_file" ]] && return
+    [[ -z $conf_file ]] && return
     local raw_cmd=""
     local sv_log=""
-    while read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^stdout_logfile= ]]; then
+    while read -r line || [[ -n $line ]]; do
+        if [[ $line =~ ^stdout_logfile= ]]; then
             sv_log="${line#*=}"
             sv_log="${sv_log%%;*}"
             sv_log="${sv_log//[[:space:]]/}"
-        elif [[ "$line" =~ /mdrive/bin ]]; then
+        elif [[ $line =~ /mdrive/bin ]]; then
             raw_cmd="$line"
         fi
     done < "$conf_file"
 
-    if [[ "$type" == "sv" ]]; then
+    if [[ $type == "sv" ]]; then
         # 情况 A: SV 日志直接返回
-        echo "$sv_log"
+        echo $sv_log
     else
         # 情况 B: Glog 探测
         local bin_name
@@ -470,8 +416,8 @@ log_get_path() {
             "${mod_clean}.INFO"
         )
         for c in "${candidates[@]}"; do
-            if [[ -L "$LOG_ROOT/$c" ]]; then
-                echo "$LOG_ROOT/$c"
+            if [[ -L "$GLOG_log_dir/$c" ]]; then
+                echo "$GLOG_log_dir/$c"
                 return
             fi
         done
@@ -483,7 +429,7 @@ log_get_path() {
 fetch_combined() {
     local s1 s2
     s1=$(sudo supervisorctl status | awk '{print "soc1 " $0}')
-    s2=$(ssh $SSH_OPTS "$REMOTE_IP" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc2 " $0}')
+    s2=$(ssh $SSH_OPTS "$SOC2_IP" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc2 " $0}')
     printf "%s\n" "$s1" "$s2" | while read -r line; do
         local clean_line soc mod state tail
         clean_line=$(echo "$line" | tr -s ' ')
@@ -500,7 +446,7 @@ fetch_combined() {
     done
 }
 export -f fetch_combined svc::mod_handler log_get_path
-export CONF_DIR_SOC1 CONF_DIR_SOC2 LOG_ROOT SSH_OPTS REMOTE_IP RED GREEN YELLOW BLUE NC
+export CONF_DIR_SOC1 CONF_DIR_SOC2 SSH_OPTS SOC2_IP RED GREEN YELLOW BLUE NC
 
 svc::module() {
     if ! command -v fzf &> /dev/null; then
@@ -544,7 +490,7 @@ disk::check(){
     else
         echo -e "[soc1]硬盘: ${RED}Umounted${NC}"
     fi
-    if ssh $SSH_OPTS "$REMOTE_IP" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
+    if ssh $SSH_OPTS "$SOC2_IP" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
         echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
     else
         echo -e "[soc2]硬盘: ${RED}Umounted or Error${NC}"
@@ -579,7 +525,7 @@ disk::umount(){
     while mountpoint -q $MOUNT_ROOT; do
         sudo umount -l $MOUNT_ROOT 2>/dev/null
     done
-    ssh $SSH_OPTS $REMOTE_IP "sudo umount -l $MOUNT_ROOT 2>/dev/null"
+    ssh $SSH_OPTS $SOC2_IP "sudo umount -l $MOUNT_ROOT 2>/dev/null"
     log_ok "硬盘卸载成功..."
 }
 
@@ -599,7 +545,7 @@ disk::diagnose(){
         return 2
     fi
 
-    ssh $SSH_OPTS "$REMOTE_IP" "mountpoint -q $MOUNT_ROOT"
+    ssh $SSH_OPTS "$SOC2_IP" "mountpoint -q $MOUNT_ROOT"
     local res=$?
     if [[ ! $res =~ ^(0|130|255)$ ]]; then
         log_err "硬盘未挂载 soc2:$MOUNT_ROOT"
@@ -616,7 +562,7 @@ disk::diagnose(){
         return 4
     fi
 
-    if ! ssh $SSH_OPTS "$REMOTE_IP" "timeout 2 stat -t $MOUNT_ROOT/data >/dev/null 2>&1"; then
+    if ! ssh $SSH_OPTS "$SOC2_IP" "timeout 2 stat -t $MOUNT_ROOT/data >/dev/null 2>&1"; then
         log_err "挂载目录内容无法访问 $MOUNT_ROOT"
         return 4
     fi
@@ -626,22 +572,22 @@ disk::diagnose(){
         return 5
     fi
 
-    if ssh $SSH_OPTS "$REMOTE_IP" "grep $MOUNT_ROOT /proc/mounts | grep -q ' ro,'"; then
+    if ssh $SSH_OPTS "$SOC2_IP" "grep $MOUNT_ROOT /proc/mounts | grep -q ' ro,'"; then
         log_err "文件系统已降级为 [只读] soc2:${MOUNT_ROOT}"
         return 5
     fi
 
     local path
-    path=$(readlink -f $DATA_SL)
+    path=$(readlink -f $MDRIVE_DATA_ROOT)
     if [[ $path != "$MOUNT_ROOT/data" ]]; then
-        log_warn "路径链接指向错误 $DATA_SL -> $path"
+        log_warn "路径链接指向错误 $MDRIVE_DATA_ROOT -> $path"
         return 6
     fi
 
     local avail
-    avail=$(df -BG "$CACHE" | awk 'NR==2 {print $4}' | tr -d 'G')
+    avail=$(df -BG "$MDRIVE_CACHE" | awk 'NR==2 {print $4}' | tr -d 'G')
     if [[ "$avail" -lt 5 ]]; then
-        log_warn "$CACHE 剩余空间不足 5GB (当前: ${avail}GB)，过低会影响 OTA 版本升级"
+        log_warn "$MDRIVE_CACHE 剩余空间不足 5GB (当前: ${avail}GB)，过低会影响 OTA 版本升级"
         return 7
     fi
 
@@ -666,7 +612,7 @@ disk::fix(){
         "2"|"3")
         disk::umount
         sudo mount $dev $MOUNT_ROOT
-        ssh $SSH_OPTS "$REMOTE_IP" "sudo systemctl restart media-data.mount"
+        ssh $SSH_OPTS "$SOC2_IP" "sudo systemctl restart media-data.mount"
         log_ok "挂载清理完成！"
         ;;
         "4"|"5")
@@ -681,12 +627,12 @@ disk::fix(){
         fi
         ;;
         "6")
-        ln -snf $MOUNT_ROOT/data $DATA_SL
-        log_ok "修改成功：$DATA_SL -> $MOUNT_ROOT/data"
+        ln -snf $MOUNT_ROOT/data $MDRIVE_DATA_ROOT
+        log_ok "修改成功：$MDRIVE_DATA_ROOT -> $MOUNT_ROOT/data"
         ;;
         "7")
-        sudo rm -rf "$CACHE"/*
-        log_ok "缓存清理成功：$CACHE "
+        sudo rm -rf "$MDRIVE_CACHE"/*
+        log_ok "缓存清理成功：$MDRIVE_CACHE "
         ;;
     esac
     log_ok "修复完成，请手动重启服务！"
@@ -982,7 +928,7 @@ vmc::rollback() {
         return 1
     fi
     local selected_line
-    selected_line=$(echo "$versions_list" | grep -E "orin_dsv|any" | fzf \
+    selected_line=$(echo "$versions_list" | grep -E "$VMC_PLATFORM|any" | fzf \
         --ansi \
         --header "发布时间            |  远程版本号 (搜索关键字: $search_v)" \
         --layout=reverse \
@@ -1012,7 +958,7 @@ flow::pre() {
     log_info "----------- Network Check -----------"
 
     printf "%-41s" "[网络] SOC2 :"
-    if ssh $SSH_OPTS -q "$REMOTE_IP" exit; then
+    if ssh $SSH_OPTS -q "$SOC2_IP" exit; then
         echo -e "${GREEN}正常${NC}"
     else
         echo -e "${RED}断开${NC}"
@@ -1070,8 +1016,8 @@ flow::pre() {
     local ts1 t1_str ts2 t2_str
     ts1=$(date +%s)
     t1_str=$(date +"%Y-%m-%d %H:%M:%S")
-    ts2=$(ssh $SSH_OPTS "$REMOTE_IP" date +%s)
-    t2_str=$(ssh $SSH_OPTS "$REMOTE_IP" "date +'%Y-%m-%d %H:%M:%S'")
+    ts2=$(ssh $SSH_OPTS "$SOC2_IP" date +%s)
+    t2_str=$(ssh $SSH_OPTS "$SOC2_IP" "date +'%Y-%m-%d %H:%M:%S'")
 
     # 获取服务器时间 (尝试 curl，如果服务器不通则跳过)
     local ts_server=0
@@ -1104,11 +1050,11 @@ flow::pre() {
     log_info "------- Disk Check (<85% Use) -------"
 
     disk::usage "Root (/)" "/"
-    disk::usage "Cache (.cache)" "$CACHE"
+    disk::usage "Cache (.cache)" $MDRIVE_CACHE
     disk::diagnose
     local res=$?
     if [[ $res -eq 0 ]]; then
-        disk::usage "External ($DISK_LABEL)" "$MOUNT_ROOT"
+        disk::usage "External ($DISK_LABEL)" $MOUNT_ROOT
     else
         log_warn "是否进行修复？('y'或回车继续，其他键退出)"
         read -r ans

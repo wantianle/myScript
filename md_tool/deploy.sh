@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 
-# =================配置区域=================
+# 配置
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_HOST="ad.minieye.tech"
 REMOTE_USER="nvidia"
-LOCAL_SCRIPT="./md.sh"
+LOCAL_SCRIPT="$DIR/md.sh"
+bindir="$DIR/bin"
 # 待部署的软件包列表 (空格分隔)
 DEB_FILES=(
-    "rsync_3.1.3-8ubuntu0.9_arm64.deb" "fzf_0.29.0-1ubuntu0.1_arm64.deb"
+    "rsync_3.1.3-8ubuntu0.9_arm64.deb" "fzf_0.29.0-1ubuntu0.1_arm64.deb" "less_551-1_arm64.deb"
 )
 # 代码内预设端口 (如果为空则运行时提示输入)
 PRESET_PORTS=()
-# PRESET_PORTS=()
 
 # 颜色定义
 GREEN='\033[0;32m'
@@ -18,8 +19,6 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
-
-# =================功能函数=================
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -33,11 +32,11 @@ deploy_software() {
     local port=$1
     log_info "[$port] 正在部署软件包..."
     for deb in "${DEB_FILES[@]}"; do
-        if [[ ! -f "$deb" ]]; then
+        if [[ ! -f "$bindir/$deb" ]]; then
             log_err "本地找不到文件: $deb"
             return 1
         fi
-        scp -P "$port" "$deb" "${REMOTE_USER}@${REMOTE_HOST}:~/" && \
+        scp -P "$port" "$bindir/$deb" "${REMOTE_USER}@${REMOTE_HOST}:~/" && \
         ssh -p "$port" -t "${REMOTE_USER}@${REMOTE_HOST}" "sudo dpkg -i ~/$deb && rm ~/$deb"
         [[ $? -ne 0 ]] && return 1
     done
@@ -55,8 +54,6 @@ deploy_script() {
     ssh -p "$port" -t "${REMOTE_USER}@${REMOTE_HOST}" "chmod +x ~/md.sh && ~/md.sh init"
     return $?
 }
-
-# =================逻辑主流程=================
 
 # 1. 确定端口列表
 if [ ${#PRESET_PORTS[@]} -gt 0 ]; then
