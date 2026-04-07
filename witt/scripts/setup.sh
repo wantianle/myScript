@@ -42,7 +42,8 @@ fi
 if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
     log_warnning "未检测到 mdrive 环境，尝试安装..."
     export VMC_SOFTWARE=$MDRIVE_ROOT
-    vmc fsearch -n mdrive -l amd64 | awk -F'[,:]' '$2 == " mdrive" {print $4}' | xargs -I {} echo "vmc install -n mdrive -v {}"
+    cmd=$(vmc fsearch -n mdrive -l amd64 | awk -F'[,:]' '$2 == " mdrive" {print $4; exit}' | xargs -I {} echo "vmc install -n mdrive -v {}")
+    eval "$cmd"
 fi
 
 if [[ ! -O "/media" ]]; then
