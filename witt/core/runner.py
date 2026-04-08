@@ -36,7 +36,7 @@ class ScriptRunner:
         self._run_script("restore_env.sh")
 
     def run_tools(self):
-        self._run_script("tools.sh")
+        self._run_script("start.sh")
 
     def run_docker(self):
         self._run_script("dev_start.sh", True, "--remove")

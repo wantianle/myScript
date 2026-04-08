@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 USER_NAME="nvidia"
 SOC1_IP="192.168.10.2"

@@ -171,13 +171,13 @@ sys::export() {
     local local_dest="/media/mdrive_export/${timestamp}"
     local ssh_port=22
     local local_ip=""
+
     # 检查是否存在反向隧道 (监听在车端本地的 2222 端口)
-    if netstat -tuln | grep -q ":2222 "; then
+    if netstat -tuln | grep -q ":2222"; then
         log_info "检测到 SSH 反向隧道，启用公网回传模式..."
         local_ip="127.0.0.1"
         ssh_port=2222
     else
-        # 如果没有隧道，走原有的局域网探测逻辑
         local_ip=$(echo "$SSH_CONNECTION" | awk '{print $1}' | tr -d '\r')
         log_info "走局域网直连模式 (Target: $local_ip)..."
     fi
@@ -187,15 +187,16 @@ sys::export() {
         return 1
     fi
 
-    # 判断是否已经配置过免密 (BatchMode=yes 如果需要输密码会直接报错退出)
-    if ! ssh -q -p $ssh_port -o BatchMode=yes -o ConnectTimeout=1 "$PC_USER@$local_ip" exit 2>/dev/null; then
+    ssh_opts=( -p "$ssh_port" -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -o LogLevel=ERROR )
+
+    if ! ssh -q "${ssh_opts[@]}" "$PC_USER@$local_ip" exit 2>/dev/null; then
         log_info "未检测到免密授权，准备配置 (Target: $PC_USER@$local_ip:$ssh_port)..."
-        ssh-copy-id -o StrictHostKeyChecking=no -p $ssh_port "$PC_USER@$local_ip"
-        if ! ssh -q -p "$ssh_port" -o BatchMode=yes -o ConnectTimeout=1 "$PC_USER@$local_ip" exit 2>/dev/null; then
-            log_err "免密配置未生效（可能是密码错误或笔记本 SSH 未开启）"
+        if ssh-copy-id "${ssh_opts[@]}" "$PC_USER@$local_ip"; then
+            log_ok "免密验证通过！"
             return 1
+        else
+            log_err "免密配置未生效（可能是密码错误或笔记本 SSH 未开启）"
         fi
-        log_ok "免密验证通过！"
     fi
 
     # 2. 文件扫描与交互选择
@@ -215,12 +216,13 @@ sys::export() {
     local count=$(echo "$selections" | wc -l)
     log_info "开始传输 $count 项内容到 $local_dest"
 
-    ssh -p $ssh_port "$PC_USER@$local_ip" "mkdir -p $local_dest"
+    ssh "${ssh_opts[@]}" "$PC_USER@$local_ip" "mkdir -p $local_dest"
+
+    cd $MDRIVE_DATA_ROOT
 
     while IFS= read -r item; do
         [[ -z "$item" ]] && continue
-        (cd "$MDRIVE_DATA_ROOT" && rsync -avPL -R -e "ssh -p $ssh_port -o StrictHostKeyChecking=no" "$item" "$PC_USER@$local_ip:$local_dest/")
-
+        rsync -avPL -R -e "ssh ${ssh_opts[*]}" "$item" "$PC_USER@$local_ip:$local_dest/"
         if [[ $? -ne 0 ]]; then
             log_err "传输中断: $item"
         fi

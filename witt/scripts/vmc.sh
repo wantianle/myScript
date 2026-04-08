@@ -37,4 +37,6 @@ ${VMC_CMD} install --name mdrive_conf  --version ${MDRIVE_CONF_VERSION}
 ${VMC_CMD} install --name mdrive_model --version ${MDRIVE_MODEL_VERSION}
 ${VMC_CMD} install --name mdrive_map  --version ${MDRIVE_MAP_VERSION} --deps
 
+[[ -f "${ROOT_DIR}/patch.sh" ]] && bash "${ROOT_DIR}/patch.sh"
+
 bash ${VMC_SOFTWARE}/mdrive/docker/dev_start.sh  --remove

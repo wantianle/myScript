@@ -36,7 +36,7 @@ if [[ ! -f $VMC_SH ]]; then
     log_warnning "未找到 vmc.sh 文件, 尝试创建..."
     mkdir -p "$MDRIVE_ROOT"
     cp "$DIR/vmc.sh" "$VMC_SH"
-    chmod +x "$MDRIVE_ROOT/vmc.sh"
+    chmod +x "$VMC_SH"
 fi
 
 if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
@@ -44,6 +44,9 @@ if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
     export VMC_SOFTWARE=$MDRIVE_ROOT
     cmd=$(vmc fsearch -n mdrive -l amd64 | awk -F'[,:]' '$2 == " mdrive" {print $4; exit}' | xargs -I {} echo "vmc install -n mdrive -v {}")
     eval "$cmd"
+    cp "$DIR/patch.sh" "$MDRIVE_ROOT/patch.sh"
+    chmod +x "$MDRIVE_ROOT/patch.sh"
+    bash "$MDRIVE_ROOT/patch.sh"
 fi
 
 if [[ ! -O "/media" ]]; then
