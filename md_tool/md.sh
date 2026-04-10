@@ -858,9 +858,9 @@ vmc::install(){
     svc::manage start soc1
     svc::manage start soc2
     vmc list
-    log_info "是否查看模块状态？('y'或回车继续，其他键退出)"
-    read -r ans
-    [[ "$ans" == "y" || "$ans" == "" ]] && svc::module || return 0
+    # log_info "是否查看模块状态？('y'或回车继续，其他键退出)"
+    # read -r ans
+    # [[ "$ans" == "y" || "$ans" == "" ]] && svc::module || return 0
 }
 
 

@@ -18,6 +18,7 @@ def menu():
         Choice(title="[仅回播] 手动选择/自动扫描回播", value="2"),
         Choice(title="[仅同步] 同步本地 mdrive 版本", value="3"),
         Choice(title="[进容器] 交互式进 docker bash", value="4"),
+        Choice(title="[回灌红绿灯] 一键回灌红绿灯数据", value="5"),
         Choice(title="[ 退出 ]", value="q"),
     ]
     menu_map = {
@@ -28,6 +29,7 @@ def menu():
         "2": lambda: workflow.play_flow(session),
         "3": lambda: workflow.restore_env_flow(session),
         "4": lambda: session.runner.into_docker(),
+        "5": lambda: workflow.replay_traffic_light_flow(session),
     }
 
     while True:

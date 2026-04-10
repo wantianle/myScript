@@ -43,7 +43,14 @@ def restore_env_flow(session: AppSession, auto: bool = False):
     session.runner.run_restore_env()
     if prompter.get_confirm_input("是否需要打开 Dreamview & Multiviz？"):
         session.runner.run_tools()
+    if prompter.get_confirm_input(
+        "是否需要打开 Debug_Driver-LiDAR & Debug_Driver-Camera & Perception-TrafficLight？"
+    ):
+        session.runner.run_traffic_light()
 
+
+def replay_traffic_light_flow(session: AppSession):
+    manual_play(session)
 
 def play_flow(session: AppSession):
     manual = prompter.get_confirm_input("手动选择文件播放？")

@@ -1,0 +1,37 @@
+input_cache_num: 32
+bgr_cache_num: 16
+compressed_cache_num: 16
+process_num: 1
+input_conf {
+  type: CYBER_CHANNEL
+  cybre_conf {
+      camera_channel_name: "/mdrive/sensor/camera/front_30/image/compressed"
+      type: MDRIVE_IMAGE
+      channel_id: 1
+  }
+  cybre_conf {
+      camera_channel_name: "/mdrive/sensor/camera/front_120/image/compressed"
+      type: MDRIVE_IMAGE
+      channel_id: 2
+  }
+}
+process_conf {
+  type: H264
+  send_compressed: false
+  out_type: NV12
+}
+publish_conf {
+  cybre_conf {
+      camera_channel_name: "/mdrive/sensor/camera/front_30/image/nv12"
+      channel_id: 1
+  }
+  cybre_conf {
+      camera_channel_name: "/mdrive/sensor/camera/front_120/image/nv12"
+      channel_id: 2
+  }
+}
+agent_config {
+report_channel: "/mdrive/fault_manage/report"
+summary_channel: "/mdrive/fault_manage/summary"
+interval: 0.1
+}

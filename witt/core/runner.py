@@ -38,6 +38,9 @@ class ScriptRunner:
     def run_tools(self):
         self._run_script("start.sh")
 
+    def run_traffic_light(self):
+        self._run_script("traffic_light.sh")
+
     def run_docker(self):
         self._run_script("dev_start.sh", True, "--remove")
 
