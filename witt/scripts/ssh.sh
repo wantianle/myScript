@@ -46,8 +46,7 @@ for IP in $SOC1_IP $SOC2_IP; do
     ssh-keygen -f "$HOME/.ssh/known_hosts" -R "192.168.10.2"
     ssh-keygen -f "$HOME/.ssh/known_hosts" -R "192.168.10.3"
     # 使用 -o 参数确保 ssh-copy-id 过程中也不检查指纹
-    ssh-copy-id -o StrictHostKeyChecking=no -i "${KEY_PATH}.pub" "$USER_NAME@$IP"
-    if [ $? -eq 0 ]; then
+    if ssh-copy-id -o StrictHostKeyChecking=no -i "${KEY_PATH}.pub" "$USER_NAME@$IP"; then
         echo "$IP 公钥上传成功！"
     else
         echo "$IP 公钥上传失败，请检查网络或密码。"

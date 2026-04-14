@@ -30,7 +30,7 @@ log_info() {
     printf "${GREEN}%s[INFO] %s${NC}\n" "$(log_prefix)" "$*"
 }
 
-log_warnning() {
+log_warning() {
     printf "${YELLOW}%s[WARN] %s${NC}\n" "$(log_prefix)" "$*"
 }
 

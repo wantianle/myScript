@@ -14,7 +14,7 @@ VENV_DIR="$DIR/../.venv"
 VENV_PIP="$VENV_DIR/bin/pip"
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 if [ ! -d "$VENV_DIR" ]; then
-    log_warnning "未检测到虚拟环境，尝试安装..."
+    log_warning "未检测到虚拟环境，尝试安装..."
     sudo apt-get update && sudo apt-get install python${PY_VER}-venv -y
     python3 -m venv "$VENV_DIR"
     $VENV_PIP install -i $INDEX --trusted-host mirrors.aliyun.com -r "$DIR/../requirements.txt"
@@ -23,24 +23,24 @@ fi
 source $VENV_DIR/bin/activate
 
 if ! command -v jq >/dev/null 2>&1; then
-    log_warnning "未检测到 jq ，尝试安装..."
+    log_warning "未检测到 jq ，尝试安装..."
     sudo apt-get install -y jq
 fi
 
 if ! command -v vmc >/dev/null 2>&1; then
-    log_warnning "未检测到 vmc 工具，尝试安装..."
+    log_warning "未检测到 vmc 工具，尝试安装..."
     bash "$DIR/vmc_deploy.sh"
 fi
 
 if [[ ! -f $VMC_SH ]]; then
-    log_warnning "未找到 vmc.sh 文件, 尝试创建..."
+    log_warning "未找到 vmc.sh 文件, 尝试创建..."
     mkdir -p "$MDRIVE_ROOT"
     cp "$DIR/vmc.sh" "$VMC_SH"
     chmod +x "$VMC_SH"
 fi
 
 if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
-    log_warnning "未检测到 mdrive 环境，尝试安装..."
+    log_warning "未检测到 mdrive 环境，尝试安装..."
     export VMC_SOFTWARE=$MDRIVE_ROOT
     cmd=$(vmc fsearch -n mdrive -l amd64 | awk -F'[,:]' '$2 == " mdrive" {print $4; exit}' | xargs -I {} echo "vmc install -n mdrive -v {}")
     eval "$cmd"
@@ -50,12 +50,12 @@ if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
 fi
 
 if [[ ! -O "/media" ]]; then
-    log_warnning "/media 没有读写权限，尝试更改..."
+    log_warning "/media 没有读写权限，尝试更改..."
     sudo chown $USER:$USER /media
 fi
 
 if [[ ! -O $DATA_ROOT ]]; then
-    log_warnning "$DATA_ROOT 没有读写权限，尝试更改..."
+    log_warning "$DATA_ROOT 没有读写权限，尝试更改..."
     sudo chown -R $USER:$USER $DATA_ROOT
 else
     mkdir -p $DATA_ROOT
@@ -64,7 +64,7 @@ fi
 if [ "$(docker ps -a -q -f name=$CONTAINER)" ]; then
     docker restart $CONTAINER > /dev/null
 else
-    log_warnning "docker 容器不存在, 尝试创建环境..."
+    log_warning "docker 容器不存在, 尝试创建环境..."
     bash $DEV_START_SCRIPT
 fi
 

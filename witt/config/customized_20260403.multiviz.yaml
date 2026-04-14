@@ -3,7 +3,8 @@ Panels:
     Help Height: 0
     Name: Displays
     Property Tree Widget:
-      Expanded: ~
+      Expanded:
+        - /[mdrive] Perception1
       Splitter Ratio: 0.5069252252578735
     Tree Height: 337
   - Class: rviz_common/Views
@@ -19,10 +20,11 @@ Visualization Manager:
     - Class: mdrive/Perception
       Enabled: true
       Heading: true
-      Info Text: true
+      Info Text: false
       Name: "[mdrive] Perception"
       Obstacle Type:
         BICYCLE: true
+        FENCE: true
         PEDESTRIAN: true
         UNKNOWN: true
         UNKNOWN_MOVABLE: true
@@ -111,7 +113,7 @@ Visualization Manager:
         Value: true
       Marking_CrossWalk:
         Id: true
-        Value: true
+        Value: false
       Name: Hdmap
       Radius: 0
       Reference Frame: <Fixed Frame>
@@ -229,7 +231,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -8.919997215270996
+      Angle: -7.72499418258667
       Class: rviz_default_plugins/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
