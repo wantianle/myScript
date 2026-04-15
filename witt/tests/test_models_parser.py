@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from types import ModuleType
+from typing import Any, cast
 import sys
 
 from core.models import (
@@ -48,11 +49,28 @@ def _fake_checkbox(*args, **kwargs):
     return _Prompt()
 
 
-fake_questionary.Choice = _FakeChoice
-fake_questionary.Style = _fake_style
-fake_questionary.select = _fake_select
-fake_questionary.checkbox = _fake_checkbox
+setattr(fake_questionary, "Choice", _FakeChoice)
+setattr(fake_questionary, "Style", _fake_style)
+setattr(fake_questionary, "select", _fake_select)
+setattr(fake_questionary, "checkbox", _fake_checkbox)
 sys.modules.setdefault("questionary", fake_questionary)
+
+fake_alive_progress = ModuleType("alive_progress")
+
+
+def _fake_alive_bar(*args, **kwargs):
+    class _Bar:
+        def __enter__(self):
+            return lambda *bar_args, **bar_kwargs: None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    return _Bar()
+
+
+setattr(fake_alive_progress, "alive_bar", _fake_alive_bar)
+sys.modules.setdefault("alive_progress", fake_alive_progress)
 
 from interface import replay_workflow
 
@@ -256,11 +274,12 @@ class ReplayWorkflowTests(unittest.TestCase):
                 "/data/soc1/20260415120000.record.00001.120001",
             ],
         )
-        session = SimpleNamespace(
+        raw_session = SimpleNamespace(
             ctx=SimpleNamespace(
                 logic=SimpleNamespace(before=15, after=5)
             )
         )
+        session = cast(Any, raw_session)
 
         replay_records = replay_workflow._build_source_replay_records(session, task_entry)
 
