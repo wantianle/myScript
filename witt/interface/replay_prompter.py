@@ -15,6 +15,7 @@ def select_playback_entry(
     vehicle: str,
     target_date: str,
 ) -> Optional[LibraryEntry]:
+    """从过滤后的回放库中选择一个回放条目。"""
     filtered_library = [
         entry
         for entry in library
@@ -36,6 +37,7 @@ def select_playback_entry(
 
 
 def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
+    """从单个回放条目中选择要播放的 SOC 记录。"""
     socs = sorted(list(tag_entry.socs.keys()))
     if not socs:
         ui.print_status("当前回播条目没有可用的 SOC 数据", "WARN")
@@ -60,6 +62,7 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
 
 
 def get_playback_range() -> tuple:
+    """读取并解析回放时间范围输入。"""
     range_input = input(
         "调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播): "
     ).strip()
@@ -67,20 +70,14 @@ def get_playback_range() -> tuple:
 
 
 def get_manual_replay_paths() -> List[Path]:
+    """获取手动回放模式下用户提供的文件路径列表。"""
     ui.show_manual_play_header()
     return get_dragged_input()
 
 
 def get_dragged_input() -> List[Path]:
     """
-    解决拖拽多文件自带换行的问题。
-    嗅探标准输入缓冲区，把所有排队中的路径一次性读完。
-    处理拖拽进终端的字符串：
-    1. 自动去引号
-    2. 兼容空格分隔的多文件；兼容 Kitty/Gnome 终端常见的路径格式
-    3. 还原空格、中文字符、特殊符号编码
-    4. 过滤出 .record 文件或目录
-    5. 去重并进行排序：根据 record 序列号 (.00001) 排序
+    读取拖拽进终端的 record 文件或目录并返回排序后的文件列表。
     """
     lines = [sys.stdin.readline()]
     while select.select([sys.stdin], [], [], 0.1)[0]:

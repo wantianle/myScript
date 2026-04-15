@@ -37,6 +37,7 @@ class TaskContext:
     temp_dir: Path = field(init=False)
 
     def __post_init__(self):
+        """加载配置并初始化当前会话的上下文目录。"""
         raw_config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
         self.app_config = AppConfig.from_dict(raw_config)
         self.logic.target_date = datetime.now().strftime("%Y%m%d")
@@ -84,7 +85,8 @@ class TaskContext:
     def manifest_path(self) -> Path:
         return self.temp_dir / "tasks.list"
 
-    def _cleanup_temp(self):
+    def _cleanup_temp(self) -> None:
+        """在会话结束时清理临时目录。"""
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
@@ -97,7 +99,8 @@ class TaskContext:
             path = path / soc
         return path
 
-    def setup_logger(self):
+    def setup_logger(self) -> None:
+        """初始化全局日志器。"""
         if self._logger_ready:
             return
         self.log_dir.mkdir(parents=True, exist_ok=True)
