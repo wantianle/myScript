@@ -10,7 +10,7 @@ from interface import ui
 
 
 def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str]:
-    """勾选式频道选择器"""
+    """显示可勾选的频道列表并返回选中的频道名。"""
     choices = [
         Choice(
             title=f"{channel.name:<20} (Msg Count: {channel.count})",

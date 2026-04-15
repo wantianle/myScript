@@ -66,7 +66,7 @@ class RecordPlayer:
             cache_path=self.library_file,
         )
 
-    def _serialize_library(self, library_entries: List[LibraryEntry]):
+    def _serialize_library(self, library_entries: List[LibraryEntry]) -> list:
         """将回放库对象转换为可写入 JSON 的结构。"""
         serialized_entries = []
         for library_entry in library_entries:
@@ -92,7 +92,7 @@ class RecordPlayer:
             )
         return serialized_entries
 
-    def _deserialize_library(self, raw_library) -> List[LibraryEntry]:
+    def _deserialize_library(self, raw_library: list) -> List[LibraryEntry]:
         """将缓存文件中的原始结构还原为回放库对象。"""
         deserialized_entries = []
         for raw_entry in raw_library:
@@ -163,6 +163,7 @@ class RecordPlayer:
         start_sec: int = 0,
         end_sec: int = 0,
     ) -> PlaybackPlan:
+        """根据回放记录和时间窗构建最终执行计划。"""
         if not records:
             raise ValueError("播放列表为空")
 
