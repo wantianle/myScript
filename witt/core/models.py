@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, TypedDict, Union
+from typing import Dict, Iterable, List, Optional, Sequence, TypedDict, Union
 
 
 class RawTaskEntry(TypedDict, total=False):
@@ -62,11 +62,14 @@ class RawReplayRecord(TypedDict):
     duration: int
 
 
-class RawLibraryEntry(TypedDict, total=False):
+class RawLibraryEntryRequired(TypedDict):
     tag: str
     time: str
     vehicle: str
     date: str
+
+
+class RawLibraryEntry(RawLibraryEntryRequired, total=False):
     last_update: Dict[str, str]
     socs: Dict[str, List[RawReplayRecord]]
 
@@ -80,8 +83,11 @@ class RawTagInfo(TypedDict):
     abs_end: str
 
 
-class RawRecordMeta(TypedDict, total=False):
+class RawRecordMetaRequired(TypedDict):
     tag_info: RawTagInfo
+
+
+class RawRecordMeta(RawRecordMetaRequired, total=False):
     vehicle: str
     date: str
     last_update: Dict[str, str]
