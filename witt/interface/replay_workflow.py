@@ -4,6 +4,7 @@ import termios
 from pathlib import Path
 
 from . import prompter
+from . import replay_prompter
 from . import ui
 from core.errors import RecordInfoError, PathMappingError
 from core.session import AppSession
@@ -81,7 +82,7 @@ def _replay_records(session: AppSession, records: list, replay_mode: str, loaded
         return
     while True:
         ui.print_status(loaded_msg)
-        start, end = prompter.get_playback_range()
+        start, end = replay_prompter.get_playback_range()
         try:
             playback_plan = session.player.build_playback_plan(records, start, end)
         except (ValueError, PathMappingError) as e:
@@ -108,14 +109,14 @@ def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDAR
         if not library:
             ui.print_status("本地目录为空！", "WARN")
             return
-        selected_tag = prompter.select_playback_entry(
+        selected_tag = replay_prompter.select_playback_entry(
             library,
             session.ctx.vehicle,
             session.ctx.target_date,
         )
         if not selected_tag:
             break
-        target_records = prompter.select_replay_records(selected_tag)
+        target_records = replay_prompter.select_replay_records(selected_tag)
         if not target_records:
             continue
         total_duration = max(r["duration"] for r in target_records)
@@ -129,7 +130,7 @@ def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDAR
 
 def manual_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
     try:
-        paths = prompter.get_manual_replay_paths()
+        paths = replay_prompter.get_manual_replay_paths()
         if not paths:
             return
         if os.name == "posix":
