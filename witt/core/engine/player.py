@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import List
 
 from core.models import LibraryEntry, RawLibraryEntry, ReplayRecord
-from core.repository import LibraryCacheRepository, MetadataRepository
 
 
 @dataclass
@@ -22,13 +21,11 @@ class PlaybackPlan:
 
 
 class RecordPlayer:
-    def __init__(self, session):
+    def __init__(self, session, library_cache, metadata_repository):
         self.session = session
         self.ctx = session.ctx
-        self.library_cache = LibraryCacheRepository(
-            self.ctx.work_dir / ".witt" / "local_library.json"
-        )
-        self.metadata_repository = MetadataRepository()
+        self.library_cache = library_cache
+        self.metadata_repository = metadata_repository
 
     @property
     def executor(self):

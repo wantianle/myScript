@@ -5,6 +5,7 @@ from core.adapter.ssh import SSHAdapter
 from core.engine.downloader import RecordDownloader
 from core.engine.player import RecordPlayer
 from core.engine.recorder import Recorder
+from core.repository import LibraryCacheRepository, MetadataRepository
 
 from pathlib import Path
 
@@ -19,8 +20,19 @@ class AppSession:
         self.ctx = TaskContext(DEFAULT_CONFIG_PATH)
         self.runner = ScriptRunner(self.ctx)
         self.recorder = Recorder(self)
-        self.record_downloader = RecordDownloader(self)
-        self.player = RecordPlayer(self)
+        self.metadata_repository = MetadataRepository()
+        self.library_cache_repository = LibraryCacheRepository(
+            self.ctx.work_dir / ".witt" / "local_library.json"
+        )
+        self.record_downloader = RecordDownloader(
+            self,
+            metadata_repository=self.metadata_repository,
+        )
+        self.player = RecordPlayer(
+            self,
+            library_cache=self.library_cache_repository,
+            metadata_repository=self.metadata_repository,
+        )
 
     @property
     def executor(self):

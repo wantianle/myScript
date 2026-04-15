@@ -23,6 +23,7 @@ sys.modules.setdefault("alive_progress", fake_alive_progress)
 
 from core.engine.downloader import RecordDownloader
 from core.models import HostConfig, LogicConfig, TaskEntry
+from core.repository import MetadataRepository
 
 
 class _FakeContext:
@@ -76,7 +77,10 @@ class DownloaderPlanningTests(unittest.TestCase):
             record_path = source_dir / "demo.record"
             record_path.write_text("record", encoding="utf-8")
 
-            downloader = RecordDownloader(_FakeSession(root_path))
+            downloader = RecordDownloader(
+                _FakeSession(root_path),
+                metadata_repository=MetadataRepository(),
+            )
             task_entry = TaskEntry.from_manifest_parts(
                 time="2026-04-15 12:00:00",
                 name="demo_tag",
@@ -97,7 +101,10 @@ class DownloaderPlanningTests(unittest.TestCase):
             record_path = source_dir / "demo.record"
             record_path.write_text("record", encoding="utf-8")
 
-            downloader = RecordDownloader(_FakeSession(root_path))
+            downloader = RecordDownloader(
+                _FakeSession(root_path),
+                metadata_repository=MetadataRepository(),
+            )
             task_entry = TaskEntry.from_manifest_parts(
                 time="2026-04-15 12:00:00",
                 name="demo_tag",

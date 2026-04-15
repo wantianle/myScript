@@ -9,7 +9,6 @@ from typing import List
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
 from core.models import RecordMeta, TaskEntry
-from core.repository import MetadataRepository
 from utils import parser
 
 
@@ -58,11 +57,11 @@ class DownloadSummary:
 
 
 class RecordDownloader:
-    def __init__(self, session):
+    def __init__(self, session, metadata_repository):
         self.session = session
         self.ctx = session.ctx
         self.recorder = session.recorder
-        self.metadata_repository = MetadataRepository()
+        self.metadata_repository = metadata_repository
 
     @property
     def mode(self):
