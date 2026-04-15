@@ -15,16 +15,10 @@ class RecordDownloader:
         self.session = session
         self.ctx = session.ctx
         self.recorder = session.recorder
-        self.remote_user = self.ctx.config["remote"]["user"]
-        self.remote_ip = self.ctx.config["remote"]["ip"]
 
     @property
     def mode(self):
         return self.ctx.config["logic"]["mode"]
-
-    @property
-    def dest_root(self):
-        return Path(self.ctx.config["host"]["dest_root"])
 
     def _prepare_dir(self, target_dir: Path):
         """
@@ -270,7 +264,7 @@ cyber_recorder play -s {play_start} -f {records_str}
             bar()
         self._finalize_batch(batch, processed_files, batch_failed)
 
-    def download_record(self, task_list):
+    def download_records(self, task_list):
         """
         负责高层调度和进度条
         """

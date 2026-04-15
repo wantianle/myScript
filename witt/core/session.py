@@ -2,7 +2,7 @@ from core.context import TaskContext
 from core.runner import ScriptRunner
 from core.adapter.docker import DockerAdapter
 from core.adapter.ssh import SSHAdapter
-from core.engine.dowloader import RecordDownloader
+from core.engine.downloader import RecordDownloader
 from core.engine.player import RecordPlayer
 from core.engine.recorder import Recorder
 
@@ -19,7 +19,7 @@ class AppSession:
         self.ctx = TaskContext(DEFAULT_CONFIG_PATH)
         self.runner = ScriptRunner(self.ctx)
         self.recorder = Recorder(self)
-        self.downloader = RecordDownloader(self)
+        self.record_downloader = RecordDownloader(self)
         self.player = RecordPlayer(self)
 
     @property

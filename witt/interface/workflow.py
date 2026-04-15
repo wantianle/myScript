@@ -28,7 +28,7 @@ def full_progress(session: AppSession):
         session.ctx.config["logic"]["blacklist"] = (
             prompter.get_tasks_channels(session, valid_tasks) or ""
         )
-        session.downloader.download_record(valid_tasks)
+        session.record_downloader.download_records(valid_tasks)
         if prompter.get_confirm_input("\n切片处理完成，是否立即回播数据?", True):
             auto_replay_flow(session, REPLAY_MODE_STANDARD)
     except Exception as e:
