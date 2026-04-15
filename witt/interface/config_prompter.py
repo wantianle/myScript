@@ -49,13 +49,13 @@ def get_path_params(ctx):
         prompter.choose_option("\n数据输入模式", ["本地", "NAS", "车端"], True)
     )
     if ctx.logic.mode == 1:
-        ctx.config["host"]["data_root"] = prompter.get_user_input(
+        ctx.host.data_root = prompter.get_user_input(
             "原始数据路径 (限/media下)",
-            ctx.config["host"]["data_root"],
+            ctx.host.data_root,
         )
-    ctx.config["host"]["dest_root"] = prompter.get_user_input(
+    ctx.host.dest_root = prompter.get_user_input(
         "切片导出路径 (限/media下)",
-        ctx.config["host"]["dest_root"],
+        ctx.host.dest_root,
     )
     get_split_params(ctx)
 
@@ -78,7 +78,7 @@ def get_json_input() -> str:
 
 
 def update_dest_root(ctx, prompt: str) -> None:
-    ctx.config["host"]["dest_root"] = prompter.get_user_input(
+    ctx.host.dest_root = prompter.get_user_input(
         prompt,
-        ctx.config["host"]["dest_root"],
+        ctx.host.dest_root,
     )

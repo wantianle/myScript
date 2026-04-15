@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
-from core.models import LogicConfig
+from core.models import DockerConfig, HostConfig, LogicConfig, PathsConfig, RemoteConfig
 
 class Formatter(logging.Formatter):
     """处理颜色与格式"""
@@ -34,11 +34,19 @@ class TaskContext:
     config_path: Path
 
     config: dict = field(init=False)
+    host: HostConfig = field(init=False)
+    remote: RemoteConfig = field(init=False)
+    docker: DockerConfig = field(init=False)
+    paths: PathsConfig = field(init=False)
     logic: LogicConfig = field(init=False)
     temp_dir: Path = field(init=False)
 
     def __post_init__(self):
         self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+        self.host = HostConfig.from_dict(self.config["host"])
+        self.remote = RemoteConfig.from_dict(self.config["remote"])
+        self.docker = DockerConfig.from_dict(self.config["docker"])
+        self.paths = PathsConfig.from_dict(self.config["paths"])
         self.logic = LogicConfig.from_dict(self.config["logic"])
         self.logic.target_date = datetime.now().strftime("%Y%m%d")
         self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
@@ -54,7 +62,7 @@ class TaskContext:
 
     @property
     def work_dir(self) -> Path:
-        base = Path(self.config["host"]["dest_root"])
+        base = Path(self.host.dest_root)
         return base / self.target_date[:8] / self.vehicle
 
     @property
@@ -105,7 +113,7 @@ class TaskContext:
         TaskContext._logger_ready = True
         logging.info("=" * 50)
         logging.info(
-            "Witt Logger Initialized. Data_root: %s", self.config["host"]["data_root"]
+            "Witt Logger Initialized. Data_root: %s", self.host.data_root
         )
         logging.info("Log File: %s", log_file)
         logging.info("=" * 50)
@@ -129,19 +137,19 @@ class TaskContext:
             "MANIFEST_PATH": self.manifest_path,
             "VEHICLE": self.vehicle,
             "TARGET_DATE": self.target_date,
-            "NAS_ROOT": self.config["host"]["nas_root"],
-            "DEST_ROOT": self.config["host"]["dest_root"],
-            "MDRIVE_ROOT": self.config["host"]["mdrive_root"],
-            "DATA_ROOT": self.config["host"]["data_root"],
+            "NAS_ROOT": self.host.nas_root,
+            "DEST_ROOT": self.host.dest_root,
+            "MDRIVE_ROOT": self.host.mdrive_root,
+            "DATA_ROOT": self.host.data_root,
             "SOC": self.logic.soc,
             "BEFORE": self.logic.before,
             "AFTER": self.logic.after,
             "MODE": self.logic.mode,
             "VERSION": self.logic.version,
-            "CONTAINER": self.config["docker"]["container"],
-            "REMOTE_USER": self.config["remote"]["user"],
-            "REMOTE_IP": self.config["remote"]["ip"],
-            "REMOTE_DATA_ROOT": self.config["remote"]["data_root"],
+            "CONTAINER": self.docker.container,
+            "REMOTE_USER": self.remote.user,
+            "REMOTE_IP": self.remote.ip,
+            "REMOTE_DATA_ROOT": self.remote.data_root,
         }
         full_env = os.environ.copy()
         full_env.update({k: str(v) for k, v in vars.items()})

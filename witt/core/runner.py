@@ -8,9 +8,7 @@ class ScriptRunner:
     def __init__(self, ctx):
         self.ctx = ctx
         PROJECT_ROOT = Path(__file__).resolve().parents[1]
-        self.scripts_dir = (
-            PROJECT_ROOT / self.ctx.config["paths"]["scripts_dir"]
-        ).resolve()
+        self.scripts_dir = (PROJECT_ROOT / self.ctx.paths.scripts_dir).resolve()
 
     def _run_script(self, script_name: str, quiet: bool = False, *args: str):
         """
@@ -18,7 +16,7 @@ class ScriptRunner:
         """
         script_path = self.scripts_dir / script_name
         if not script_path.exists():
-            script_path = Path(self.ctx.config["docker"]["docker_scripts"]) / script_name
+            script_path = Path(self.ctx.docker.docker_scripts) / script_name
         env_vars = self.ctx.get_env_vars()
         bash_cmd = ["bash"]
         # if self.ctx.config["env"]["debug"]:

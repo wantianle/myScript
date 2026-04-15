@@ -10,10 +10,10 @@ class DockerAdapter(BaseAdapter):
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.container = ctx.config["docker"]["container"]
-        self.setup_env = ctx.config["docker"]["setup_env"]
-        self.host_mount = Path(ctx.config["docker"]["host_mount"]).resolve()
-        self.docker_mount = Path(ctx.config["docker"]["docker_mount"])
+        self.container = ctx.docker.container
+        self.setup_env = ctx.docker.setup_env
+        self.host_mount = Path(ctx.docker.host_mount).resolve()
+        self.docker_mount = Path(ctx.docker.docker_mount)
 
     def wrap_env(self, cmd: str) -> str:
         base_env = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"

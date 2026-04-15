@@ -48,6 +48,68 @@ class LogicConfig:
 
 
 @dataclass
+class HostConfig:
+    mdrive_root: str
+    nas_root: str
+    data_root: str
+    dest_root: str
+
+    @classmethod
+    def from_dict(cls, raw_host: Dict[str, Any]) -> "HostConfig":
+        return cls(
+            mdrive_root=str(raw_host.get("mdrive_root", "")),
+            nas_root=str(raw_host.get("nas_root", "")),
+            data_root=str(raw_host.get("data_root", "")),
+            dest_root=str(raw_host.get("dest_root", "")),
+        )
+
+
+@dataclass
+class RemoteConfig:
+    user: str
+    ip: str
+    data_root: str
+
+    @classmethod
+    def from_dict(cls, raw_remote: Dict[str, Any]) -> "RemoteConfig":
+        return cls(
+            user=str(raw_remote.get("user", "")),
+            ip=str(raw_remote.get("ip", "")),
+            data_root=str(raw_remote.get("data_root", "")),
+        )
+
+
+@dataclass
+class DockerConfig:
+    container: str
+    host_mount: str
+    docker_mount: str
+    docker_scripts: str
+    setup_env: str
+
+    @classmethod
+    def from_dict(cls, raw_docker: Dict[str, Any]) -> "DockerConfig":
+        return cls(
+            container=str(raw_docker.get("container", "")),
+            host_mount=str(raw_docker.get("host_mount", "")),
+            docker_mount=str(raw_docker.get("docker_mount", "")),
+            docker_scripts=str(raw_docker.get("docker_scripts", "")),
+            setup_env=str(raw_docker.get("setup_env", "")),
+        )
+
+
+@dataclass
+class PathsConfig:
+    scripts_dir: str
+
+    @classmethod
+    def from_dict(cls, raw_paths: Dict[str, Any]) -> "PathsConfig":
+        return cls(
+            scripts_dir=str(raw_paths.get("scripts_dir", "")),
+        )
+
+
+@dataclass
 class ReplayRecord:
     path: str
     begin: Union[str, datetime]

@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 class SSHAdapter(BaseAdapter):
     """远程执行命令适配器（精简重构版）"""
 
-    def __init__(self, config) -> None:
-        self.user = config["remote"]["user"]
-        self.ip = config["remote"]["ip"]
-        self.setup_env = config["docker"]["setup_env"]
+    def __init__(self, ctx) -> None:
+        self.user = ctx.remote.user
+        self.ip = ctx.remote.ip
+        self.setup_env = ctx.docker.setup_env
         self.remote_addr = f"{self.user}@{self.ip}"
         self.env_setup_cmd = (
             "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8 && "

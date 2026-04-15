@@ -160,7 +160,7 @@ class RecordDownloader:
 
         # 生成 README
         v_content = version_files[0].read_text(encoding="utf-8", errors="replace")
-        nas_path = save_dir.relative_to(Path(self.ctx.config["host"]["dest_root"]))
+        nas_path = save_dir.relative_to(Path(self.ctx.host.dest_root))
         before = int(self.ctx.logic.before)
         after = int(self.ctx.logic.after)
         play_lead = 10
@@ -179,7 +179,7 @@ class RecordDownloader:
 ```
 - **数据路径：**
 ```bash
-cd {self.ctx.config["host"]["nas_root"]}/{nas_path}
+cd {self.ctx.host.nas_root}/{nas_path}
 ```
 - **数据时刻：**
 ```bash
