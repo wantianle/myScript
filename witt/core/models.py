@@ -140,6 +140,19 @@ class ReplayRecord:
     duration: int
 
     @classmethod
+    def from_local_file(
+        cls,
+        file_path: Path,
+        begin: Union[str, datetime],
+        duration: Union[int, float],
+    ) -> "ReplayRecord":
+        return cls(
+            path=str(file_path.absolute()),
+            begin=begin,
+            duration=int(duration),
+        )
+
+    @classmethod
     def from_cache_dict(cls, raw_record: Mapping[str, Any]) -> "ReplayRecord":
         return cls(
             path=str(raw_record["path"]),
@@ -196,6 +209,36 @@ class LibraryEntry:
                 for soc_name, replay_records in self.socs.items()
             },
         }
+
+    @classmethod
+    def from_metadata(cls, meta: Mapping[str, Any], tag_dir: Path) -> "LibraryEntry":
+        entry = cls(
+            tag=str(meta["tag_info"]["name"]),
+            time=str(meta["tag_info"]["time"]),
+            vehicle=str(meta.get("vehicle", tag_dir.parent.name)),
+            date=str(meta.get("date", tag_dir.parents[1].name)),
+            last_update=dict(meta.get("last_update") or {}),
+        )
+        for soc_name, file_names in meta.get("files", {}).items():
+            soc_path = tag_dir / soc_name
+            if not soc_path.exists():
+                continue
+            replay_records = []
+            for file_name in file_names:
+                file_path = soc_path / file_name
+                if file_path.exists():
+                    replay_records.append(
+                        ReplayRecord.from_local_file(
+                            file_path=file_path,
+                            begin=meta["tag_info"]["abs_start"],
+                            duration=meta["tag_info"]["offset_bf"]
+                            + meta["tag_info"]["offset_af"],
+                        )
+                    )
+            if replay_records:
+                replay_records.sort(key=lambda replay_record: replay_record.begin)
+                entry.socs[soc_name] = replay_records
+        return entry
 
 
 @dataclass

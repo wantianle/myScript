@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 from core.models import LibraryEntry, ReplayRecord
 
@@ -66,11 +66,17 @@ class RecordPlayer:
             cache_path=self.library_file,
         )
 
-    def _serialize_library(self, library_entries: List[LibraryEntry]) -> list:
+    def _serialize_library(
+        self,
+        library_entries: List[LibraryEntry],
+    ) -> List[Dict[str, Any]]:
         """将回放库对象转换为可写入 JSON 的结构。"""
         return [library_entry.to_cache_dict() for library_entry in library_entries]
 
-    def _deserialize_library(self, raw_library: list) -> List[LibraryEntry]:
+    def _deserialize_library(
+        self,
+        raw_library: List[Dict[str, Any]],
+    ) -> List[LibraryEntry]:
         """将缓存文件中的原始结构还原为回放库对象。"""
         return [LibraryEntry.from_cache_dict(raw_entry) for raw_entry in raw_library]
 
@@ -81,33 +87,7 @@ class RecordPlayer:
             tag_dir = meta_file.parent
             try:
                 meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                tag_name = meta["tag_info"]["name"]
-                tag_entry = LibraryEntry(
-                    tag=tag_name,
-                    time=meta["tag_info"]["time"],
-                    vehicle=meta.get("vehicle", tag_dir.parent.name),
-                    date=meta.get("date", tag_dir.parents[1].name),
-                    last_update=meta.get("last_update") or {},
-                )
-                for soc_name, file_names in meta.get("files", {}).items():
-                    soc_path = tag_dir / soc_name
-                    if not soc_path.exists():
-                        continue
-                    record_details = []
-                    for fname in file_names:
-                        f_abs_path = soc_path / fname
-                        if f_abs_path.exists():
-                            record_details.append(
-                                ReplayRecord(
-                                    path=str(f_abs_path.absolute()),
-                                    begin=meta["tag_info"]["abs_start"],
-                                    duration=meta["tag_info"]["offset_bf"]
-                                    + meta["tag_info"]["offset_af"],
-                                )
-                            )
-                    if record_details:
-                        record_details.sort(key=lambda replay_record: replay_record.begin)
-                        tag_entry.socs[soc_name] = record_details
+                tag_entry = LibraryEntry.from_metadata(meta, tag_dir)
                 library_map[str(tag_dir)] = tag_entry
             except Exception as e:
                 raise RuntimeError(f"[{meta_file}] 元数据解析失败") from e
