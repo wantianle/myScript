@@ -13,6 +13,25 @@ from core.session import AppSession
 from interface import ui
 from utils import parser
 
+MAIN_MENU_CHOICES = [
+    Choice(title="[全流程] 查询 -> 切片 -> 回放", value="1"),
+    Choice(title="[仅回播] 手动选择/自动扫描回播", value="2"),
+    Choice(title="[仅同步] 同步本地 mdrive 版本", value="3"),
+    Choice(title="[进容器] 交互式进 docker bash", value="4"),
+    Choice(title="[回灌红绿灯] 一键回灌红绿灯数据", value="5"),
+    Choice(title="[ 退出 ]", value="q"),
+]
+
+MAIN_MENU_STYLE = questionary.Style(
+    [
+        ("qmark", "fg:yellow bold"),
+        ("question", "bold"),
+        ("pointer", "fg:cyan bold"),
+        ("highlighted", "fg:cyan bold"),
+        ("selected", "fg:green"),
+    ]
+)
+
 
 def get_user_input(prompt: str, default_value: str):
     try:
@@ -174,6 +193,22 @@ def get_confirm_input(prompt: str, default: bool = False) -> bool:
     if not res:
         return default
     return res == "y"
+
+
+def select_main_menu_action():
+    return questionary.select(
+        "请选择操作 :",
+        choices=MAIN_MENU_CHOICES,
+        use_shortcuts=True,
+        style=MAIN_MENU_STYLE,
+    ).ask()
+
+
+def wait_for_continue():
+    try:
+        input("按回车键继续...")
+    except KeyboardInterrupt:
+        print()
 
 
 def get_json_input() -> str:

@@ -1,8 +1,7 @@
 import logging
 import sys
-import questionary
-from questionary import Choice
 
+from . import prompter
 from . import ui
 from . import workflow
 from core.session import AppSession
@@ -23,31 +22,7 @@ def menu():
 
     while True:
         ui.print_banner()
-        choices = [
-            Choice(title="[全流程] 查询 -> 切片 -> 回放", value="1"),
-            # Choice(title="[仅查询] 查询 tag 对应 record", value="2"),
-            # Choice(title="[仅压缩] 指定文件过滤 Channel", value="3"),
-            # Choice(title="[仅切片] 指定目录时间进行切片", value="4"),
-            Choice(title="[仅回播] 手动选择/自动扫描回播", value="2"),
-            Choice(title="[仅同步] 同步本地 mdrive 版本", value="3"),
-            Choice(title="[进容器] 交互式进 docker bash", value="4"),
-            Choice(title="[回灌红绿灯] 一键回灌红绿灯数据", value="5"),
-            Choice(title="[ 退出 ]", value="q"),
-        ]
-        choice = questionary.select(
-            "请选择操作 :",
-            choices=choices,
-            use_shortcuts=True,
-            style=questionary.Style(
-                [
-                    ("qmark", "fg:yellow bold"),  # 问号颜色
-                    ("question", "bold"),
-                    ("pointer", "fg:cyan bold"),
-                    ("highlighted", "fg:cyan bold"),  # 选中项颜色
-                    ("selected", "fg:green"),  # 确认项颜色
-                ]
-            ),
-        ).ask()
+        choice = prompter.select_main_menu_action()
 
         if choice is None or choice == "q":
             sys.exit(0)
@@ -60,4 +35,4 @@ def menu():
                 ui.print_status("用户终止程序...", "WARN")
             except Exception as e:
                 logging.error(f"执行操作 {choice} 时发生异常: {e}")
-            input("按回车键继续...")
+            prompter.wait_for_continue()
