@@ -32,21 +32,36 @@ class ScriptRunner:
     def run_find_record(self):
         self._run_script("find_record.sh")
 
+    def restore_runtime_environment(self):
+        self._run_script("restore_runtime_env.sh")
+
+    def start_replay_stack(self):
+        self._run_script("start_replay_stack.sh")
+
+    def start_traffic_light_stack(self):
+        self._run_script("start_traffic_light_stack.sh")
+
+    def start_standard_replay_stack(self):
+        self.start_replay_stack()
+
+    def start_traffic_light_replay_stack(self):
+        self.start_standard_replay_stack()
+        self.start_traffic_light_stack()
+
     def run_restore_env(self):
-        self._run_script("restore_env.sh")
+        self.restore_runtime_environment()
 
     def run_tools(self):
-        self._run_script("start.sh")
+        self.start_replay_stack()
 
     def run_traffic_light(self):
-        self._run_script("traffic_light.sh")
+        self.start_traffic_light_stack()
 
     def run_standard_replay_stack(self):
-        self.run_tools()
+        self.start_standard_replay_stack()
 
     def run_traffic_light_replay_stack(self):
-        self.run_standard_replay_stack()
-        self.run_traffic_light()
+        self.start_traffic_light_replay_stack()
 
     def run_docker(self):
         self._run_script("dev_start.sh", True, "--remove")

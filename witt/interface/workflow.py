@@ -30,7 +30,7 @@ def full_progress(session: AppSession):
         )
         session.downloader.download_record(valid_tasks)
         if prompter.get_confirm_input("\n切片处理完成，是否立即回播数据?", True):
-            auto_play(session, REPLAY_MODE_STANDARD)
+            auto_replay_flow(session, REPLAY_MODE_STANDARD)
     except Exception as e:
         raise e
 
@@ -41,7 +41,7 @@ def search_flow(session: AppSession):
     session.runner.run_find_record()
 
 
-def restore_env_flow(
+def restore_environment_flow(
     session: AppSession,
     auto: bool = False,
     launch_mode: str = "prompt",
@@ -51,45 +51,45 @@ def restore_env_flow(
         if not session.ctx.config["logic"]["version"]:
             ui.print_status("未提供版本文件，已取消环境恢复", "WARN")
             return False
-    session.runner.run_restore_env()
+    session.runner.restore_runtime_environment()
     if launch_mode == "prompt":
         if prompter.get_confirm_input("是否需要打开 Dreamview & Multiviz？"):
-            session.runner.run_standard_replay_stack()
+            session.runner.start_standard_replay_stack()
         if prompter.get_confirm_input(
             "是否需要打开 Debug_Driver-LiDAR & Debug_Driver-Camera & Perception-TrafficLight？"
         ):
-            session.runner.run_traffic_light()
+            session.runner.start_traffic_light_stack()
     elif launch_mode == REPLAY_MODE_STANDARD:
-        session.runner.run_standard_replay_stack()
+        session.runner.start_standard_replay_stack()
     elif launch_mode == REPLAY_MODE_TRAFFIC_LIGHT:
-        session.runner.run_traffic_light_replay_stack()
+        session.runner.start_traffic_light_replay_stack()
     return True
 
 
-def replay_traffic_light_flow(session: AppSession):
+def traffic_light_replay_flow(session: AppSession):
     manual = prompter.get_confirm_input("手动选择文件回灌？")
     if manual:
-        manual_play(session, REPLAY_MODE_TRAFFIC_LIGHT)
+        manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
     else:
         prompter.get_basic_params(session.ctx.config)
         session.ctx.config["host"]["dest_root"] = prompter.get_user_input(
             "输入要扫描的回灌路径(限/media下)",
             session.ctx.config["host"]["dest_root"],
         )
-        auto_play(session, REPLAY_MODE_TRAFFIC_LIGHT)
+        auto_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
 
 
-def play_flow(session: AppSession):
+def replay_flow(session: AppSession):
     manual = prompter.get_confirm_input("手动选择文件播放？")
     if manual:
-        manual_play(session, REPLAY_MODE_STANDARD)
+        manual_replay_flow(session, REPLAY_MODE_STANDARD)
     else:
         prompter.get_basic_params(session.ctx.config)
         session.ctx.config["host"]["dest_root"] = prompter.get_user_input(
             "输入要扫描的回播路径(限/media下)",
             session.ctx.config["host"]["dest_root"],
         )
-        auto_play(session, REPLAY_MODE_STANDARD)
+        auto_replay_flow(session, REPLAY_MODE_STANDARD)
 
 def _resolve_version_from_records(session: AppSession, records: list) -> bool:
     version_path = next(Path(records[0]["path"]).parent.glob("version*"), None)
@@ -100,7 +100,11 @@ def _resolve_version_from_records(session: AppSession, records: list) -> bool:
 def _prepare_replay(session: AppSession, records: list, replay_mode: str) -> bool:
     auto_version = _resolve_version_from_records(session, records)
     launch_mode = "prompt" if replay_mode == REPLAY_MODE_STANDARD else REPLAY_MODE_TRAFFIC_LIGHT
-    return restore_env_flow(session, auto=auto_version, launch_mode=launch_mode)
+    return restore_environment_flow(
+        session,
+        auto=auto_version,
+        launch_mode=launch_mode,
+    )
 
 
 def _replay_records(session: AppSession, records: list, replay_mode: str, loaded_msg: str):
@@ -120,7 +124,7 @@ def _replay_records(session: AppSession, records: list, replay_mode: str, loaded
             break
 
 
-def auto_play(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
+def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
     """
     自动扫描指定路径下的文件，专门负责回播界面的展示和用户输入处理
     """
@@ -157,7 +161,7 @@ def auto_play(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
         )
 
 
-def manual_play(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
+def manual_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
     """
     手动播放循环，保留文件列表，支持多次调整时间播放
     """
@@ -186,3 +190,10 @@ def manual_play(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
         )
     except Exception as e:
         raise e
+
+
+restore_env_flow = restore_environment_flow
+replay_traffic_light_flow = traffic_light_replay_flow
+play_flow = replay_flow
+auto_play = auto_replay_flow
+manual_play = manual_replay_flow

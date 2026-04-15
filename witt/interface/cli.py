@@ -15,10 +15,10 @@ def menu():
         # "2": lambda: workflow.search_flow(session),
         # "3": lambda: workflow.compress_flow(session),
         # "4": lambda: workflow.slice_flow(session),
-        "2": lambda: workflow.play_flow(session),
-        "3": lambda: workflow.restore_env_flow(session),
+        "2": lambda: workflow.replay_flow(session),
+        "3": lambda: workflow.restore_environment_flow(session),
         "4": lambda: session.runner.into_docker(),
-        "5": lambda: workflow.replay_traffic_light_flow(session),
+        "5": lambda: workflow.traffic_light_replay_flow(session),
     }
 
     while True:
