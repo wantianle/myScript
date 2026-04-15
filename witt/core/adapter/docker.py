@@ -8,7 +8,7 @@ from core.errors import PathMappingError
 class DockerAdapter(BaseAdapter):
     """负责在 Docker 容器内执行命令并处理路径映射"""
 
-    def __init__(self, ctx):
+    def __init__(self, ctx) -> None:
         self.ctx = ctx
         self.container = ctx.docker.container
         self.setup_env = ctx.docker.setup_env
@@ -37,7 +37,7 @@ class DockerAdapter(BaseAdapter):
         )
         return result.stdout
 
-    def execute_interactive(self, cmd: str):
+    def execute_interactive(self, cmd: str) -> None:
         play_cmd = (
             f"docker exec -it {self.container} /bin/bash -c '{self.wrap_env(cmd)}'"
         )

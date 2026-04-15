@@ -2,7 +2,7 @@ import math
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Sequence, Tuple, Union
 
 from core.models import ChannelInfo, RecordInfo, TaskEntry
 from interface import ui
@@ -55,8 +55,8 @@ def str_to_time(t_str: str) -> datetime:
         raise
 
 
-def time_to_str(dt: Any) -> str:
-    """转回 Cyber 要求的字符串"""
+def time_to_str(dt: Union[datetime, str]) -> str:
+    """将 datetime 或字符串转换为 Cyber 需要的时间字符串。"""
     if isinstance(dt, datetime):
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return str(dt)
@@ -97,8 +97,8 @@ def parse_manifest(manifest_path: Path) -> List[TaskEntry]:
     return tasks
 
 
-def parse_range_logic(range_in: str) -> tuple:
-    """专门处理播放时间范围字符串，确保永远返回两个整数"""
+def parse_range_logic(range_in: str) -> Tuple[int, int]:
+    """解析播放时间范围字符串并返回起止秒数。"""
     if not range_in:
         return 0, 0
     try:
@@ -112,15 +112,15 @@ def parse_range_logic(range_in: str) -> tuple:
     return 0, 0
 
 
-def sort_records(file_list: list) -> list:
+def sort_records(file_list: Sequence[Path]) -> List[Path]:
     """
     根据 Cyber Record 的序号进行全局排序
     排序规则：先按序号排，序号相同按文件名排（处理 soc1/soc2 同序号情况）
     文件名示例: 20260110125227.record.00005.125739
     """
 
-    def get_index(path) -> int:
+    def get_index(path: Path) -> int:
         match = re.search(r"\.record\.(\d+)", path.name)
         return int(match.group(1)) if match else 0
 
-    return sorted(file_list, key=lambda x: (get_index(x), x.name))
+    return sorted(file_list, key=lambda path: (get_index(path), path.name))
