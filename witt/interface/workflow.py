@@ -6,68 +6,69 @@ from . import replay_workflow
 from core.session import AppSession
 from utils import parser
 
-def full_progress(session: AppSession):
-    try:
-        search_flow(session)
-        task_list = parser.parse_manifest(session.ctx.manifest_path)
-        if not task_list:
-            ui.print_status("未找到相关 Record 记录", "ERROR")
-            return
-        selected_tasks = prompter.get_selected_indices(
-            task_list, prompt="请选择要处理的 Tag 序号"
+def _show_skipped_batches(skipped_batches) -> None:
+    """输出被跳过批次的摘要信息。"""
+    for skipped_batch in skipped_batches:
+        ui.print_status(
+            f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
+            "ERROR",
         )
-        valid_tasks = [task_entry for task_entry in selected_tasks if task_entry.paths]
-        if not valid_tasks:
-            ui.print_status("所选序号无效或无路径数据", "ERROR")
-            return
-        session.ctx.logic.blacklist = (
-            channel_prompter.get_tasks_channels(
-                session,
-                valid_tasks,
-                prompter.get_confirm_input,
-            )
-            or []
-        )
-        planned_summary = session.record_downloader.plan_download(valid_tasks)
-        if planned_summary.total_files <= 0:
-            ui.print_status("下载队列为空", "WARN")
-            for skipped_batch in planned_summary.skipped_batches:
-                ui.print_status(
-                    f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
-                    "ERROR",
-                )
-            return
-        ui.print_status(f"准备同步 {planned_summary.total_files} 个 Record 片段...")
-        for skipped_batch in planned_summary.skipped_batches:
-            ui.print_status(
-                f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
-                "ERROR",
-            )
-        download_summary = session.record_downloader.download_records(valid_tasks)
-        for skipped_batch in download_summary.skipped_batches:
-            ui.print_status(
-                f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
-                "ERROR",
-            )
-        for failed_batch in download_summary.failed_batches:
-            ui.print_status(
-                f"{failed_batch.task_name}[{failed_batch.soc_name}] 失败: {failed_batch.reason}",
-                "WARN",
-            )
-        if not download_summary.completed_batches:
-            ui.print_status("没有成功完成的切片批次", "WARN")
-            return
-        ui.print_status("所有同步任务已完成！")
-        if prompter.get_confirm_input("\n切片处理完成，是否立即回播数据?", True):
-            replay_workflow.auto_replay_flow(
-                session,
-                replay_workflow.REPLAY_MODE_STANDARD,
-            )
-    except Exception as e:
-        raise e
 
 
-def search_flow(session: AppSession):
+def _show_failed_batches(failed_batches) -> None:
+    """输出失败批次的摘要信息。"""
+    for failed_batch in failed_batches:
+        ui.print_status(
+            f"{failed_batch.task_name}[{failed_batch.soc_name}] 失败: {failed_batch.reason}",
+            "WARN",
+        )
+
+
+def full_progress(session: AppSession) -> None:
+    """执行查询、切片和可选回放的一体化主流程。"""
+    search_flow(session)
+    task_list = parser.parse_manifest(session.ctx.manifest_path)
+    if not task_list:
+        ui.print_status("未找到相关 Record 记录", "ERROR")
+        return
+    selected_tasks = prompter.get_selected_indices(
+        task_list, prompt="请选择要处理的 Tag 序号"
+    )
+    valid_tasks = [task_entry for task_entry in selected_tasks if task_entry.paths]
+    if not valid_tasks:
+        ui.print_status("所选序号无效或无路径数据", "ERROR")
+        return
+    session.ctx.logic.blacklist = (
+        channel_prompter.get_tasks_channels(
+            session,
+            valid_tasks,
+            prompter.get_confirm_input,
+        )
+        or []
+    )
+    planned_summary = session.record_downloader.plan_download(valid_tasks)
+    if planned_summary.total_files <= 0:
+        ui.print_status("下载队列为空", "WARN")
+        _show_skipped_batches(planned_summary.skipped_batches)
+        return
+    ui.print_status(f"准备同步 {planned_summary.total_files} 个 Record 片段...")
+    _show_skipped_batches(planned_summary.skipped_batches)
+    download_summary = session.record_downloader.download_records(valid_tasks)
+    _show_skipped_batches(download_summary.skipped_batches)
+    _show_failed_batches(download_summary.failed_batches)
+    if not download_summary.completed_batches:
+        ui.print_status("没有成功完成的切片批次", "WARN")
+        return
+    ui.print_status("所有同步任务已完成！")
+    if prompter.get_confirm_input("\n切片处理完成，是否立即回播数据?", True):
+        replay_workflow.auto_replay_flow(
+            session,
+            replay_workflow.REPLAY_MODE_STANDARD,
+        )
+
+
+def search_flow(session: AppSession) -> None:
+    """采集查询条件并执行 Record 检索脚本。"""
     config_prompter.get_basic_params(session.ctx)
     config_prompter.get_path_params(session.ctx)
     session.runner.run_find_record()

@@ -7,7 +7,8 @@ from . import workflow
 from core.session import AppSession
 
 
-def menu():
+def menu() -> None:
+    """显示主菜单并分发用户选择的动作。"""
     session = AppSession()
     menu_map = {
         "1": lambda: workflow.full_progress(session),

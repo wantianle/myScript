@@ -20,7 +20,8 @@ def restore_environment_flow(
     session: AppSession,
     auto: bool = False,
     launch_mode: str = "prompt",
-):
+) -> bool:
+    """恢复运行环境并按模式启动回放相关栈。"""
     if not auto:
         session.ctx.logic.version = config_prompter.get_json_input()
         if not session.ctx.logic.version:
@@ -41,7 +42,8 @@ def restore_environment_flow(
     return True
 
 
-def traffic_light_replay_flow(session: AppSession):
+def traffic_light_replay_flow(session: AppSession) -> None:
+    """执行红绿灯回灌模式的入口编排。"""
     manual = prompter.get_confirm_input("手动选择文件回灌？")
     if manual:
         manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
@@ -54,7 +56,8 @@ def traffic_light_replay_flow(session: AppSession):
         auto_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
 
 
-def replay_flow(session: AppSession):
+def replay_flow(session: AppSession) -> None:
+    """执行标准回放模式的入口编排。"""
     manual = prompter.get_confirm_input("手动选择文件播放？")
     if manual:
         manual_replay_flow(session, REPLAY_MODE_STANDARD)
@@ -71,6 +74,7 @@ def _resolve_version_from_records(
     session: AppSession,
     records: List[ReplayRecord],
 ) -> bool:
+    """从当前回放记录中推断版本文件路径。"""
     version_path = next(Path(records[0].path).parent.glob("version*"), None)
     session.ctx.logic.version = version_path or ""
     return version_path is not None
@@ -81,6 +85,7 @@ def _prepare_replay(
     records: List[ReplayRecord],
     replay_mode: str,
 ) -> bool:
+    """为回放准备环境和工具栈。"""
     auto_version = _resolve_version_from_records(session, records)
     launch_mode = "prompt" if replay_mode == REPLAY_MODE_STANDARD else REPLAY_MODE_TRAFFIC_LIGHT
     return restore_environment_flow(
@@ -95,7 +100,8 @@ def _replay_records(
     records: List[ReplayRecord],
     replay_mode: str,
     loaded_msg: str,
-):
+) -> None:
+    """执行一轮可重复调整时间窗的回放循环。"""
     if not records:
         ui.print_status("回播列表为空", "WARN")
         return
@@ -119,7 +125,11 @@ def _replay_records(
             break
 
 
-def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
+def auto_replay_flow(
+    session: AppSession,
+    replay_mode: str = REPLAY_MODE_STANDARD,
+) -> None:
+    """自动扫描目录并选择回放条目。"""
     while True:
         library_result = session.player.load_library()
         if library_result.cache_hit:
@@ -149,34 +159,35 @@ def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDAR
         )
 
 
-def manual_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDARD):
+def manual_replay_flow(
+    session: AppSession,
+    replay_mode: str = REPLAY_MODE_STANDARD,
+) -> None:
+    """手动选择文件后执行回放。"""
+    paths = replay_prompter.get_manual_replay_paths()
+    if not paths:
+        return
+    if os.name == "posix":
+        termios.tcflush(sys.stdin, termios.TCIFLUSH)
     try:
-        paths = replay_prompter.get_manual_replay_paths()
-        if not paths:
-            return
-        if os.name == "posix":
-            termios.tcflush(sys.stdin, termios.TCIFLUSH)
-        try:
-            info_start = session.recorder.get_info(str(paths[0]))
-            info_end = session.recorder.get_info(str(paths[-1]))
-        except RecordInfoError as e:
-            ui.print_status(str(e), "ERROR")
-            return
-        tag_start = info_start.begin
-        tag_end = info_end.end
-        tag_duration = int((tag_end - tag_start).total_seconds())
-        current_records = [
-            ReplayRecord(path=str(path_obj), begin=tag_start, duration=tag_duration)
-            for path_obj in paths
-        ]
-        _replay_records(
-            session,
-            current_records,
-            replay_mode,
-            f"已加载 {len(paths)} 个文件，总长 {tag_duration}s",
-        )
-    except Exception as e:
-        raise e
+        info_start = session.recorder.get_info(str(paths[0]))
+        info_end = session.recorder.get_info(str(paths[-1]))
+    except RecordInfoError as e:
+        ui.print_status(str(e), "ERROR")
+        return
+    tag_start = info_start.begin
+    tag_end = info_end.end
+    tag_duration = int((tag_end - tag_start).total_seconds())
+    current_records = [
+        ReplayRecord(path=str(path_obj), begin=tag_start, duration=tag_duration)
+        for path_obj in paths
+    ]
+    _replay_records(
+        session,
+        current_records,
+        replay_mode,
+        f"已加载 {len(paths)} 个文件，总长 {tag_duration}s",
+    )
 
 
 restore_env_flow = restore_environment_flow
