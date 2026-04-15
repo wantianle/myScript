@@ -68,55 +68,11 @@ class RecordPlayer:
 
     def _serialize_library(self, library_entries: List[LibraryEntry]) -> list:
         """将回放库对象转换为可写入 JSON 的结构。"""
-        serialized_entries = []
-        for library_entry in library_entries:
-            serialized_entries.append(
-                {
-                    "tag": library_entry.tag,
-                    "time": library_entry.time,
-                    "vehicle": library_entry.vehicle,
-                    "date": library_entry.date,
-                    "last_update": library_entry.last_update,
-                    "socs": {
-                        soc_name: [
-                            {
-                                "path": replay_record.path,
-                                "begin": replay_record.begin,
-                                "duration": replay_record.duration,
-                            }
-                            for replay_record in replay_records
-                        ]
-                        for soc_name, replay_records in library_entry.socs.items()
-                    },
-                }
-            )
-        return serialized_entries
+        return [library_entry.to_cache_dict() for library_entry in library_entries]
 
     def _deserialize_library(self, raw_library: list) -> List[LibraryEntry]:
         """将缓存文件中的原始结构还原为回放库对象。"""
-        deserialized_entries = []
-        for raw_entry in raw_library:
-            deserialized_entries.append(
-                LibraryEntry(
-                    tag=raw_entry["tag"],
-                    time=raw_entry["time"],
-                    vehicle=raw_entry["vehicle"],
-                    date=raw_entry["date"],
-                    last_update=raw_entry.get("last_update") or {},
-                    socs={
-                        soc_name: [
-                            ReplayRecord(
-                                path=raw_record["path"],
-                                begin=raw_record["begin"],
-                                duration=raw_record["duration"],
-                            )
-                            for raw_record in raw_records
-                        ]
-                        for soc_name, raw_records in raw_entry.get("socs", {}).items()
-                    },
-                )
-            )
-        return deserialized_entries
+        return [LibraryEntry.from_cache_dict(raw_entry) for raw_entry in raw_library]
 
     def scan_local_library(self) -> List[LibraryEntry]:
         """扫描工作目录中的 metadata，构建回放库对象。"""

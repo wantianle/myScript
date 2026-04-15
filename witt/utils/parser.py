@@ -22,9 +22,8 @@ def parse_record_info(stdout: str) -> RecordInfo:
     begin_time = str_to_time(raw_time[0])
     end_time = str_to_time(raw_time[1])
     duration = math.floor(float(raw_duration[0]))
-    channels = [ChannelInfo(name=name, count=int(count)) for name, count in raw_channels]
-    channels.sort(key=lambda channel_info: channel_info.name)
-    return RecordInfo(
+    channels = [ChannelInfo.from_raw(name, count) for name, count in raw_channels]
+    return RecordInfo.from_components(
         begin=begin_time,
         end=end_time,
         duration=duration,
@@ -77,23 +76,16 @@ def parse_manifest(manifest_path: Path) -> List[TaskEntry]:
         tag_time = parts[0]
         tag_name = sanitize_name(parts[1])
         raw_paths = parts[2].split()
-        soc_paths = {"soc1": [], "soc2": []}
-        for p in raw_paths:
-            if "soc1" in p:
-                soc_paths["soc1"].append(p)
-            elif "soc2" in p:
-                soc_paths["soc2"].append(p)
         tasks.append(
-            TaskEntry(
+            TaskEntry.from_manifest_parts(
                 time=tag_time,
                 name=tag_name,
-                soc_paths=soc_paths,
                 paths=raw_paths,
             )
         )
     tasks.sort(key=lambda task_entry: task_entry.time)
     for index, task_entry in enumerate(tasks, 1):
-        task_entry.id = f"{index:02d}"
+        task_entry.assign_id(index)
     return tasks
 
 

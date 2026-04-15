@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Union
 
 
 @dataclass
@@ -11,6 +11,30 @@ class TaskEntry:
     soc_paths: Dict[str, List[str]]
     paths: List[str]
     id: str = field(default="")
+
+    @classmethod
+    def from_manifest_parts(
+        cls,
+        time: str,
+        name: str,
+        paths: Sequence[str],
+    ) -> "TaskEntry":
+        soc_paths = {"soc1": [], "soc2": []}
+        for path_text in paths:
+            if "soc1" in path_text:
+                soc_paths["soc1"].append(path_text)
+            elif "soc2" in path_text:
+                soc_paths["soc2"].append(path_text)
+        return cls(
+            time=time,
+            name=name,
+            soc_paths=soc_paths,
+            paths=list(paths),
+        )
+
+    def assign_id(self, index: int) -> None:
+        """根据排序后的序号为任务分配稳定 ID。"""
+        self.id = f"{index:02d}"
 
 
 @dataclass
@@ -115,6 +139,21 @@ class ReplayRecord:
     begin: Union[str, datetime]
     duration: int
 
+    @classmethod
+    def from_cache_dict(cls, raw_record: Mapping[str, Any]) -> "ReplayRecord":
+        return cls(
+            path=str(raw_record["path"]),
+            begin=raw_record["begin"],
+            duration=int(raw_record["duration"]),
+        )
+
+    def to_cache_dict(self) -> Dict[str, Any]:
+        return {
+            "path": self.path,
+            "begin": self.begin,
+            "duration": self.duration,
+        }
+
 
 @dataclass
 class LibraryEntry:
@@ -125,11 +164,48 @@ class LibraryEntry:
     socs: Dict[str, List[ReplayRecord]] = field(default_factory=dict)
     last_update: Dict[str, str] = field(default_factory=dict)
 
+    @classmethod
+    def from_cache_dict(cls, raw_entry: Mapping[str, Any]) -> "LibraryEntry":
+        return cls(
+            tag=str(raw_entry["tag"]),
+            time=str(raw_entry["time"]),
+            vehicle=str(raw_entry["vehicle"]),
+            date=str(raw_entry["date"]),
+            last_update=dict(raw_entry.get("last_update") or {}),
+            socs={
+                soc_name: [
+                    ReplayRecord.from_cache_dict(raw_record)
+                    for raw_record in raw_records
+                ]
+                for soc_name, raw_records in raw_entry.get("socs", {}).items()
+            },
+        )
+
+    def to_cache_dict(self) -> Dict[str, Any]:
+        return {
+            "tag": self.tag,
+            "time": self.time,
+            "vehicle": self.vehicle,
+            "date": self.date,
+            "last_update": self.last_update,
+            "socs": {
+                soc_name: [
+                    replay_record.to_cache_dict()
+                    for replay_record in replay_records
+                ]
+                for soc_name, replay_records in self.socs.items()
+            },
+        }
+
 
 @dataclass
 class ChannelInfo:
     name: str
     count: int
+
+    @classmethod
+    def from_raw(cls, name: str, count: Union[str, int]) -> "ChannelInfo":
+        return cls(name=name, count=int(count))
 
 
 @dataclass
@@ -138,3 +214,18 @@ class RecordInfo:
     end: datetime
     duration: int
     channels: List[ChannelInfo] = field(default_factory=list)
+
+    @classmethod
+    def from_components(
+        cls,
+        begin: datetime,
+        end: datetime,
+        duration: Union[int, float],
+        channels: Iterable[ChannelInfo],
+    ) -> "RecordInfo":
+        return cls(
+            begin=begin,
+            end=end,
+            duration=int(duration),
+            channels=sorted(list(channels), key=lambda channel: channel.name),
+        )
