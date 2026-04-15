@@ -198,93 +198,96 @@ cyber_recorder play -s {play_start} -f {records_str}
             except Exception:
                 pass
 
-    def download_record(self, task_list):
-        """
-        负责高层调度和进度条
-        """
-        download_queue = []
-        prepared_dirs = set()
+    def _plan_task_batch(self, task, soc_name, paths):
+        src_dir = Path(paths[0]).parent
+        try:
+            self._ensure_version_files(src_dir)
+        except Exception as e:
+            ui.print_status(str(e), "ERROR")
+            logging.warning(
+                f"[TASK_SKIP] Tag: {task['name']} | Soc: {soc_name} | {e}"
+            )
+            return None
+        save_dir = self.ctx.get_task_dir(task["id"], task["time"], soc_name)
+        self._prepare_dir(save_dir)
+        return {
+            "task": task,
+            "soc_name": soc_name,
+            "save_dir": save_dir,
+            "items": [
+                {
+                    "src": Path(p),
+                    "dest": save_dir / (Path(p).name + ".split"),
+                }
+                for p in paths
+            ],
+        }
+
+    def _collect_task_batches(self, task_list):
+        batches = []
         for task in task_list:
             for soc_name, paths in task["soc_paths"].items():
                 if not paths:
                     continue
-                src_dir = Path(paths[0]).parent
-                try:
-                    self._ensure_version_files(src_dir)
-                except Exception as e:
-                    ui.print_status(str(e), "ERROR")
-                    logging.warning(
-                        f"[TASK_SKIP] Tag: {task['name']} | Soc: {soc_name} | {e}"
+                batch = self._plan_task_batch(task, soc_name, paths)
+                if batch:
+                    batches.append(batch)
+        return batches
+
+    def _finalize_batch(self, batch, processed_files, batch_failed):
+        task = batch["task"]
+        if batch_failed or not processed_files:
+            self._cleanup_failed_batch(batch["save_dir"])
+            logging.warning(
+                f"[TASK_SKIP] Tag: {task['name']} | Soc: {batch['soc_name']} | 批次存在异常，已清理残留数据"
+            )
+            return
+        try:
+            self._post_process_task(task, batch["save_dir"], processed_files)
+        except Exception as e:
+            self._cleanup_failed_batch(batch["save_dir"])
+            ui.print_status(
+                f"{batch['save_dir']} 后处理失败，已清理当前批次",
+                "WARN",
+            )
+            logging.warning(
+                f"[TASK_POST_PROCESS_FAIL] Tag: {task['name']} | Soc: {batch['soc_name']} | {e}"
+            )
+
+    def _run_task_batch(self, batch, bar):
+        task = batch["task"]
+        processed_files = []
+        batch_failed = False
+        for item in batch["items"]:
+            bar.text = f"-> [Tag: {task['name'][:15]}]"
+            if not batch_failed:
+                if self._sync_file(item["src"], item["dest"], task):
+                    processed_files.append(
+                        (str(item["src"]), str(item["dest"]), batch["soc_name"])
                     )
-                    continue
-                save_dir = self.ctx.get_task_dir(task["id"], task["time"], soc_name)
-                if save_dir not in prepared_dirs:
-                    self._prepare_dir(save_dir)
-                    prepared_dirs.add(save_dir)
-                save_dir.mkdir(parents=True, exist_ok=True)
-                for p in paths:
-                    download_queue.append(
-                        {
-                            "src": Path(p),
-                            "dest": save_dir / (Path(p).name + ".split"),
-                            "task": task,
-                            "save_dir": save_dir,
-                            "soc_name": soc_name,
-                        }
-                    )
-        if not download_queue:
+                else:
+                    batch_failed = True
+            bar()
+        self._finalize_batch(batch, processed_files, batch_failed)
+
+    def download_record(self, task_list):
+        """
+        负责高层调度和进度条
+        """
+        batches = self._collect_task_batches(task_list)
+        if not batches:
             ui.print_status("下载队列为空", "WARN")
             return
-        ui.print_status(f"准备同步 {len(download_queue)} 个 Record 片段...")
+        total_files = sum(len(batch["items"]) for batch in batches)
+        ui.print_status(f"准备同步 {total_files} 个 Record 片段...")
         with alive_bar(
-            len(download_queue),
+            total_files,
             title="Progress",
             theme="classic",
             stats=False,
             elapsed=False,
         ) as bar:
-            processed_files = []
-            batch_failed = False
-            for i, item in enumerate(download_queue):
-                task = item["task"]
-                bar.text = f"-> [Tag: {task['name'][:15]}]"
-                if not batch_failed:
-                    if self._sync_file(item["src"], item["dest"], task):
-                        processed_files.append(
-                            (str(item["src"]), str(item["dest"]), item["soc_name"])
-                        )
-                    else:
-                        batch_failed = True
-                is_last_in_queue = i == len(download_queue) - 1
-
-                if is_last_in_queue:
-                    should_post_process = True
-                else:
-                    next_item = download_queue[i + 1]
-                    should_post_process = (next_item["task"]["id"] != task["id"]) or (
-                        next_item["soc_name"] != item["soc_name"]
-                    )
-
-                if should_post_process:
-                    if batch_failed or not processed_files:
-                        self._cleanup_failed_batch(item["save_dir"])
-                        logging.warning(
-                            f"[TASK_SKIP] Tag: {task['name']} | Soc: {item['soc_name']} | 批次存在异常，已清理残留数据"
-                        )
-                    else:
-                        try:
-                            self._post_process_task(task, item["save_dir"], processed_files)
-                        except Exception as e:
-                            self._cleanup_failed_batch(item["save_dir"])
-                            ui.print_status(
-                                f"{item['save_dir']} 后处理失败，已清理当前批次",
-                                "WARN",
-                            )
-                            logging.warning(
-                                f"[TASK_POST_PROCESS_FAIL] Tag: {task['name']} | Soc: {item['soc_name']} | {e}"
-                            )
-                    processed_files = []
-                    batch_failed = False
-                bar()
+            for batch in batches:
+                self._run_task_batch(batch, bar)
 
         ui.print_status("所有同步任务已完成！")
