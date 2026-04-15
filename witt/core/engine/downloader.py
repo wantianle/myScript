@@ -1,4 +1,3 @@
-import json
 import logging
 import shutil
 from dataclasses import dataclass, field
@@ -10,6 +9,7 @@ from typing import List
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
 from core.models import RecordMeta, TaskEntry
+from core.repository import MetadataRepository
 from utils import parser
 
 
@@ -62,6 +62,7 @@ class RecordDownloader:
         self.session = session
         self.ctx = session.ctx
         self.recorder = session.recorder
+        self.metadata_repository = MetadataRepository()
 
     @property
     def mode(self):
@@ -129,9 +130,7 @@ class RecordDownloader:
         )
         if meta_path.exists():
             try:
-                existing_meta = RecordMeta.from_dict(
-                    json.loads(meta_path.read_text(encoding="utf-8"))
-                )
+                existing_meta = self.metadata_repository.load(meta_path)
                 record_meta.merge_existing(existing_meta)
             except Exception:
                 logging.warning("元数据文件损坏，执行全量重写")
@@ -141,9 +140,7 @@ class RecordDownloader:
             file_names=[Path(file_info[1]).name for file_info in file_infos],
             updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
-        meta_path.write_text(
-            json.dumps(record_meta.to_dict(), indent=4, ensure_ascii=False)
-        )
+        self.metadata_repository.save(meta_path, record_meta)
 
     def _post_process_task(self, task_entry: TaskEntry, save_dir, file_infos):
         """生成元数据、README 和 version"""

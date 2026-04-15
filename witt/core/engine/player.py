@@ -1,10 +1,10 @@
-import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List
 
-from core.models import LibraryEntry, RawLibraryEntry, RecordMeta, ReplayRecord
+from core.models import LibraryEntry, RawLibraryEntry, ReplayRecord
+from core.repository import LibraryCacheRepository, MetadataRepository
 
 
 @dataclass
@@ -25,6 +25,10 @@ class RecordPlayer:
     def __init__(self, session):
         self.session = session
         self.ctx = session.ctx
+        self.library_cache = LibraryCacheRepository(
+            self.ctx.work_dir / ".witt" / "local_library.json"
+        )
+        self.metadata_repository = MetadataRepository()
 
     @property
     def executor(self):
@@ -34,32 +38,20 @@ class RecordPlayer:
     @property
     def library_file(self):
         """返回本地回放库缓存文件路径。"""
-        return self.ctx.work_dir / ".witt" / "local_library.json"
+        return self.library_cache.cache_path
 
     def load_library(self) -> LibraryLoadResult:
         """加载本地回放库，必要时重扫目录并刷新缓存。"""
         fp = self.ctx.get_library_fingerprint()
-        if self.library_file.exists():
-            data = json.loads(self.library_file.read_text(encoding="utf-8"))
-            if data.get("fingerprint") == fp and data.get("library"):
-                return LibraryLoadResult(
-                    library=self._deserialize_library(data.get("library", [])),
-                    cache_hit=True,
-                    cache_path=self.library_file,
-                )
-        library_list = self.scan_local_library()
-        save_obj = {"fingerprint": fp, "library": library_list}
-        self.library_file.parent.mkdir(parents=True, exist_ok=True)
-        self.library_file.write_text(
-            json.dumps(
-                {
-                    "fingerprint": save_obj["fingerprint"],
-                    "library": self._serialize_library(library_list),
-                },
-                indent=4,
-                ensure_ascii=False,
+        cached_library = self.library_cache.load(fp)
+        if cached_library is not None:
+            return LibraryLoadResult(
+                library=cached_library,
+                cache_hit=True,
+                cache_path=self.library_file,
             )
-        )
+        library_list = self.scan_local_library()
+        self.library_cache.save(fp, library_list)
         return LibraryLoadResult(
             library=library_list,
             cache_hit=False,
@@ -83,16 +75,12 @@ class RecordPlayer:
     def scan_local_library(self) -> List[LibraryEntry]:
         """扫描工作目录中的 metadata，构建回放库对象。"""
         library_map = {}
-        for meta_file in self.ctx.work_dir.rglob("meta.json"):
-            tag_dir = meta_file.parent
+        for tag_dir, record_meta in self.metadata_repository.iter_record_meta(self.ctx.work_dir):
             try:
-                record_meta = RecordMeta.from_dict(
-                    json.loads(meta_file.read_text(encoding="utf-8"))
-                )
                 tag_entry = LibraryEntry.from_record_meta(record_meta, tag_dir)
                 library_map[str(tag_dir)] = tag_entry
             except Exception as e:
-                raise RuntimeError(f"[{meta_file}] 元数据解析失败") from e
+                raise RuntimeError(f"[{tag_dir / 'meta.json'}] 元数据解析失败") from e
         return sorted(list(library_map.values()), key=lambda library_entry: library_entry.time)
 
     def build_playback_plan(
