@@ -1,4 +1,5 @@
 from . import channel_prompter
+from . import config_prompter
 from . import prompter
 from . import ui
 from . import replay_workflow
@@ -67,8 +68,8 @@ def full_progress(session: AppSession):
 
 
 def search_flow(session: AppSession):
-    prompter.get_basic_params(session.ctx.config)
-    prompter.get_path_params(session.ctx.config)
+    config_prompter.get_basic_params(session.ctx.config)
+    config_prompter.get_path_params(session.ctx.config)
     session.runner.run_find_record()
 
 restore_environment_flow = replay_workflow.restore_environment_flow

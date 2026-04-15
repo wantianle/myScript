@@ -1,6 +1,4 @@
-import os
 import re
-import urllib.parse
 import questionary
 from questionary import Choice
 from typing import List
@@ -53,62 +51,6 @@ def choose_option(prompt: str, options: List[str], index: bool = False):
         if val.isdigit() and 1 <= int(val) <= len(options):
             return int(val) if index else options[int(val) - 1]
         ui.print_status("输入无效，请重新选择", "WARN")
-
-
-def get_basic_params(config: dict):
-    ui.print_status("基本信息配置")
-    config["logic"]["target_date"] = get_user_input(
-        "数据日期", config["logic"]["target_date"]
-    )
-    config["logic"]["vehicle"] = get_vehicle_name()
-
-
-def get_vehicle_name():
-    prefix = choose_option("\n选择车辆类型", ["XZB6", "XZT5"])
-    while True:
-        num = input("\033[32m输入车辆号: \033[0m").strip()
-        if not num:
-            num = "00000"
-        if num.isdigit() and 0 <= int(num) <= 99999:
-            num = num.zfill(5)
-            break
-        ui.print_status("编号必须是 0-99999", "ERROR")
-    vehicle = f"{prefix}{num}"
-    print(f"\033[1;33m@{vehicle}\033[0m")
-    return vehicle
-
-
-def get_split_params(config: dict):
-    while True:
-        before = get_int_input("切片 tag 前多少秒", config["logic"]["before"])
-        after = get_int_input("切片 tag 后多少秒", config["logic"]["after"])
-        if before < 0:
-            ui.print_status("before 不能小于 0", "WARN")
-            continue
-        if before + after <= 0:
-            ui.print_status("切片总时长必须大于 0 秒", "WARN")
-            continue
-        config["logic"]["before"] = before
-        config["logic"]["after"] = after
-        return
-
-
-def get_path_params(config: dict):
-    # soc_inx = get_user_input("选择 [1] soc1 [2] soc2", "all")
-    # if soc_inx == "all":
-    #     soc_inx = ""
-    # config["logic"]["soc"] = f"soc{soc_inx}"
-    config["logic"]["mode"] = int(choose_option("\n数据输入模式", ["本地", "NAS", "车端"], True))
-    if config["logic"]["mode"] == 1:
-        config["host"]["data_root"] = get_user_input(
-            "原始数据路径 (限/media下)", config["host"]["data_root"]
-        )
-    config["host"]["dest_root"] = get_user_input(
-        "切片导出路径 (限/media下)", config["host"]["dest_root"]
-    )
-    get_split_params(config)
-    # bash 调试
-    # config["env"]["debug"] = get_user_input("bash 调试模式", config["env"]["debug"])
 
 
 def get_selected_indices(all_tasks: list, prompt="请输入要处理的序号") -> list:
@@ -203,27 +145,3 @@ def wait_for_continue():
         input("按回车键继续...")
     except KeyboardInterrupt:
         print()
-
-
-def get_json_input() -> str:
-    """获取 version.json 输入：支持路径拖拽和内容粘贴"""
-    while True:
-        try:
-            raw_data = input("拖拽或粘贴输入 version 文件路径:").strip()
-            if not raw_data:
-                ui.print_status("输入为空，请重新输入！", "WARN")
-                continue
-            proc_path = raw_data.strip("'\"").replace("file://", "")
-            proc_path = urllib.parse.unquote(proc_path)
-            if os.path.exists(proc_path):
-                return proc_path
-        except KeyboardInterrupt:
-            ui.print_status("已取消...")
-            return ""
-
-
-def update_dest_root(config: dict, prompt: str) -> None:
-    config["host"]["dest_root"] = get_user_input(
-        prompt,
-        config["host"]["dest_root"],
-    )

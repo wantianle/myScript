@@ -3,6 +3,7 @@ import sys
 import termios
 from pathlib import Path
 
+from . import config_prompter
 from . import prompter
 from . import replay_prompter
 from . import ui
@@ -19,7 +20,7 @@ def restore_environment_flow(
     launch_mode: str = "prompt",
 ):
     if not auto:
-        session.ctx.config["logic"]["version"] = prompter.get_json_input()
+        session.ctx.config["logic"]["version"] = config_prompter.get_json_input()
         if not session.ctx.config["logic"]["version"]:
             ui.print_status("未提供版本文件，已取消环境恢复", "WARN")
             return False
@@ -43,8 +44,11 @@ def traffic_light_replay_flow(session: AppSession):
     if manual:
         manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
     else:
-        prompter.get_basic_params(session.ctx.config)
-        prompter.update_dest_root(session.ctx.config, "输入要扫描的回灌路径(限/media下)")
+        config_prompter.get_basic_params(session.ctx.config)
+        config_prompter.update_dest_root(
+            session.ctx.config,
+            "输入要扫描的回灌路径(限/media下)",
+        )
         auto_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
 
 
@@ -53,8 +57,11 @@ def replay_flow(session: AppSession):
     if manual:
         manual_replay_flow(session, REPLAY_MODE_STANDARD)
     else:
-        prompter.get_basic_params(session.ctx.config)
-        prompter.update_dest_root(session.ctx.config, "输入要扫描的回播路径(限/media下)")
+        config_prompter.get_basic_params(session.ctx.config)
+        config_prompter.update_dest_root(
+            session.ctx.config,
+            "输入要扫描的回播路径(限/media下)",
+        )
         auto_replay_flow(session, REPLAY_MODE_STANDARD)
 
 
