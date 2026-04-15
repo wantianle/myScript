@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from core.models import LibraryEntry, RawLibraryEntry, ReplayRecord
+from core.repository import LibraryCacheRepository, MetadataRepository
+
+if TYPE_CHECKING:
+    from core.session import AppSession
 
 
 @dataclass
@@ -21,7 +25,12 @@ class PlaybackPlan:
 
 
 class RecordPlayer:
-    def __init__(self, session, library_cache, metadata_repository):
+    def __init__(
+        self,
+        session: "AppSession",
+        library_cache: LibraryCacheRepository,
+        metadata_repository: MetadataRepository,
+    ) -> None:
         self.session = session
         self.ctx = session.ctx
         self.library_cache = library_cache

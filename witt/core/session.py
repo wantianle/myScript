@@ -6,6 +6,7 @@ from core.engine.downloader import RecordDownloader
 from core.engine.player import RecordPlayer
 from core.engine.recorder import Recorder
 from core.repository import LibraryCacheRepository, MetadataRepository
+from core.adapter.base import BaseAdapter
 
 from pathlib import Path
 
@@ -16,7 +17,7 @@ DEFAULT_CONFIG_PATH = BASE_DIR / "config" / "settings.yaml"
 class AppSession:
     """初始化并持有所有执行对象，减少重复创建"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.ctx = TaskContext(DEFAULT_CONFIG_PATH)
         self.runner = ScriptRunner(self.ctx)
         self.recorder = Recorder(self)
@@ -35,11 +36,12 @@ class AppSession:
         )
 
     @property
-    def executor(self):
+    def executor(self) -> BaseAdapter:
         return (
             DockerAdapter(self.ctx)
             if self.ctx.logic.mode != 3
             else SSHAdapter(self.ctx)
         )
-    def init_logging(self):
+
+    def init_logging(self) -> None:
         self.ctx.setup_logger()

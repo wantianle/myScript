@@ -5,11 +5,15 @@ from alive_progress import alive_bar
 from datetime import datetime, timedelta
 from pathlib import Path
 from shlex import quote
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
 from core.models import RecordMeta, TaskEntry
+from core.repository import MetadataRepository
 from utils import parser
+
+if TYPE_CHECKING:
+    from core.session import AppSession
 
 
 @dataclass
@@ -57,7 +61,11 @@ class DownloadSummary:
 
 
 class RecordDownloader:
-    def __init__(self, session, metadata_repository):
+    def __init__(
+        self,
+        session: "AppSession",
+        metadata_repository: MetadataRepository,
+    ) -> None:
         self.session = session
         self.ctx = session.ctx
         self.recorder = session.recorder
@@ -67,10 +75,8 @@ class RecordDownloader:
     def mode(self):
         return self.ctx.logic.mode
 
-    def _prepare_dir(self, target_dir: Path):
-        """
-        彻底清理目标目录，确保没有旧数据干扰
-        """
+    def _prepare_dir(self, target_dir: Path) -> None:
+        """彻底清理目标目录，确保没有旧数据干扰。"""
         if target_dir.exists():
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -83,30 +89,30 @@ class RecordDownloader:
         if tag_dir.exists() and not any(tag_dir.iterdir()):
             tag_dir.rmdir()
 
-    def _get_version_files(self, src_dir: Path):
+    def _get_version_files(self, src_dir: Path) -> List[Path]:
         if self.mode == 3:
             find_cmd = (
                 f"find {quote(str(src_dir))} -maxdepth 1 -type f "
                 f"-name 'version*' 2>/dev/null"
             )
             result_str = self.session.executor.execute(find_cmd).strip()
-            return [line.strip() for line in result_str.splitlines() if line.strip()]
+            return [Path(line.strip()) for line in result_str.splitlines() if line.strip()]
         return sorted(src_dir.glob("version*"))
 
-    def _ensure_version_files(self, src_dir: Path):
+    def _ensure_version_files(self, src_dir: Path) -> List[Path]:
         version_files = self._get_version_files(src_dir)
         if not version_files:
             raise VersionFileMissingError(f"{src_dir} 未找到 version 文件，已跳过当前任务")
         return version_files
 
-    def _sync_version_files(self, src_dir: Path, save_dir: Path):
+    def _sync_version_files(self, src_dir: Path, save_dir: Path) -> List[Path]:
         version_files = self._ensure_version_files(src_dir)
         synced_files = []
         if self.mode == 3:
             for remote_v_path in version_files:
-                v_name = Path(remote_v_path).name
+                v_name = remote_v_path.name
                 v_dest = save_dir / v_name
-                self.session.executor.fetch_file(remote_v_path, v_dest)
+                self.session.executor.fetch_file(str(remote_v_path), v_dest)
                 synced_files.append(v_dest)
                 logging.info(f"[SYNC_VERSION] 成功同步远程文件: {v_name}")
         else:
