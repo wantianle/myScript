@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core.models import LibraryEntry, ReplayRecord
+from core.models import LibraryEntry, RecordMeta, ReplayRecord
 
 
 @dataclass
@@ -86,8 +86,10 @@ class RecordPlayer:
         for meta_file in self.ctx.work_dir.rglob("meta.json"):
             tag_dir = meta_file.parent
             try:
-                meta = json.loads(meta_file.read_text(encoding="utf-8"))
-                tag_entry = LibraryEntry.from_metadata(meta, tag_dir)
+                record_meta = RecordMeta.from_dict(
+                    json.loads(meta_file.read_text(encoding="utf-8"))
+                )
+                tag_entry = LibraryEntry.from_record_meta(record_meta, tag_dir)
                 library_map[str(tag_dir)] = tag_entry
             except Exception as e:
                 raise RuntimeError(f"[{meta_file}] 元数据解析失败") from e

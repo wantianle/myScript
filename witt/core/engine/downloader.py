@@ -1,5 +1,5 @@
-import logging
 import json
+import logging
 import shutil
 from dataclasses import dataclass, field
 from alive_progress import alive_bar
@@ -9,7 +9,7 @@ from shlex import quote
 from typing import List
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
-from core.models import TaskEntry
+from core.models import RecordMeta, TaskEntry
 from utils import parser
 
 
@@ -120,35 +120,30 @@ class RecordDownloader:
         """保存元数据，实现数据信息缓存，减少底层重复计算，并为回播提供必要的上下文信息"""
         tag_dir = save_dir.parent
         meta_path = tag_dir / "meta.json"
-        dt_tag = parser.str_to_time(task_entry.time)
-        bf, af = (int(self.ctx.logic.before), int(self.ctx.logic.after))
-        contract = {
-            "tag_info": {
-                "name": task_entry.name,
-                "time": task_entry.time,
-                "offset_bf": bf,
-                "offset_af": af,
-                "abs_start": (dt_tag - timedelta(seconds=bf)).isoformat(),
-                "abs_end": (dt_tag + timedelta(seconds=af)).isoformat(),
-            },
-            "vehicle": self.ctx.vehicle,
-            "date": self.ctx.target_date,
-            "last_update": {},
-            "files": {},
-        }
+        record_meta = RecordMeta.from_task_entry(
+            task_entry=task_entry,
+            vehicle=self.ctx.vehicle,
+            date=self.ctx.target_date,
+            before=int(self.ctx.logic.before),
+            after=int(self.ctx.logic.after),
+        )
         if meta_path.exists():
             try:
-                old_contract = json.loads(meta_path.read_text(encoding="utf-8"))
-                contract["last_update"] = old_contract["last_update"]
-                contract["files"] = old_contract["files"]
+                existing_meta = RecordMeta.from_dict(
+                    json.loads(meta_path.read_text(encoding="utf-8"))
+                )
+                record_meta.merge_existing(existing_meta)
             except Exception:
                 logging.warning("元数据文件损坏，执行全量重写")
         current_soc = file_infos[0][2]
-        contract["files"][current_soc] = [Path(f[1]).name for f in file_infos]
-        contract["last_update"][current_soc] = datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
+        record_meta.update_soc_files(
+            soc_name=current_soc,
+            file_names=[Path(file_info[1]).name for file_info in file_infos],
+            updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
-        meta_path.write_text(json.dumps(contract, indent=4, ensure_ascii=False))
+        meta_path.write_text(
+            json.dumps(record_meta.to_dict(), indent=4, ensure_ascii=False)
+        )
 
     def _post_process_task(self, task_entry: TaskEntry, save_dir, file_infos):
         """生成元数据、README 和 version"""

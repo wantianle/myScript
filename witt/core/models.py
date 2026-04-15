@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Union
 
@@ -230,15 +230,15 @@ class LibraryEntry:
         }
 
     @classmethod
-    def from_metadata(cls, meta: Mapping[str, Any], tag_dir: Path) -> "LibraryEntry":
+    def from_record_meta(cls, record_meta: "RecordMeta", tag_dir: Path) -> "LibraryEntry":
         entry = cls(
-            tag=str(meta["tag_info"]["name"]),
-            time=str(meta["tag_info"]["time"]),
-            vehicle=str(meta.get("vehicle", tag_dir.parent.name)),
-            date=str(meta.get("date", tag_dir.parents[1].name)),
-            last_update=dict(meta.get("last_update") or {}),
+            tag=record_meta.tag_info.name,
+            time=record_meta.tag_info.time,
+            vehicle=record_meta.vehicle or tag_dir.parent.name,
+            date=record_meta.date or tag_dir.parents[1].name,
+            last_update=dict(record_meta.last_update),
         )
-        for soc_name, file_names in meta.get("files", {}).items():
+        for soc_name, file_names in record_meta.files.items():
             soc_path = tag_dir / soc_name
             if not soc_path.exists():
                 continue
@@ -249,9 +249,9 @@ class LibraryEntry:
                     replay_records.append(
                         ReplayRecord.from_local_file(
                             file_path=file_path,
-                            begin=meta["tag_info"]["abs_start"],
-                            duration=meta["tag_info"]["offset_bf"]
-                            + meta["tag_info"]["offset_af"],
+                            begin=record_meta.tag_info.abs_start,
+                            duration=record_meta.tag_info.offset_bf
+                            + record_meta.tag_info.offset_af,
                         )
                     )
             if replay_records:
@@ -268,6 +268,122 @@ class ChannelInfo:
     @classmethod
     def from_raw(cls, name: str, count: Union[str, int]) -> "ChannelInfo":
         return cls(name=name, count=int(count))
+
+
+@dataclass
+class TagInfo:
+    name: str
+    time: str
+    offset_bf: int
+    offset_af: int
+    abs_start: str
+    abs_end: str
+
+    @classmethod
+    def from_task_entry(
+        cls,
+        task_entry: TaskEntry,
+        before: int,
+        after: int,
+    ) -> "TagInfo":
+        task_datetime = datetime.strptime(task_entry.time, "%Y-%m-%d %H:%M:%S")
+        return cls(
+            name=task_entry.name,
+            time=task_entry.time,
+            offset_bf=before,
+            offset_af=after,
+            abs_start=(task_datetime - timedelta(seconds=before)).isoformat(),
+            abs_end=(task_datetime + timedelta(seconds=after)).isoformat(),
+        )
+
+    @classmethod
+    def from_dict(cls, raw_tag_info: Mapping[str, Any]) -> "TagInfo":
+        return cls(
+            name=str(raw_tag_info["name"]),
+            time=str(raw_tag_info["time"]),
+            offset_bf=int(raw_tag_info["offset_bf"]),
+            offset_af=int(raw_tag_info["offset_af"]),
+            abs_start=str(raw_tag_info["abs_start"]),
+            abs_end=str(raw_tag_info["abs_end"]),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "time": self.time,
+            "offset_bf": self.offset_bf,
+            "offset_af": self.offset_af,
+            "abs_start": self.abs_start,
+            "abs_end": self.abs_end,
+        }
+
+
+@dataclass
+class RecordMeta:
+    tag_info: TagInfo
+    vehicle: str
+    date: str
+    last_update: Dict[str, str] = field(default_factory=dict)
+    files: Dict[str, List[str]] = field(default_factory=dict)
+
+    @classmethod
+    def from_task_entry(
+        cls,
+        task_entry: TaskEntry,
+        vehicle: str,
+        date: str,
+        before: int,
+        after: int,
+    ) -> "RecordMeta":
+        return cls(
+            tag_info=TagInfo.from_task_entry(task_entry, before, after),
+            vehicle=vehicle,
+            date=date,
+        )
+
+    @classmethod
+    def from_dict(cls, raw_meta: Mapping[str, Any]) -> "RecordMeta":
+        return cls(
+            tag_info=TagInfo.from_dict(raw_meta["tag_info"]),
+            vehicle=str(raw_meta.get("vehicle", "")),
+            date=str(raw_meta.get("date", "")),
+            last_update={
+                str(soc_name): str(update_time)
+                for soc_name, update_time in (raw_meta.get("last_update") or {}).items()
+            },
+            files={
+                str(soc_name): [str(file_name) for file_name in file_names]
+                for soc_name, file_names in (raw_meta.get("files") or {}).items()
+            },
+        )
+
+    def merge_existing(self, existing_meta: "RecordMeta") -> None:
+        """合并已有 metadata 的更新时间和文件映射。"""
+        self.last_update = dict(existing_meta.last_update)
+        self.files = {
+            soc_name: list(file_names)
+            for soc_name, file_names in existing_meta.files.items()
+        }
+
+    def update_soc_files(
+        self,
+        soc_name: str,
+        file_names: Sequence[str],
+        updated_at: Optional[str] = None,
+    ) -> None:
+        self.files[soc_name] = list(file_names)
+        self.last_update[soc_name] = updated_at or datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "tag_info": self.tag_info.to_dict(),
+            "vehicle": self.vehicle,
+            "date": self.date,
+            "last_update": self.last_update,
+            "files": self.files,
+        }
 
 
 @dataclass
