@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 
 @dataclass
@@ -25,7 +25,7 @@ class LogicConfig:
     blacklist: List[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, raw_logic: Dict[str, object]) -> "LogicConfig":
+    def from_dict(cls, raw_logic: Dict[str, Any]) -> "LogicConfig":
         raw_blacklist = raw_logic.get("blacklist")
         if isinstance(raw_blacklist, list):
             blacklist = [str(item) for item in raw_blacklist]
@@ -33,11 +33,13 @@ class LogicConfig:
             blacklist = [str(raw_blacklist)]
         else:
             blacklist = []
+        raw_version = raw_logic.get("version", "") or ""
+        version = raw_version if isinstance(raw_version, Path) else str(raw_version)
         return cls(
             vehicle=str(raw_logic.get("vehicle", "")),
             target_date=str(raw_logic.get("target_date", "")),
             mode=int(raw_logic.get("mode", 0)),
-            version=raw_logic.get("version", "") or "",
+            version=version,
             soc=str(raw_logic.get("soc", "")),
             before=int(raw_logic.get("before", 0)),
             after=int(raw_logic.get("after", 0)),

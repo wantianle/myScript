@@ -26,7 +26,7 @@ def full_progress(session: AppSession):
                 valid_tasks,
                 prompter.get_confirm_input,
             )
-            or ""
+            or []
         )
         planned_summary = session.record_downloader.plan_download(valid_tasks)
         if planned_summary.total_files <= 0:
