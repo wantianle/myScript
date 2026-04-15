@@ -3,13 +3,9 @@ import re
 import urllib.parse
 import questionary
 from questionary import Choice
-from pathlib import Path
 from typing import List
 
-from core.errors import RecordInfoError
-from core.session import AppSession
 from interface import ui
-from utils import parser
 
 MAIN_MENU_CHOICES = [
     Choice(title="[全流程] 查询 -> 切片 -> 回放", value="1"),
@@ -231,68 +227,3 @@ def update_dest_root(config: dict, prompt: str) -> None:
         prompt,
         config["host"]["dest_root"],
     )
-
-
-def select_channels_wizard(channels: List[dict], prompt: str) -> List[str]:
-    """勾选式频道选择器"""
-    choices = [
-        Choice(
-            title=f"{ch['name']:<20} (Msg Count: {ch.get('count', 0)})",
-            value=ch["name"],
-        )
-        for ch in channels
-    ]
-    selected = questionary.checkbox(
-        prompt,
-        choices=choices,
-        style=questionary.Style(
-            [
-                ("pointer", "fg:cyan bold"),
-                ("highlighted", "fg:cyan bold"),
-                ("selected", "fg:red"),
-            ]
-        ),
-    ).ask()
-    return selected if selected is not None else []
-
-
-def get_channels(session: "AppSession", tasks: List[dict]) -> List[dict]:
-    """从多个 record 中提取频道并集，支持双 SOC 路径检查"""
-    channels_map = {}
-    socs = set()
-    try:
-        for t in tasks:
-            path_list = t.get("paths", [])
-            for p in path_list:
-                soc = Path(p).parent.name[-4:]
-                if soc in socs:
-                    continue
-                info = session.recorder.get_info(p)
-                channels = info.get("channels", [])
-                for ch in channels:
-                    name = ch["name"]
-                    if name not in channels_map:
-                        channels_map[name] = ch.copy()
-                        channels_map[name].setdefault("count", 0)
-                    else:
-                        channels_map[name]["count"] += ch.get("count", 0)
-                socs.add(soc)
-    except RecordInfoError as e:
-        ui.print_status(str(e), "ERROR")
-        raise
-    except Exception as e:
-        ui.print_status("频道获取失败", "ERROR")
-        raise e
-    return sorted(channels_map.values(), key=lambda x: x["name"])
-
-
-def get_tasks_channels(session: AppSession, tasks: List[dict]) -> List[str]:
-    """过滤要播放的频道"""
-    if not get_confirm_input("是否过滤 Channel?"):
-        return []
-    try:
-        unique_channels = get_channels(session, tasks)
-    except Exception as e:
-        ui.print_status("频道获取失败", "ERROR")
-        raise e
-    return select_channels_wizard(unique_channels, prompt="请【选中】要删除的频道:")

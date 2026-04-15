@@ -1,3 +1,4 @@
+from . import channel_prompter
 from . import prompter
 from . import ui
 from . import replay_workflow
@@ -19,7 +20,12 @@ def full_progress(session: AppSession):
             ui.print_status("所选序号无效或无路径数据", "ERROR")
             return
         session.ctx.config["logic"]["blacklist"] = (
-            prompter.get_tasks_channels(session, valid_tasks) or ""
+            channel_prompter.get_tasks_channels(
+                session,
+                valid_tasks,
+                prompter.get_confirm_input,
+            )
+            or ""
         )
         planned_summary = session.record_downloader.plan_download(valid_tasks)
         if planned_summary.total_files <= 0:
