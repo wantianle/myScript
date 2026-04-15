@@ -16,3 +16,11 @@ class RecordInfoError(WittCoreError):
 
 class RecordSplitError(WittCoreError):
     """Raised when record splitting fails."""
+
+
+class TaskBatchPlanningError(WittCoreError):
+    """Raised when a downloader batch cannot be planned."""
+
+
+class VersionFileMissingError(TaskBatchPlanningError):
+    """Raised when a task batch cannot proceed because version files are missing."""

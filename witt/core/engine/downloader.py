@@ -1,14 +1,22 @@
 import logging
 import json
 import shutil
+from dataclasses import dataclass, field
 from alive_progress import alive_bar
 from datetime import datetime, timedelta
 from pathlib import Path
 from shlex import quote
 
-from core.errors import RecordSplitError
-from interface import ui
+from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
 from utils import parser
+
+
+@dataclass
+class DownloadSummary:
+    total_files: int = 0
+    completed_batches: list = field(default_factory=list)
+    skipped_batches: list = field(default_factory=list)
+    failed_batches: list = field(default_factory=list)
 
 
 class RecordDownloader:
@@ -50,7 +58,7 @@ class RecordDownloader:
     def _ensure_version_files(self, src_dir: Path):
         version_files = self._get_version_files(src_dir)
         if not version_files:
-            raise FileNotFoundError(f"{src_dir} 未找到 version 文件，已跳过当前任务")
+            raise VersionFileMissingError(f"{src_dir} 未找到 version 文件，已跳过当前任务")
         return version_files
 
     def _sync_version_files(self, src_dir: Path, save_dir: Path):
@@ -99,7 +107,7 @@ class RecordDownloader:
                 contract["last_update"] = old_contract["last_update"]
                 contract["files"] = old_contract["files"]
             except Exception:
-                ui.print_status("元数据文件损坏，执行全量重写", "WARN")
+                logging.warning("元数据文件损坏，执行全量重写")
         current_soc = file_infos[0][2]
         contract["files"][current_soc] = [Path(f[1]).name for f in file_infos]
         contract["last_update"][current_soc] = datetime.now().strftime(
@@ -161,8 +169,7 @@ cyber_recorder play -s {play_start} -f {records_str}
             try:
                 self.session.recorder.split(src, dest, t_start, t_end, blacklist)
                 return True
-            except RecordSplitError as e:
-                ui.print_status(str(e), "WARN")
+            except RecordSplitError:
                 if Path(dest).exists():
                     Path(dest).unlink()
                 return False
@@ -173,8 +180,7 @@ cyber_recorder play -s {play_start} -f {records_str}
             pass
         try:
             self.session.recorder.split(src, remote_out, t_start, t_end, blacklist)
-        except RecordSplitError as e:
-            ui.print_status(str(e), "WARN")
+        except RecordSplitError:
             try:
                 self.session.executor.remove(remote_out)
             except Exception:
@@ -184,10 +190,6 @@ cyber_recorder play -s {play_start} -f {records_str}
             self.session.executor.fetch_file(remote_out, dest)
             return True
         except Exception as e:
-            ui.print_status(
-                f"同步异常，跳过 {src} 请检查网络、权限或远程文件状态",
-                "WARN",
-            )
             logging.debug(f"{src} 拉取异常: {e}")
             if Path(dest).exists():
                 Path(dest).unlink()
@@ -200,14 +202,7 @@ cyber_recorder play -s {play_start} -f {records_str}
 
     def _plan_task_batch(self, task, soc_name, paths):
         src_dir = Path(paths[0]).parent
-        try:
-            self._ensure_version_files(src_dir)
-        except Exception as e:
-            ui.print_status(str(e), "ERROR")
-            logging.warning(
-                f"[TASK_SKIP] Tag: {task['name']} | Soc: {soc_name} | {e}"
-            )
-            return None
+        self._ensure_version_files(src_dir)
         save_dir = self.ctx.get_task_dir(task["id"], task["time"], soc_name)
         self._prepare_dir(save_dir)
         return {
@@ -225,36 +220,73 @@ cyber_recorder play -s {play_start} -f {records_str}
 
     def _collect_task_batches(self, task_list):
         batches = []
+        skipped_batches = []
         for task in task_list:
             for soc_name, paths in task["soc_paths"].items():
                 if not paths:
                     continue
-                batch = self._plan_task_batch(task, soc_name, paths)
-                if batch:
+                try:
+                    batch = self._plan_task_batch(task, soc_name, paths)
                     batches.append(batch)
-        return batches
+                except TaskBatchPlanningError as e:
+                    skipped_batches.append(
+                        {
+                            "task_name": task["name"],
+                            "soc_name": soc_name,
+                            "reason": str(e),
+                        }
+                    )
+                    logging.warning(
+                        f"[TASK_SKIP] Tag: {task['name']} | Soc: {soc_name} | {e}"
+                    )
+        return batches, skipped_batches
 
-    def _finalize_batch(self, batch, processed_files, batch_failed):
+    def plan_download(self, task_list) -> DownloadSummary:
+        batches, skipped_batches = self._collect_task_batches(task_list)
+        return DownloadSummary(
+            total_files=sum(len(batch["items"]) for batch in batches),
+            skipped_batches=skipped_batches,
+        )
+
+    def _finalize_batch(self, batch, processed_files, batch_failed, summary: DownloadSummary):
         task = batch["task"]
         if batch_failed or not processed_files:
             self._cleanup_failed_batch(batch["save_dir"])
+            summary.failed_batches.append(
+                {
+                    "task_name": task["name"],
+                    "soc_name": batch["soc_name"],
+                    "reason": "批次存在异常，已清理残留数据",
+                }
+            )
             logging.warning(
                 f"[TASK_SKIP] Tag: {task['name']} | Soc: {batch['soc_name']} | 批次存在异常，已清理残留数据"
             )
             return
         try:
             self._post_process_task(task, batch["save_dir"], processed_files)
+            summary.completed_batches.append(
+                {
+                    "task_name": task["name"],
+                    "soc_name": batch["soc_name"],
+                    "save_dir": batch["save_dir"],
+                    "file_count": len(processed_files),
+                }
+            )
         except Exception as e:
             self._cleanup_failed_batch(batch["save_dir"])
-            ui.print_status(
-                f"{batch['save_dir']} 后处理失败，已清理当前批次",
-                "WARN",
+            summary.failed_batches.append(
+                {
+                    "task_name": task["name"],
+                    "soc_name": batch["soc_name"],
+                    "reason": f"{batch['save_dir']} 后处理失败，已清理当前批次",
+                }
             )
             logging.warning(
                 f"[TASK_POST_PROCESS_FAIL] Tag: {task['name']} | Soc: {batch['soc_name']} | {e}"
             )
 
-    def _run_task_batch(self, batch, bar):
+    def _run_task_batch(self, batch, bar, summary: DownloadSummary):
         task = batch["task"]
         processed_files = []
         batch_failed = False
@@ -268,18 +300,18 @@ cyber_recorder play -s {play_start} -f {records_str}
                 else:
                     batch_failed = True
             bar()
-        self._finalize_batch(batch, processed_files, batch_failed)
+        self._finalize_batch(batch, processed_files, batch_failed, summary)
 
-    def download_records(self, task_list):
+    def download_records(self, task_list) -> DownloadSummary:
         """
         负责高层调度和进度条
         """
-        batches = self._collect_task_batches(task_list)
+        batches, skipped_batches = self._collect_task_batches(task_list)
+        summary = DownloadSummary(skipped_batches=skipped_batches)
         if not batches:
-            ui.print_status("下载队列为空", "WARN")
-            return
+            return summary
         total_files = sum(len(batch["items"]) for batch in batches)
-        ui.print_status(f"准备同步 {total_files} 个 Record 片段...")
+        summary.total_files = total_files
         with alive_bar(
             total_files,
             title="Progress",
@@ -288,6 +320,5 @@ cyber_recorder play -s {play_start} -f {records_str}
             elapsed=False,
         ) as bar:
             for batch in batches:
-                self._run_task_batch(batch, bar)
-
-        ui.print_status("所有同步任务已完成！")
+                self._run_task_batch(batch, bar, summary)
+        return summary
