@@ -2,6 +2,9 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
+from types import ModuleType
+import sys
 
 from core.models import (
     ChannelInfo,
@@ -14,6 +17,44 @@ from core.models import (
     TaskEntry,
 )
 from utils import parser
+
+
+fake_questionary = ModuleType("questionary")
+
+
+class _FakeChoice:
+    def __init__(self, title=None, value=None):
+        self.title = title
+        self.value = value
+
+
+def _fake_style(value):
+    return value
+
+
+def _fake_select(*args, **kwargs):
+    class _Prompt:
+        def ask(self):
+            return None
+
+    return _Prompt()
+
+
+def _fake_checkbox(*args, **kwargs):
+    class _Prompt:
+        def ask(self):
+            return []
+
+    return _Prompt()
+
+
+fake_questionary.Choice = _FakeChoice
+fake_questionary.Style = _fake_style
+fake_questionary.select = _fake_select
+fake_questionary.checkbox = _fake_checkbox
+sys.modules.setdefault("questionary", fake_questionary)
+
+from interface import replay_workflow
 
 
 class TaskEntryTests(unittest.TestCase):
@@ -203,6 +244,36 @@ class ParserTests(unittest.TestCase):
         self.assertEqual([task.name for task in task_entries], ["tag_a", "tag_b"])
         self.assertEqual(task_entries[0].id, "01")
         self.assertEqual(task_entries[0].soc_paths["soc1"], ["/data/soc1/a.record"])
+
+
+class ReplayWorkflowTests(unittest.TestCase):
+    def test_build_source_replay_records_uses_tag_window(self) -> None:
+        task_entry = TaskEntry.from_manifest_parts(
+            time="2026-04-15 12:00:00",
+            name="demo_tag",
+            paths=[
+                "/data/soc1/20260415120000.record.00002.120002",
+                "/data/soc1/20260415120000.record.00001.120001",
+            ],
+        )
+        session = SimpleNamespace(
+            ctx=SimpleNamespace(
+                logic=SimpleNamespace(before=15, after=5)
+            )
+        )
+
+        replay_records = replay_workflow._build_source_replay_records(session, task_entry)
+
+        self.assertEqual(len(replay_records), 2)
+        self.assertEqual(
+            [Path(record.path).name for record in replay_records],
+            [
+                "20260415120000.record.00001.120001",
+                "20260415120000.record.00002.120002",
+            ],
+        )
+        self.assertEqual(replay_records[0].begin, datetime(2026, 4, 15, 11, 59, 45))
+        self.assertEqual(replay_records[0].duration, 20)
 
 
 if __name__ == "__main__":

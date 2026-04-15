@@ -1,6 +1,7 @@
 import os
 import sys
 import termios
+from datetime import timedelta
 from pathlib import Path
 from typing import List
 
@@ -11,6 +12,7 @@ from . import ui
 from core.models import ReplayRecord
 from core.errors import RecordInfoError, PathMappingError
 from core.session import AppSession
+from utils import parser
 
 REPLAY_MODE_STANDARD = "standard"
 REPLAY_MODE_TRAFFIC_LIGHT = "traffic_light"
@@ -95,6 +97,24 @@ def _prepare_replay(
     )
 
 
+def _build_source_replay_records(
+    session: AppSession,
+    task_entry,
+) -> List[ReplayRecord]:
+    """根据查询结果为全量模式构造原始数据回放记录。"""
+    ordered_paths = parser.sort_records([Path(path_text) for path_text in task_entry.paths])
+    replay_begin = parser.str_to_time(task_entry.time) - timedelta(seconds=session.ctx.logic.before)
+    replay_duration = session.ctx.logic.before + session.ctx.logic.after
+    return [
+        ReplayRecord(
+            path=str(path_obj),
+            begin=replay_begin,
+            duration=replay_duration,
+        )
+        for path_obj in ordered_paths
+    ]
+
+
 def _replay_records(
     session: AppSession,
     records: List[ReplayRecord],
@@ -157,6 +177,27 @@ def auto_replay_flow(
             replay_mode,
             f"已加载 {len(target_records)} 个文件，总长 {total_duration}s",
         )
+
+
+def full_source_replay_flow(session: AppSession, task_entries) -> None:
+    """直接基于查询结果回放原始 record 数据，不生成任何导出文件。"""
+    if not task_entries:
+        ui.print_status("没有可回放的 Tag", "WARN")
+        return
+    for index, task_entry in enumerate(task_entries, 1):
+        source_records = _build_source_replay_records(session, task_entry)
+        if not source_records:
+            ui.print_status(f"{task_entry.name} 未匹配到可回放的原始数据", "WARN")
+            continue
+        _replay_records(
+            session,
+            source_records,
+            REPLAY_MODE_STANDARD,
+            f"全量模式已加载 Tag[{index}/{len(task_entries)}] {task_entry.name}，共 {len(source_records)} 个文件，总长 {source_records[0].duration}s",
+        )
+        if index < len(task_entries):
+            if not prompter.get_confirm_input("继续回放下一个 Tag?", True):
+                break
 
 
 def manual_replay_flow(

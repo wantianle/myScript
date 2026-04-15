@@ -38,6 +38,14 @@ def full_progress(session: AppSession) -> None:
     if not valid_tasks:
         ui.print_status("所选序号无效或无路径数据", "ERROR")
         return
+    process_mode = prompter.choose_option(
+        "\n选择处理模式",
+        ["切片模式", "全量回放"],
+        True,
+    )
+    if process_mode == 2:
+        replay_workflow.full_source_replay_flow(session, valid_tasks)
+        return
     session.ctx.logic.blacklist = (
         channel_prompter.get_tasks_channels(
             session,

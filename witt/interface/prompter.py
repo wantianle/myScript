@@ -10,7 +10,7 @@ from interface import ui
 TaskLike = TypeVar("TaskLike")
 
 MAIN_MENU_ITEMS = [
-    ("[全流程] 查询 -> 切片 -> 回放", "1"),
+    ("[全流程] 查询 -> 切片/全量回放", "1"),
     ("[仅回播] 手动选择/自动扫描回播", "2"),
     ("[仅同步] 同步本地 mdrive 版本", "3"),
     ("[进容器] 交互式进 docker bash", "4"),
