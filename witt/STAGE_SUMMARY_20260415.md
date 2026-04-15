@@ -319,6 +319,71 @@
 
 - 以功能需求为主
 - 以测试和小步收口为辅
+- 在新增功能时继续遵守本阶段建立起来的边界和规范
+
+---
+
+## 六、阶段完成清单
+
+为了便于后续回顾，这里给出本阶段已经完成的工程化清单。
+
+### 已完成的结构治理
+
+- `ui / prompt / workflow / core / utils` 分层已基本稳定
+- `replay_workflow` 已从主流程中拆出
+- `replay_prompter / channel_prompter / config_prompter` 已拆出
+- `core` 不再直接承担 UI 提示
+- `repository` 层已建立并投入使用
+
+### 已完成的数据结构规范化
+
+- `TaskEntry`
+- `ReplayRecord`
+- `LibraryEntry`
+- `ChannelInfo`
+- `RecordInfo`
+- `TagInfo`
+- `RecordMeta`
+- `AppConfig`
+- `HostConfig`
+- `RemoteConfig`
+- `DockerConfig`
+- `PathsConfig`
+- `LogicConfig`
+
+### 已完成的边界规范化
+
+- `meta.json` 读写已走 `RecordMeta`
+- `local_library.json` 读写已走 `LibraryCacheRepository`
+- 配置已走 `AppConfig` 聚合根
+- 原始边界 schema 已用 `TypedDict` 描述
+
+### 已完成的质量护栏
+
+- 模型/解析测试
+- 下载规划测试
+- repository 测试
+- 配置与上下文测试
+- 全量 unittest 已通过
+
+### 已完成的文档
+
+- [ARCHITECTURE.md](/home/mini/dev/myScript/witt/ARCHITECTURE.md)
+- [AGENTS.md](/home/mini/dev/myScript/witt/AGENTS.md)
+- [STAGE_SUMMARY_20260415.md](/home/mini/dev/myScript/witt/STAGE_SUMMARY_20260415.md)
+
+### 建议的阶段收尾结论
+
+这阶段建议正式收口，不再继续无边界纯重构。
+
+后续进入新阶段时，优先顺序应改成：
+
+1. 功能开发
+2. 为新功能补针对性测试
+3. 只做必要的小步重构
+
+如果继续长时间只做结构重构，收益会开始明显下降。 
+- 以测试和小步收口为辅
 - 在新增功能时继续遵守这阶段建立起来的边界和规范
 
 如果照这个节奏推进，后面再扩功能，维护成本会低很多。 

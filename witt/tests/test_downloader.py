@@ -5,9 +5,6 @@ import sys
 from contextlib import contextmanager
 from types import ModuleType
 from typing import Any, cast
-from core.engine.downloader import RecordDownloader
-from core.models import HostConfig, LogicConfig, TaskEntry
-from core.repository import MetadataRepository
 
 @contextmanager
 def _fake_alive_bar(*args, **kwargs):
@@ -23,6 +20,10 @@ def _fake_alive_bar(*args, **kwargs):
 fake_alive_progress = ModuleType("alive_progress")
 setattr(fake_alive_progress, "alive_bar", _fake_alive_bar)
 sys.modules.setdefault("alive_progress", fake_alive_progress)
+
+from core.engine.downloader import RecordDownloader
+from core.models import HostConfig, LogicConfig, TaskEntry
+from core.repository import MetadataRepository
 
 
 class _FakeContext:
