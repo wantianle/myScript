@@ -14,14 +14,12 @@ def menu() -> None:
     while True:
         ui.print_banner()
         menu_map = {
-            "1": lambda: workflow.full_progress(session),
-            # "2": lambda: workflow.search_flow(session),
-            # "3": lambda: workflow.compress_flow(session),
-            # "4": lambda: workflow.slice_flow(session),
-            "2": lambda: workflow.replay_flow(session),
-            "3": lambda: workflow.restore_environment_flow(session),
-            "4": lambda: session.runner.into_docker(),
-            "5": lambda: workflow.traffic_light_replay_flow(session),
+            "1": lambda: workflow.slice_progress(session),
+            "2": lambda: workflow.full_source_progress(session),
+            "3": lambda: workflow.replay_flow(session),
+            "4": lambda: workflow.restore_environment_flow(session),
+            "5": lambda: session.runner.into_docker(),
+            "6": lambda: workflow.traffic_light_replay_flow(session),
         }
         choice = prompter.select_main_menu_action()
 

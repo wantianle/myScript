@@ -6,7 +6,7 @@ from core.models import LibraryEntry
 def print_banner() -> None:
     """打印程序主标题。"""
     print("" + "=" * 42)
-    print("     witt ( What Is That Tag ? ）v1.5.8")
+    print("     witt ( What Is That Tag ? ）v2.0.0")
     print("" + "=" * 42)
 
 
@@ -28,6 +28,13 @@ def show_playback_library(
         soc2_update = meta.get("soc2", "N/A")
         print(f"{indent}├── soc1 update: \033[3;33m{soc1_update}\033[0m")
         print(f"{indent}└── soc2 update: \033[3;33m{soc2_update}\033[0m")
+
+
+def print_text_block(text: str) -> None:
+    """按原样打印多行文本块。"""
+    if not text:
+        return
+    print(text, end="" if text.endswith("\n") else "\n")
 
 
 def show_manual_play_header() -> None:

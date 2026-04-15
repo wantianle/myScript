@@ -3,18 +3,17 @@ import questionary
 from questionary import Choice
 from typing import List, Optional, Sequence, TypeVar
 
-from core.models import TaskEntry
-
 from interface import ui
 
 TaskLike = TypeVar("TaskLike")
 
 MAIN_MENU_ITEMS = [
-    ("[全流程] 查询 -> 切片/全量回放", "1"),
-    ("[仅回播] 手动选择/自动扫描回播", "2"),
-    ("[仅同步] 同步本地 mdrive 版本", "3"),
-    ("[进容器] 交互式进 docker bash", "4"),
-    ("[回灌红绿灯] 一键回灌红绿灯数据", "5"),
+    ("[全流程] 查询 -> 切片", "1"),
+    ("[全流程] 查询 -> 全量回放", "2"),
+    ("[仅回播] 手动选择/自动扫描回播", "3"),
+    ("[仅同步] 同步本地 mdrive 版本", "4"),
+    ("[进容器] 交互式进 docker bash", "5"),
+    ("[回灌红绿灯] 一键回灌红绿灯数据", "6"),
     ("[ 退出 ]", "q"),
 ]
 

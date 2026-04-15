@@ -6,6 +6,7 @@ from . import replay_workflow
 from core.session import AppSession
 from utils import parser
 
+
 def _show_skipped_batches(skipped_batches) -> None:
     """输出被跳过批次的摘要信息。"""
     for skipped_batch in skipped_batches:
@@ -24,24 +25,23 @@ def _show_failed_batches(failed_batches) -> None:
         )
 
 
-def full_progress(session: AppSession) -> None:
-    """执行查询、切片和可选回放的一体化主流程。"""
-    search_flow(session)
+def _load_task_entries(
+    session: AppSession,
+    need_export_path: bool = True,
+):
+    """执行查询并加载 manifest 中的任务列表。"""
+    search_flow(session, need_export_path=need_export_path)
     task_list = parser.parse_manifest(session.ctx.manifest_path)
     if not task_list:
         ui.print_status("未找到相关 Record 记录", "ERROR")
-        return
-    process_mode = prompter.choose_option(
-        "\n选择处理模式",
-        ["切片模式", "全量回放"],
-        True,
-    )
-    valid_tasks = [task_entry for task_entry in task_list if task_entry.paths]
-    if not valid_tasks:
-        ui.print_status("未找到可处理的有效 Tag 数据", "ERROR")
-        return
-    if process_mode == 2:
-        replay_workflow.full_source_replay_flow(session, valid_tasks)
+        return []
+    return task_list
+
+
+def slice_progress(session: AppSession) -> None:
+    """执行查询、切片和可选回放的一体化主流程。"""
+    task_list = _load_task_entries(session, need_export_path=True)
+    if not task_list:
         return
     selected_tasks = prompter.get_selected_indices(
         task_list, prompt="请选择要处理的 Tag 序号"
@@ -79,12 +79,31 @@ def full_progress(session: AppSession) -> None:
         )
 
 
-def search_flow(session: AppSession) -> None:
+def full_source_progress(session: AppSession) -> None:
+    """执行查询后直接回放原始 record 数据。"""
+    task_list = _load_task_entries(session, need_export_path=False)
+    if not task_list:
+        return
+    valid_tasks = [task_entry for task_entry in task_list if task_entry.paths]
+    if not valid_tasks:
+        ui.print_status("未找到可处理的有效 Tag 数据", "ERROR")
+        return
+    replay_workflow.full_source_replay_flow(session, valid_tasks)
+
+
+def search_flow(
+    session: AppSession,
+    need_export_path: bool = True,
+) -> None:
     """采集查询条件并执行 Record 检索脚本。"""
     config_prompter.get_basic_params(session.ctx)
-    config_prompter.get_path_params(session.ctx)
+    config_prompter.get_source_path_params(session.ctx)
+    if need_export_path:
+        config_prompter.get_export_path_params(session.ctx)
+    config_prompter.get_split_params(session.ctx)
     session.runner.run_find_record()
 
+full_progress = slice_progress
 restore_environment_flow = replay_workflow.restore_environment_flow
 traffic_light_replay_flow = replay_workflow.traffic_light_replay_flow
 replay_flow = replay_workflow.replay_flow

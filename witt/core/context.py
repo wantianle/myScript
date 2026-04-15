@@ -35,6 +35,7 @@ class TaskContext:
 
     app_config: AppConfig = field(init=False)
     temp_dir: Path = field(init=False)
+    find_record_output: str = field(init=False, default="")
 
     def __post_init__(self):
         """加载配置并初始化当前会话的上下文目录。"""

@@ -1,4 +1,8 @@
+import errno
+import os
 import subprocess
+import sys
+import pty
 from pathlib import Path
 
 
@@ -10,11 +14,16 @@ class ScriptRunner:
         PROJECT_ROOT = Path(__file__).resolve().parents[1]
         self.scripts_dir = (PROJECT_ROOT / self.ctx.paths.scripts_dir).resolve()
 
-    def _run_script(self, script_name: str, quiet: bool = False, *args: str) -> None:
-        """注入环境变量并执行指定脚本。"""
+    def _resolve_script_path(self, script_name: str) -> Path:
+        """解析脚本路径，优先使用仓库内脚本。"""
         script_path = self.scripts_dir / script_name
         if not script_path.exists():
             script_path = Path(self.ctx.docker.docker_scripts) / script_name
+        return script_path
+
+    def _run_script(self, script_name: str, quiet: bool = False, *args: str) -> None:
+        """注入环境变量并执行指定脚本。"""
+        script_path = self._resolve_script_path(script_name)
         env_vars = self.ctx.get_env_vars()
         bash_cmd = ["bash"]
         # if self.ctx.config["env"]["debug"]:
@@ -25,9 +34,52 @@ class ScriptRunner:
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"{script_name} 脚本执行失败") from e
 
+    def _run_script_with_terminal_capture(self, script_name: str, *args: str) -> str:
+        """在保留终端输出效果的同时捕获脚本输出。"""
+        script_path = self._resolve_script_path(script_name)
+        env_vars = self.ctx.get_env_vars()
+        cmd = ["bash", str(script_path), *args]
+        master_fd, slave_fd = pty.openpty()
+        output_chunks = []
+        process = None
+        try:
+            process = subprocess.Popen(
+                cmd,
+                env=env_vars,
+                stdout=slave_fd,
+                stderr=slave_fd,
+            )
+            os.close(slave_fd)
+            slave_fd = -1
+            while True:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError as exc:
+                    if exc.errno == errno.EIO:
+                        break
+                    raise
+                if not chunk:
+                    break
+                text = chunk.decode("utf-8", errors="replace")
+                output_chunks.append(text)
+                sys.stdout.write(text)
+                sys.stdout.flush()
+            return_code = process.wait()
+            if return_code != 0:
+                raise RuntimeError(f"{script_name} 脚本执行失败")
+            return "".join(output_chunks)
+        finally:
+            if slave_fd >= 0:
+                os.close(slave_fd)
+            os.close(master_fd)
+            if process is not None and process.poll() is None:
+                process.wait()
+
     def run_find_record(self) -> None:
         """执行 record 查询脚本。"""
-        self._run_script("find_record.sh")
+        self.ctx.find_record_output = self._run_script_with_terminal_capture(
+            "find_record.sh"
+        )
 
     def restore_runtime_environment(self) -> None:
         """恢复运行环境版本配置。"""

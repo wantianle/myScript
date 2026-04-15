@@ -16,6 +16,7 @@ from utils import parser
 
 REPLAY_MODE_STANDARD = "standard"
 REPLAY_MODE_TRAFFIC_LIGHT = "traffic_light"
+LAUNCH_MODE_STANDARD_PROMPT = "standard_prompt"
 
 
 def restore_environment_flow(
@@ -31,12 +32,19 @@ def restore_environment_flow(
             return False
     session.runner.restore_runtime_environment()
     if launch_mode == "prompt":
-        if prompter.get_confirm_input("是否需要打开 Dreamview & Multiviz？"):
+        if prompter.get_confirm_input(
+            "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
+        ):
             session.runner.start_standard_replay_stack()
         if prompter.get_confirm_input(
-            "是否需要打开 Debug_Driver-LiDAR & Debug_Driver-Camera & Perception-TrafficLight？"
+            "是否需要打开 Debug_Driver-Camera & Perception-TrafficLight？"
         ):
             session.runner.start_traffic_light_stack()
+    elif launch_mode == LAUNCH_MODE_STANDARD_PROMPT:
+        if prompter.get_confirm_input(
+            "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
+        ):
+            session.runner.start_standard_replay_stack()
     elif launch_mode == REPLAY_MODE_STANDARD:
         session.runner.start_standard_replay_stack()
     elif launch_mode == REPLAY_MODE_TRAFFIC_LIGHT:
@@ -89,7 +97,11 @@ def _prepare_replay(
 ) -> bool:
     """为回放准备环境和工具栈。"""
     auto_version = _resolve_version_from_records(session, records)
-    launch_mode = "prompt" if replay_mode == REPLAY_MODE_STANDARD else REPLAY_MODE_TRAFFIC_LIGHT
+    launch_mode = (
+        LAUNCH_MODE_STANDARD_PROMPT
+        if replay_mode == REPLAY_MODE_STANDARD
+        else REPLAY_MODE_TRAFFIC_LIGHT
+    )
     return restore_environment_flow(
         session,
         auto=auto_version,
@@ -120,6 +132,7 @@ def _replay_records(
     records: List[ReplayRecord],
     replay_mode: str,
     loaded_msg: str,
+    display_tag: str = "",
 ) -> None:
     """执行一轮可重复调整时间窗的回放循环。"""
     if not records:
@@ -136,7 +149,7 @@ def _replay_records(
             ui.print_status(str(e), "WARN")
             continue
         ui.show_playback_info(
-            tag=playback_plan.display_tag,
+            tag=display_tag or playback_plan.display_tag,
             duration=playback_plan.duration,
         )
         print(f"执行指令: \033[1;32m{playback_plan.command}\033[0m")
@@ -176,6 +189,7 @@ def auto_replay_flow(
             target_records,
             replay_mode,
             f"已加载 {len(target_records)} 个文件，总长 {total_duration}s",
+            display_tag=selected_tag.tag,
         )
 
 
@@ -184,8 +198,12 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
     if not task_entries:
         ui.print_status("没有可回放的 Tag", "WARN")
         return
+    find_record_output = getattr(session.ctx, "find_record_output", "")
     while True:
-        task_entry = replay_prompter.select_source_task_entry(task_entries)
+        task_entry = replay_prompter.select_source_task_entry(
+            task_entries,
+            find_record_output=find_record_output,
+        )
         if task_entry is None:
             return
         source_records = _build_source_replay_records(session, task_entry)
@@ -196,7 +214,10 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
             session,
             source_records,
             REPLAY_MODE_STANDARD,
-            f"全量模式已加载 {task_entry.name}，共 {len(source_records)} 个文件，总长 {source_records[0].duration}s",
+            "全量模式已加载 "
+            f"\033[1;32m{task_entry.name}\033[0m"
+            f" | 共 {len(source_records)} 个文件 | 总长 {source_records[0].duration}s",
+            display_tag=task_entry.name,
         )
 
 

@@ -47,8 +47,8 @@ def get_split_params(ctx) -> None:
         return
 
 
-def get_path_params(ctx) -> None:
-    """采集数据源路径和导出路径等与路径相关的配置。"""
+def get_source_path_params(ctx) -> None:
+    """采集数据源路径参数。"""
     ctx.logic.mode = int(
         prompter.choose_option("\n数据输入模式", ["本地", "NAS", "车端"], True)
     )
@@ -57,10 +57,20 @@ def get_path_params(ctx) -> None:
             "原始数据路径 (限/media下)",
             ctx.host.data_root,
         )
+
+
+def get_export_path_params(ctx) -> None:
+    """采集切片导出路径。"""
     ctx.host.dest_root = prompter.get_user_input(
         "切片导出路径 (限/media下)",
         ctx.host.dest_root,
     )
+
+
+def get_path_params(ctx) -> None:
+    """采集数据源路径和导出路径等与路径相关的配置。"""
+    get_source_path_params(ctx)
+    get_export_path_params(ctx)
     get_split_params(ctx)
 
 
