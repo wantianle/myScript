@@ -110,7 +110,17 @@ def _replay_records(session: AppSession, records: list, replay_mode: str, loaded
     while True:
         ui.print_status(loaded_msg)
         start, end = prompter.get_playback_range()
-        session.player.play(records, start, end)
+        try:
+            playback_plan = session.player.build_playback_plan(records, start, end)
+        except ValueError as e:
+            ui.print_status(str(e), "WARN")
+            continue
+        ui.show_playback_info(
+            tag=playback_plan.display_tag,
+            duration=playback_plan.duration,
+        )
+        print(f"执行指令: \033[1;32m{playback_plan.command}\033[0m")
+        session.executor.execute_interactive(playback_plan.command)
         if not prompter.get_confirm_input("继续调整播放时间?"):
             break
 
@@ -120,7 +130,12 @@ def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDAR
     自动扫描指定路径下的文件，专门负责回播界面的展示和用户输入处理
     """
     while True:
-        library = session.player.get_library()
+        library_result = session.player.load_library()
+        if library_result.cache_hit:
+            ui.print_status(f"本地库状态未变，加载缓存: {library_result.cache_path}...")
+        else:
+            ui.print_status(f"已扫描本地库 {session.ctx.work_dir}...")
+        library = library_result.library
         if not library:
             ui.print_status("本地目录为空！", "WARN")
             return
