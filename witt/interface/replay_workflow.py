@@ -184,7 +184,10 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
     if not task_entries:
         ui.print_status("没有可回放的 Tag", "WARN")
         return
-    for index, task_entry in enumerate(task_entries, 1):
+    while True:
+        task_entry = replay_prompter.select_source_task_entry(task_entries)
+        if task_entry is None:
+            return
         source_records = _build_source_replay_records(session, task_entry)
         if not source_records:
             ui.print_status(f"{task_entry.name} 未匹配到可回放的原始数据", "WARN")
@@ -193,11 +196,8 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
             session,
             source_records,
             REPLAY_MODE_STANDARD,
-            f"全量模式已加载 Tag[{index}/{len(task_entries)}] {task_entry.name}，共 {len(source_records)} 个文件，总长 {source_records[0].duration}s",
+            f"全量模式已加载 {task_entry.name}，共 {len(source_records)} 个文件，总长 {source_records[0].duration}s",
         )
-        if index < len(task_entries):
-            if not prompter.get_confirm_input("继续回放下一个 Tag?", True):
-                break
 
 
 def manual_replay_flow(

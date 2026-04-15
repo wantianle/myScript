@@ -5,7 +5,7 @@ import urllib.parse
 from pathlib import Path
 from typing import List, Optional
 
-from core.models import LibraryEntry, ReplayRecord
+from core.models import LibraryEntry, ReplayRecord, TaskEntry
 from interface import ui
 from utils import parser
 
@@ -58,6 +58,31 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
                 for soc_name in socs:
                     target_records.extend(tag_entry.socs[soc_name])
                 return target_records
+        ui.print_status("输入无效，请重新选择", "WARN")
+
+
+def select_source_task_entry(task_entries: List[TaskEntry]) -> Optional[TaskEntry]:
+    """从查询结果列表中选择一个用于全量回放的 Tag。"""
+    if not task_entries:
+        return None
+    while True:
+        print("-" * 48)
+        for index, task_entry in enumerate(task_entries, 1):
+            available_socs = [
+                soc_name
+                for soc_name, path_list in sorted(task_entry.soc_paths.items())
+                if path_list
+            ]
+            soc_summary = " ".join(available_socs) if available_socs else "no_soc"
+            print(f"[{index}] {task_entry.name} : {task_entry.time} [{soc_summary}]")
+        print("-" * 48)
+        raw_choice = input("选择要回放的 Tag 序号 (回车返回): ").strip()
+        if not raw_choice:
+            return None
+        if raw_choice.isdigit():
+            selected_index = int(raw_choice)
+            if 1 <= selected_index <= len(task_entries):
+                return task_entries[selected_index - 1]
         ui.print_status("输入无效，请重新选择", "WARN")
 
 

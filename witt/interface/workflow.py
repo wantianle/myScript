@@ -31,20 +31,24 @@ def full_progress(session: AppSession) -> None:
     if not task_list:
         ui.print_status("未找到相关 Record 记录", "ERROR")
         return
+    process_mode = prompter.choose_option(
+        "\n选择处理模式",
+        ["切片模式", "全量回放"],
+        True,
+    )
+    valid_tasks = [task_entry for task_entry in task_list if task_entry.paths]
+    if not valid_tasks:
+        ui.print_status("未找到可处理的有效 Tag 数据", "ERROR")
+        return
+    if process_mode == 2:
+        replay_workflow.full_source_replay_flow(session, valid_tasks)
+        return
     selected_tasks = prompter.get_selected_indices(
         task_list, prompt="请选择要处理的 Tag 序号"
     )
     valid_tasks = [task_entry for task_entry in selected_tasks if task_entry.paths]
     if not valid_tasks:
         ui.print_status("所选序号无效或无路径数据", "ERROR")
-        return
-    process_mode = prompter.choose_option(
-        "\n选择处理模式",
-        ["切片模式", "全量回放"],
-        True,
-    )
-    if process_mode == 2:
-        replay_workflow.full_source_replay_flow(session, valid_tasks)
         return
     session.ctx.logic.blacklist = (
         channel_prompter.get_tasks_channels(
