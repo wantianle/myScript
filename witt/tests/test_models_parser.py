@@ -105,6 +105,38 @@ class MetadataModelTests(unittest.TestCase):
         self.assertEqual(restored_meta.files["soc1"], ["a.record", "b.record"])
         self.assertEqual(restored_meta.last_update["soc1"], "2026-04-15 12:01:00")
 
+    def test_library_entry_from_record_meta(self) -> None:
+        task_entry = TaskEntry.from_manifest_parts(
+            time="2026-04-15 12:00:00",
+            name="demo_tag",
+            paths=[],
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tag_dir = Path(tmpdir) / "tag_dir"
+            soc_dir = tag_dir / "soc1"
+            soc_dir.mkdir(parents=True, exist_ok=True)
+            record_file = soc_dir / "a.record"
+            record_file.write_text("record", encoding="utf-8")
+
+            record_meta = RecordMeta.from_task_entry(
+                task_entry=task_entry,
+                vehicle="XZB600013",
+                date="20260415",
+                before=15,
+                after=5,
+            )
+            record_meta.update_soc_files(
+                soc_name="soc1",
+                file_names=[record_file.name],
+                updated_at="2026-04-15 12:01:00",
+            )
+
+            library_entry = LibraryEntry.from_record_meta(record_meta, tag_dir)
+
+        self.assertEqual(library_entry.tag, "demo_tag")
+        self.assertEqual(library_entry.socs["soc1"][0].path, str(record_file.absolute()))
+        self.assertEqual(library_entry.last_update["soc1"], "2026-04-15 12:01:00")
+
     def test_library_entry_cache_roundtrip(self) -> None:
         library_entry = LibraryEntry(
             tag="demo_tag",
