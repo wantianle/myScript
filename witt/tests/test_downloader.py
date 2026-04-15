@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from types import ModuleType
 from typing import Any, cast
 
-
 @contextmanager
 def _fake_alive_bar(*args, **kwargs):
     class _DummyBar:
