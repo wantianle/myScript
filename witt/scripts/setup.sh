@@ -13,14 +13,33 @@ DATA_ROOT="/media/mini"
 VENV_DIR="$DIR/../.venv"
 VENV_PIP="$VENV_DIR/bin/pip"
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+
+ensure_venv_support() {
+    if python3 -m venv --help >/dev/null 2>&1; then
+        return 0
+    fi
+
+    log_warning "当前 Python 缺少 venv 模块，尝试安装..."
+    if ! sudo apt-get update; then
+        log_warning "apt-get update 存在不可用源，继续尝试安装 venv 依赖..."
+    fi
+
+    if sudo apt-get install -y "python${PY_VER}-venv"; then
+        return 0
+    fi
+
+    log_warning "python${PY_VER}-venv 安装失败，尝试回退到 python3-venv..."
+    sudo apt-get install -y python3-venv
+}
+
 if [ ! -d "$VENV_DIR" ]; then
     log_warning "未检测到虚拟环境，尝试安装..."
-    sudo apt-get update && sudo apt-get install python${PY_VER}-venv -y
+    ensure_venv_support
     python3 -m venv "$VENV_DIR"
-    $VENV_PIP install -i $INDEX --trusted-host mirrors.aliyun.com -r "$DIR/../requirements.txt"
+    "$VENV_PIP" install -i "$INDEX" --trusted-host mirrors.aliyun.com -r "$DIR/../requirements.txt"
 fi
 
-source $VENV_DIR/bin/activate
+source "$VENV_DIR/bin/activate"
 
 if ! command -v jq >/dev/null 2>&1; then
     log_warning "未检测到 jq ，尝试安装..."
@@ -49,16 +68,23 @@ if [[ ! -d "$MDRIVE_ROOT/mdrive" ]]; then
     bash "$MDRIVE_ROOT/patch.sh"
 fi
 
-if [[ ! -O "/media" ]]; then
-    log_warning "/media 没有读写权限，尝试更改..."
-    sudo chown $USER:$USER /media
+if [[ ! -e "/media" ]]; then
+    log_error "/media 目录不存在！"
+    exit 1
 fi
 
-if [[ ! -O $DATA_ROOT ]]; then
+if [[ ! -O "/media" ]]; then
+    log_warning "/media 没有读写权限，尝试更改..."
+    sudo chown "$USER:$USER" /media
+fi
+
+if [[ ! -e "$DATA_ROOT" ]]; then
+    mkdir -p "$DATA_ROOT"
+fi
+
+if [[ ! -O "$DATA_ROOT" ]]; then
     log_warning "$DATA_ROOT 没有读写权限，尝试更改..."
-    sudo chown -R $USER:$USER $DATA_ROOT
-else
-    mkdir -p $DATA_ROOT
+    sudo chown -R "$USER:$USER" "$DATA_ROOT"
 fi
 
 if [[ -z "$(docker ps -a -q -f name=$CONTAINER)" ]]; then
@@ -66,9 +92,9 @@ if [[ -z "$(docker ps -a -q -f name=$CONTAINER)" ]]; then
     bash "$DEV_START_SCRIPT"
 fi
 
-if ! docker exec $CONTAINER /bin/bash -c "source /mdrive/mdrive/setup.sh && cyber_recorder --help" >/dev/null 2>&1; then
+if ! docker exec "$CONTAINER" /bin/bash -c "source /mdrive/mdrive/setup.sh && cyber_recorder --help" >/dev/null 2>&1; then
     log_error "docker 容器无法正确打开！"
-    sleep 1
+    exit 1
 fi
 
-python3 $DIR/../main.py
+python3 "$DIR/../main.py"

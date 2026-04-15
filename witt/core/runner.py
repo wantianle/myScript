@@ -23,7 +23,7 @@ class ScriptRunner:
         bash_cmd = ["bash"]
         # if self.ctx.config["env"]["debug"]:
         #     bash_cmd.append("-x")
-        cmd = bash_cmd + [str(script_path)]
+        cmd = bash_cmd + [str(script_path), *args]
         try:
             subprocess.run(cmd, env=env_vars, text=True, check=True, capture_output=quiet)
         except subprocess.CalledProcessError as e:
@@ -40,6 +40,13 @@ class ScriptRunner:
 
     def run_traffic_light(self):
         self._run_script("traffic_light.sh")
+
+    def run_standard_replay_stack(self):
+        self.run_tools()
+
+    def run_traffic_light_replay_stack(self):
+        self.run_standard_replay_stack()
+        self.run_traffic_light()
 
     def run_docker(self):
         self._run_script("dev_start.sh", True, "--remove")

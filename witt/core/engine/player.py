@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any
-from interface import ui, workflow
+from interface import ui
 
 
 class RecordPlayer:
@@ -88,12 +88,21 @@ class RecordPlayer:
             return datetime.fromisoformat(val) if isinstance(val, str) else val
         global_start = ensure_dt(records[0]["begin"])
         total_duration = max(r["duration"] for r in records)
+        if total_duration <= 0:
+            ui.print_status("数据总时长无效，无法播放", "WARN")
+            return
         # 构造指令
         docker_paths = [self.executor.map_path(r["path"]) for r in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]
         # 时间窗
         fmt = "%Y-%m-%d %H:%M:%S"
         final_start = max(0, start_sec)
+        if final_start >= total_duration:
+            ui.print_status("播放起点超出数据总时长", "WARN")
+            return
+        if end_sec > 0 and end_sec <= final_start:
+            ui.print_status("播放时间范围无效，结束时间必须大于开始时间", "WARN")
+            return
         final_end = total_duration if end_sec <= 0 else min(end_sec, total_duration)
         cmd_parts.append(
             f'-b "{(global_start + timedelta(seconds=final_start)).strftime(fmt)}"'
@@ -108,13 +117,4 @@ class RecordPlayer:
             duration=total_duration,
         )
         print(f"执行指令: \033[1;32m{full_cmd}\033[0m")
-
-        self.ctx.config["logic"]["version"] = next(
-            Path(records[0]["path"]).parent.glob("version*"),
-            self.ctx.config["logic"]["version"]
-        )
-        if self.ctx.config["logic"]["version"]:
-            workflow.restore_env_flow(self.session, True)
-        else:
-            workflow.restore_env_flow(self.session)
         self.executor.execute_interactive(full_cmd)

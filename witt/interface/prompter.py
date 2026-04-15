@@ -22,6 +22,15 @@ def get_user_input(prompt: str, default_value: str):
         raise
 
 
+def get_int_input(prompt: str, default_value) -> int:
+    while True:
+        raw_val = get_user_input(prompt, str(default_value))
+        try:
+            return int(raw_val)
+        except ValueError:
+            ui.print_status("请输入整数", "WARN")
+
+
 def choose_option(prompt: str, options: List[str], index: bool = False):
     for i, opt in enumerate(options, 1):
         print(f"[{i}] {opt}  ", end="")
@@ -56,15 +65,18 @@ def get_vehicle_name():
 
 
 def get_split_params(config: dict):
-    config["logic"]["before"] = int(
-        get_user_input("切片 tag 前多少秒", config["logic"]["before"])
-    )
-    config["logic"]["after"] = int(
-        get_user_input(
-            "切片 tag 后多少秒",
-            config["logic"]["after"],
-        )
-    )
+    while True:
+        before = get_int_input("切片 tag 前多少秒", config["logic"]["before"])
+        after = get_int_input("切片 tag 后多少秒", config["logic"]["after"])
+        if before < 0:
+            ui.print_status("before 不能小于 0", "WARN")
+            continue
+        if before + after <= 0:
+            ui.print_status("切片总时长必须大于 0 秒", "WARN")
+            continue
+        config["logic"]["before"] = before
+        config["logic"]["after"] = after
+        return
 
 
 def get_path_params(config: dict):
@@ -273,7 +285,7 @@ def get_channels(session: "AppSession", tasks: List[dict]) -> List[dict]:
                         channels_map[name].setdefault("count", 0)
                     else:
                         channels_map[name]["count"] += ch.get("count", 0)
-                socs.update(soc)
+                socs.add(soc)
     except Exception as e:
         ui.print_status("频道获取失败", "ERROR")
         raise e

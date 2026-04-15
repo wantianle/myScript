@@ -26,7 +26,7 @@ class Recorder:
         start_dt: Optional[str],
         end_dt: Optional[str],
         blacklist: Optional[List[str]] = None,
-    ):
+    ) -> bool:
         """执行 record 切片，生成 .split 文件"""
         logging.info(f"[RECORDER_SLICE] File: {Path(host_in).name}")
         logging.info(f"  Range: {start_dt} -> {end_dt}")
@@ -44,9 +44,11 @@ class Recorder:
 
         try:
             self.session.executor.execute(split_cmd)
+            return True
         except Exception as e:
             ui.print_status(
                 f"切片异常，跳过 {host_in} 请检查文件是否存在，是否有权限，是否损坏",
                 "WARN",
             )
             logging.debug(f"{host_in} 切片异常: {e}")
+            return False
