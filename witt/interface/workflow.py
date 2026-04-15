@@ -26,25 +26,25 @@ def full_progress(session: AppSession):
             ui.print_status("下载队列为空", "WARN")
             for skipped_batch in planned_summary.skipped_batches:
                 ui.print_status(
-                    f"{skipped_batch['task_name']}[{skipped_batch['soc_name']}] 跳过: {skipped_batch['reason']}",
+                    f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
                     "ERROR",
                 )
             return
         ui.print_status(f"准备同步 {planned_summary.total_files} 个 Record 片段...")
         for skipped_batch in planned_summary.skipped_batches:
             ui.print_status(
-                f"{skipped_batch['task_name']}[{skipped_batch['soc_name']}] 跳过: {skipped_batch['reason']}",
+                f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
                 "ERROR",
             )
         download_summary = session.record_downloader.download_records(valid_tasks)
         for skipped_batch in download_summary.skipped_batches:
             ui.print_status(
-                f"{skipped_batch['task_name']}[{skipped_batch['soc_name']}] 跳过: {skipped_batch['reason']}",
+                f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
                 "ERROR",
             )
         for failed_batch in download_summary.failed_batches:
             ui.print_status(
-                f"{failed_batch['task_name']}[{failed_batch['soc_name']}] 失败: {failed_batch['reason']}",
+                f"{failed_batch.task_name}[{failed_batch.soc_name}] 失败: {failed_batch.reason}",
                 "WARN",
             )
         if not download_summary.completed_batches:

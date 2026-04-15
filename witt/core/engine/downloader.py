@@ -6,17 +6,54 @@ from alive_progress import alive_bar
 from datetime import datetime, timedelta
 from pathlib import Path
 from shlex import quote
+from typing import List
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
 from utils import parser
 
 
 @dataclass
+class DownloadItem:
+    src: Path
+    dest: Path
+
+
+@dataclass
+class DownloadBatch:
+    task: dict
+    soc_name: str
+    save_dir: Path
+    items: List[DownloadItem]
+
+
+@dataclass
+class SkippedBatch:
+    task_name: str
+    soc_name: str
+    reason: str
+
+
+@dataclass
+class FailedBatch:
+    task_name: str
+    soc_name: str
+    reason: str
+
+
+@dataclass
+class CompletedBatch:
+    task_name: str
+    soc_name: str
+    save_dir: Path
+    file_count: int
+
+
+@dataclass
 class DownloadSummary:
     total_files: int = 0
-    completed_batches: list = field(default_factory=list)
-    skipped_batches: list = field(default_factory=list)
-    failed_batches: list = field(default_factory=list)
+    completed_batches: List[CompletedBatch] = field(default_factory=list)
+    skipped_batches: List[SkippedBatch] = field(default_factory=list)
+    failed_batches: List[FailedBatch] = field(default_factory=list)
 
 
 class RecordDownloader:
@@ -205,18 +242,18 @@ cyber_recorder play -s {play_start} -f {records_str}
         self._ensure_version_files(src_dir)
         save_dir = self.ctx.get_task_dir(task["id"], task["time"], soc_name)
         self._prepare_dir(save_dir)
-        return {
-            "task": task,
-            "soc_name": soc_name,
-            "save_dir": save_dir,
-            "items": [
-                {
-                    "src": Path(p),
-                    "dest": save_dir / (Path(p).name + ".split"),
-                }
+        return DownloadBatch(
+            task=task,
+            soc_name=soc_name,
+            save_dir=save_dir,
+            items=[
+                DownloadItem(
+                    src=Path(p),
+                    dest=save_dir / (Path(p).name + ".split"),
+                )
                 for p in paths
             ],
-        }
+        )
 
     def _collect_task_batches(self, task_list):
         batches = []
@@ -230,11 +267,11 @@ cyber_recorder play -s {play_start} -f {records_str}
                     batches.append(batch)
                 except TaskBatchPlanningError as e:
                     skipped_batches.append(
-                        {
-                            "task_name": task["name"],
-                            "soc_name": soc_name,
-                            "reason": str(e),
-                        }
+                        SkippedBatch(
+                            task_name=task["name"],
+                            soc_name=soc_name,
+                            reason=str(e),
+                        )
                     )
                     logging.warning(
                         f"[TASK_SKIP] Tag: {task['name']} | Soc: {soc_name} | {e}"
@@ -244,58 +281,58 @@ cyber_recorder play -s {play_start} -f {records_str}
     def plan_download(self, task_list) -> DownloadSummary:
         batches, skipped_batches = self._collect_task_batches(task_list)
         return DownloadSummary(
-            total_files=sum(len(batch["items"]) for batch in batches),
+            total_files=sum(len(batch.items) for batch in batches),
             skipped_batches=skipped_batches,
         )
 
     def _finalize_batch(self, batch, processed_files, batch_failed, summary: DownloadSummary):
-        task = batch["task"]
+        task = batch.task
         if batch_failed or not processed_files:
-            self._cleanup_failed_batch(batch["save_dir"])
+            self._cleanup_failed_batch(batch.save_dir)
             summary.failed_batches.append(
-                {
-                    "task_name": task["name"],
-                    "soc_name": batch["soc_name"],
-                    "reason": "批次存在异常，已清理残留数据",
-                }
+                FailedBatch(
+                    task_name=task["name"],
+                    soc_name=batch.soc_name,
+                    reason="批次存在异常，已清理残留数据",
+                )
             )
             logging.warning(
-                f"[TASK_SKIP] Tag: {task['name']} | Soc: {batch['soc_name']} | 批次存在异常，已清理残留数据"
+                f"[TASK_SKIP] Tag: {task['name']} | Soc: {batch.soc_name} | 批次存在异常，已清理残留数据"
             )
             return
         try:
-            self._post_process_task(task, batch["save_dir"], processed_files)
+            self._post_process_task(task, batch.save_dir, processed_files)
             summary.completed_batches.append(
-                {
-                    "task_name": task["name"],
-                    "soc_name": batch["soc_name"],
-                    "save_dir": batch["save_dir"],
-                    "file_count": len(processed_files),
-                }
+                CompletedBatch(
+                    task_name=task["name"],
+                    soc_name=batch.soc_name,
+                    save_dir=batch.save_dir,
+                    file_count=len(processed_files),
+                )
             )
         except Exception as e:
-            self._cleanup_failed_batch(batch["save_dir"])
+            self._cleanup_failed_batch(batch.save_dir)
             summary.failed_batches.append(
-                {
-                    "task_name": task["name"],
-                    "soc_name": batch["soc_name"],
-                    "reason": f"{batch['save_dir']} 后处理失败，已清理当前批次",
-                }
+                FailedBatch(
+                    task_name=task["name"],
+                    soc_name=batch.soc_name,
+                    reason=f"{batch.save_dir} 后处理失败，已清理当前批次",
+                )
             )
             logging.warning(
-                f"[TASK_POST_PROCESS_FAIL] Tag: {task['name']} | Soc: {batch['soc_name']} | {e}"
+                f"[TASK_POST_PROCESS_FAIL] Tag: {task['name']} | Soc: {batch.soc_name} | {e}"
             )
 
     def _run_task_batch(self, batch, bar, summary: DownloadSummary):
-        task = batch["task"]
+        task = batch.task
         processed_files = []
         batch_failed = False
-        for item in batch["items"]:
+        for item in batch.items:
             bar.text = f"-> [Tag: {task['name'][:15]}]"
             if not batch_failed:
-                if self._sync_file(item["src"], item["dest"], task):
+                if self._sync_file(item.src, item.dest, task):
                     processed_files.append(
-                        (str(item["src"]), str(item["dest"]), batch["soc_name"])
+                        (str(item.src), str(item.dest), batch.soc_name)
                     )
                 else:
                     batch_failed = True
@@ -310,7 +347,7 @@ cyber_recorder play -s {play_start} -f {records_str}
         summary = DownloadSummary(skipped_batches=skipped_batches)
         if not batches:
             return summary
-        total_files = sum(len(batch["items"]) for batch in batches)
+        total_files = sum(len(batch.items) for batch in batches)
         summary.total_files = total_files
         with alive_bar(
             total_files,
