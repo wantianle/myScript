@@ -65,7 +65,7 @@ class RecordDownloader:
 
     @property
     def mode(self):
-        return self.ctx.config["logic"]["mode"]
+        return self.ctx.logic.mode
 
     def _prepare_dir(self, target_dir: Path):
         """
@@ -121,10 +121,7 @@ class RecordDownloader:
         tag_dir = save_dir.parent
         meta_path = tag_dir / "meta.json"
         dt_tag = parser.str_to_time(task_entry.time)
-        bf, af = (
-            int(self.ctx.config["logic"]["before"]),
-            int(self.ctx.config["logic"]["after"]),
-        )
+        bf, af = (int(self.ctx.logic.before), int(self.ctx.logic.after))
         contract = {
             "tag_info": {
                 "name": task_entry.name,
@@ -164,8 +161,8 @@ class RecordDownloader:
         # 生成 README
         v_content = version_files[0].read_text(encoding="utf-8", errors="replace")
         nas_path = save_dir.relative_to(Path(self.ctx.config["host"]["dest_root"]))
-        before = int(self.ctx.config["logic"]["before"])
-        after = int(self.ctx.config["logic"]["after"])
+        before = int(self.ctx.logic.before)
+        after = int(self.ctx.logic.after)
         play_lead = 10
         duration = max(before + after, 0)
         target_start = before - play_lead
@@ -196,14 +193,14 @@ cyber_recorder play -s {play_start} -f {records_str}
 
     def _sync_file(self, src, dest, task_entry: TaskEntry) -> bool:
         """生成 .split 文件，全量覆盖，最后清理中间文件"""
-        logic = self.ctx.config["logic"]
+        logic = self.ctx.logic
         tag_dt = parser.str_to_time(task_entry.time)
-        t_start = tag_dt - timedelta(seconds=int(logic["before"]))
-        t_end = tag_dt + timedelta(seconds=int(logic["after"]))
-        blacklist = logic.get("blacklist")
+        t_start = tag_dt - timedelta(seconds=int(logic.before))
+        t_end = tag_dt + timedelta(seconds=int(logic.after))
+        blacklist = logic.blacklist
         if blacklist:
             logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
-        if self.ctx.config["logic"]["mode"] != 3:
+        if self.ctx.logic.mode != 3:
             try:
                 self.session.recorder.split(src, dest, t_start, t_end, blacklist)
                 return True

@@ -20,7 +20,7 @@ def full_progress(session: AppSession):
         if not valid_tasks:
             ui.print_status("所选序号无效或无路径数据", "ERROR")
             return
-        session.ctx.config["logic"]["blacklist"] = (
+        session.ctx.logic.blacklist = (
             channel_prompter.get_tasks_channels(
                 session,
                 valid_tasks,
@@ -68,8 +68,8 @@ def full_progress(session: AppSession):
 
 
 def search_flow(session: AppSession):
-    config_prompter.get_basic_params(session.ctx.config)
-    config_prompter.get_path_params(session.ctx.config)
+    config_prompter.get_basic_params(session.ctx)
+    config_prompter.get_path_params(session.ctx)
     session.runner.run_find_record()
 
 restore_environment_flow = replay_workflow.restore_environment_flow

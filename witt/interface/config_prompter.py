@@ -20,44 +20,44 @@ def get_vehicle_name():
     return vehicle_name
 
 
-def get_basic_params(config):
+def get_basic_params(ctx):
     ui.print_status("基本信息配置")
-    config["logic"]["target_date"] = prompter.get_user_input(
+    ctx.logic.target_date = prompter.get_user_input(
         "数据日期",
-        config["logic"]["target_date"],
+        ctx.logic.target_date,
     )
-    config["logic"]["vehicle"] = get_vehicle_name()
+    ctx.logic.vehicle = get_vehicle_name()
 
 
-def get_split_params(config):
+def get_split_params(ctx):
     while True:
-        before = prompter.get_int_input("切片 tag 前多少秒", config["logic"]["before"])
-        after = prompter.get_int_input("切片 tag 后多少秒", config["logic"]["after"])
+        before = prompter.get_int_input("切片 tag 前多少秒", ctx.logic.before)
+        after = prompter.get_int_input("切片 tag 后多少秒", ctx.logic.after)
         if before < 0:
             ui.print_status("before 不能小于 0", "WARN")
             continue
         if before + after <= 0:
             ui.print_status("切片总时长必须大于 0 秒", "WARN")
             continue
-        config["logic"]["before"] = before
-        config["logic"]["after"] = after
+        ctx.logic.before = before
+        ctx.logic.after = after
         return
 
 
-def get_path_params(config):
-    config["logic"]["mode"] = int(
+def get_path_params(ctx):
+    ctx.logic.mode = int(
         prompter.choose_option("\n数据输入模式", ["本地", "NAS", "车端"], True)
     )
-    if config["logic"]["mode"] == 1:
-        config["host"]["data_root"] = prompter.get_user_input(
+    if ctx.logic.mode == 1:
+        ctx.config["host"]["data_root"] = prompter.get_user_input(
             "原始数据路径 (限/media下)",
-            config["host"]["data_root"],
+            ctx.config["host"]["data_root"],
         )
-    config["host"]["dest_root"] = prompter.get_user_input(
+    ctx.config["host"]["dest_root"] = prompter.get_user_input(
         "切片导出路径 (限/media下)",
-        config["host"]["dest_root"],
+        ctx.config["host"]["dest_root"],
     )
-    get_split_params(config)
+    get_split_params(ctx)
 
 
 def get_json_input() -> str:
@@ -77,8 +77,8 @@ def get_json_input() -> str:
             return ""
 
 
-def update_dest_root(config, prompt: str) -> None:
-    config["host"]["dest_root"] = prompter.get_user_input(
+def update_dest_root(ctx, prompt: str) -> None:
+    ctx.config["host"]["dest_root"] = prompter.get_user_input(
         prompt,
-        config["host"]["dest_root"],
+        ctx.config["host"]["dest_root"],
     )

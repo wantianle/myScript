@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
+from core.models import LogicConfig
 
 class Formatter(logging.Formatter):
     """处理颜色与格式"""
@@ -33,21 +34,23 @@ class TaskContext:
     config_path: Path
 
     config: dict = field(init=False)
+    logic: LogicConfig = field(init=False)
     temp_dir: Path = field(init=False)
 
     def __post_init__(self):
         self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
-        self.config["logic"]["target_date"] = datetime.now().strftime("%Y%m%d")
+        self.logic = LogicConfig.from_dict(self.config["logic"])
+        self.logic.target_date = datetime.now().strftime("%Y%m%d")
         self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
         atexit.register(self._cleanup_temp)
 
     @property
     def vehicle(self) -> str:
-        return self.config["logic"]["vehicle"]
+        return self.logic.vehicle
 
     @property
     def target_date(self) -> str:
-        return self.config["logic"]["target_date"]
+        return self.logic.target_date
 
     @property
     def work_dir(self) -> Path:
@@ -130,11 +133,11 @@ class TaskContext:
             "DEST_ROOT": self.config["host"]["dest_root"],
             "MDRIVE_ROOT": self.config["host"]["mdrive_root"],
             "DATA_ROOT": self.config["host"]["data_root"],
-            "SOC": self.config["logic"]["soc"],
-            "BEFORE": self.config["logic"]["before"],
-            "AFTER": self.config["logic"]["after"],
-            "MODE": self.config["logic"]["mode"],
-            "VERSION": self.config["logic"]["version"],
+            "SOC": self.logic.soc,
+            "BEFORE": self.logic.before,
+            "AFTER": self.logic.after,
+            "MODE": self.logic.mode,
+            "VERSION": self.logic.version,
             "CONTAINER": self.config["docker"]["container"],
             "REMOTE_USER": self.config["remote"]["user"],
             "REMOTE_IP": self.config["remote"]["ip"],

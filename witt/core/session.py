@@ -26,7 +26,7 @@ class AppSession:
     def executor(self):
         return (
             DockerAdapter(self.ctx)
-            if self.ctx.config["logic"].get("mode") != 3
+            if self.ctx.logic.mode != 3
             else SSHAdapter(self.ctx.config)
         )
     def init_logging(self):

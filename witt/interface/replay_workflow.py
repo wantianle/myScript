@@ -22,8 +22,8 @@ def restore_environment_flow(
     launch_mode: str = "prompt",
 ):
     if not auto:
-        session.ctx.config["logic"]["version"] = config_prompter.get_json_input()
-        if not session.ctx.config["logic"]["version"]:
+        session.ctx.logic.version = config_prompter.get_json_input()
+        if not session.ctx.logic.version:
             ui.print_status("未提供版本文件，已取消环境恢复", "WARN")
             return False
     session.runner.restore_runtime_environment()
@@ -46,9 +46,9 @@ def traffic_light_replay_flow(session: AppSession):
     if manual:
         manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
     else:
-        config_prompter.get_basic_params(session.ctx.config)
+        config_prompter.get_basic_params(session.ctx)
         config_prompter.update_dest_root(
-            session.ctx.config,
+            session.ctx,
             "输入要扫描的回灌路径(限/media下)",
         )
         auto_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
@@ -59,9 +59,9 @@ def replay_flow(session: AppSession):
     if manual:
         manual_replay_flow(session, REPLAY_MODE_STANDARD)
     else:
-        config_prompter.get_basic_params(session.ctx.config)
+        config_prompter.get_basic_params(session.ctx)
         config_prompter.update_dest_root(
-            session.ctx.config,
+            session.ctx,
             "输入要扫描的回播路径(限/media下)",
         )
         auto_replay_flow(session, REPLAY_MODE_STANDARD)
@@ -72,7 +72,7 @@ def _resolve_version_from_records(
     records: List[ReplayRecord],
 ) -> bool:
     version_path = next(Path(records[0].path).parent.glob("version*"), None)
-    session.ctx.config["logic"]["version"] = version_path or ""
+    session.ctx.logic.version = version_path or ""
     return version_path is not None
 
 
