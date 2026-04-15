@@ -66,9 +66,10 @@ class TaskContext:
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
-    def get_task_dir(self, task_id: str, task_name: str, soc: str = "") -> Path:
-        """统一管理任务存储路径规则"""
-        folder = f"{int(task_id):02d}.{task_name}"
+    def get_task_dir(self, task_id: str, task_time: str, soc: str = "") -> Path:
+        """统一管理任务存储路径规则，目录名使用 ASCII 时间戳"""
+        dt = datetime.strptime(task_time, "%Y-%m-%d %H:%M:%S")
+        folder = f"{int(task_id):02d}.{dt.strftime('%Y%m%d_%H%M%S')}"
         path = self.work_dir / folder
         if soc:
             path = path / soc

@@ -110,7 +110,10 @@ class RecordDownloader:
         nas_path = save_dir.relative_to(Path(self.ctx.config["host"]["dest_root"]))
         before = int(self.ctx.config["logic"]["before"])
         after = int(self.ctx.config["logic"]["after"])
-        play_start = (before - 15) if (before - 15) > 0 else 0
+        play_lead = 10
+        duration = max(before + after, 0)
+        target_start = before - play_lead
+        play_start = target_start if 0 <= target_start < duration else 0
         records_str = " ".join([Path(f[1]).name for f in file_infos])
         readme_content = f"""- **tag：** {task["time"]} {task["name"]} duration: {before + after}s
 - **问题描述：**
@@ -163,7 +166,7 @@ cyber_recorder play -s {play_start} -f {records_str}
             for soc_name, paths in task["soc_paths"].items():
                 if not paths:
                     continue
-                save_dir = self.ctx.get_task_dir(task["id"], task["name"], soc_name)
+                save_dir = self.ctx.get_task_dir(task["id"], task["time"], soc_name)
                 if save_dir not in prepared_dirs:
                     self._prepare_dir(save_dir)
                     prepared_dirs.add(save_dir)

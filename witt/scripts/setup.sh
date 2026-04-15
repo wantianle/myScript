@@ -61,15 +61,13 @@ else
     mkdir -p $DATA_ROOT
 fi
 
-if [ "$(docker ps -a -q -f name=$CONTAINER)" ]; then
-    docker restart $CONTAINER > /dev/null
-else
+if [[ -z "$(docker ps -a -q -f name=$CONTAINER)" ]]; then
     log_warning "docker 容器不存在, 尝试创建环境..."
-    bash $DEV_START_SCRIPT
+    bash "$DEV_START_SCRIPT"
 fi
 
 if ! docker exec $CONTAINER /bin/bash -c "source /mdrive/mdrive/setup.sh && cyber_recorder --help" >/dev/null 2>&1; then
-    log_error " mdrive docker 容器启动失败！"
+    log_error "docker 容器无法正确打开！"
     sleep 1
 fi
 
