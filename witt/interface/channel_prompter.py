@@ -68,7 +68,7 @@ def get_tasks_channels(
     confirm_prompt: Callable[[str, bool], bool],
 ) -> List[str]:
     """交互式选择要过滤掉的频道。"""
-    if not confirm_prompt("是否过滤 Channel?"):
+    if not confirm_prompt("是否过滤 Channel?", False):
         return []
     try:
         unique_channels = get_channels(session, tasks)
