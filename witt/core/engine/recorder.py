@@ -1,15 +1,16 @@
 import logging
 from utils import parser
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 from core.errors import RecordInfoError, RecordSplitError
+from core.models import RecordInfo
 
 
 class Recorder:
     def __init__(self, session):
         self.session = session
 
-    def get_info(self, docker_path: str) -> Dict[str, Any]:
+    def get_info(self, docker_path: str) -> RecordInfo:
         """获取 record 的时间、时长、排序后的频道列表"""
         try:
             stdout = self.session.executor.execute(f"cyber_recorder info {docker_path}")

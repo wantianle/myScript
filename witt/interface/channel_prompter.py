@@ -4,17 +4,17 @@ from pathlib import Path
 from typing import List
 
 from core.errors import RecordInfoError
-from core.models import TaskEntry
+from core.models import ChannelInfo, TaskEntry
 from core.session import AppSession
 from interface import ui
 
 
-def select_channels_wizard(channels: List[dict], prompt: str) -> List[str]:
+def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str]:
     """勾选式频道选择器"""
     choices = [
         Choice(
-            title=f"{channel['name']:<20} (Msg Count: {channel.get('count', 0)})",
-            value=channel["name"],
+            title=f"{channel.name:<20} (Msg Count: {channel.count})",
+            value=channel.name,
         )
         for channel in channels
     ]
@@ -32,7 +32,7 @@ def select_channels_wizard(channels: List[dict], prompt: str) -> List[str]:
     return selected if selected is not None else []
 
 
-def get_channels(session: AppSession, tasks: List[TaskEntry]) -> List[dict]:
+def get_channels(session: AppSession, tasks: List[TaskEntry]) -> List[ChannelInfo]:
     """从多个 record 中提取频道并集，支持双 SOC 路径检查"""
     channels_map = {}
     socs = set()
@@ -43,14 +43,15 @@ def get_channels(session: AppSession, tasks: List[TaskEntry]) -> List[dict]:
                 if soc in socs:
                     continue
                 info = session.recorder.get_info(path_text)
-                channels = info.get("channels", [])
-                for channel in channels:
-                    name = channel["name"]
+                for channel in info.channels:
+                    name = channel.name
                     if name not in channels_map:
-                        channels_map[name] = channel.copy()
-                        channels_map[name].setdefault("count", 0)
+                        channels_map[name] = ChannelInfo(
+                            name=channel.name,
+                            count=channel.count,
+                        )
                     else:
-                        channels_map[name]["count"] += channel.get("count", 0)
+                        channels_map[name].count += channel.count
                 socs.add(soc)
     except RecordInfoError as e:
         ui.print_status(str(e), "ERROR")
@@ -58,7 +59,7 @@ def get_channels(session: AppSession, tasks: List[TaskEntry]) -> List[dict]:
     except Exception as e:
         ui.print_status("频道获取失败", "ERROR")
         raise e
-    return sorted(channels_map.values(), key=lambda channel: channel["name"])
+    return sorted(channels_map.values(), key=lambda channel: channel.name)
 
 
 def get_tasks_channels(session: AppSession, tasks: List[TaskEntry], confirm_prompt) -> List[str]:

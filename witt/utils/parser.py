@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
 
-from core.models import TaskEntry
+from core.models import ChannelInfo, RecordInfo, TaskEntry
 from interface import ui
 
 _RE_TIME = re.compile(
@@ -14,7 +14,7 @@ _RE_DURATION = re.compile(r"duration:\s+(\d+\.?\d*)")
 _RE_CHANNELS = re.compile(r"(\/mdrive\/[\/\w]+)\s+(\d+)\s+messages")
 
 
-def parse_record_info(stdout: str) -> Dict[str, Any]:
+def parse_record_info(stdout: str) -> RecordInfo:
     """从 cyber_recorder info 的输出中抠出核心数据"""
     raw_time = _RE_TIME.findall(stdout)
     raw_duration = _RE_DURATION.findall(stdout)
@@ -22,14 +22,14 @@ def parse_record_info(stdout: str) -> Dict[str, Any]:
     begin_time = str_to_time(raw_time[0])
     end_time = str_to_time(raw_time[1])
     duration = math.floor(float(raw_duration[0]))
-    channels = [{"name": name, "count": int(count)} for name, count in raw_channels]
-    channels.sort(key=lambda x: x["name"])
-    return {
-        "begin": begin_time,
-        "end": end_time,
-        "duration": duration,
-        "channels": channels,
-    }
+    channels = [ChannelInfo(name=name, count=int(count)) for name, count in raw_channels]
+    channels.sort(key=lambda channel_info: channel_info.name)
+    return RecordInfo(
+        begin=begin_time,
+        end=end_time,
+        duration=duration,
+        channels=channels,
+    )
 
 
 def sanitize_name(name: str) -> str:

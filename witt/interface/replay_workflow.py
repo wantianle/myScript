@@ -162,8 +162,8 @@ def manual_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STAND
         except RecordInfoError as e:
             ui.print_status(str(e), "ERROR")
             return
-        tag_start = info_start["begin"]
-        tag_end = info_end["end"]
+        tag_start = info_start.begin
+        tag_end = info_end.end
         tag_duration = int((tag_end - tag_start).total_seconds())
         current_records = [
             ReplayRecord(path=str(path_obj), begin=tag_start, duration=tag_duration)
