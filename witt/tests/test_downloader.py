@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 from contextlib import contextmanager
 from types import ModuleType
+from typing import Any, cast
 
 
 @contextmanager
@@ -18,7 +19,7 @@ def _fake_alive_bar(*args, **kwargs):
 
 
 fake_alive_progress = ModuleType("alive_progress")
-fake_alive_progress.alive_bar = _fake_alive_bar
+setattr(fake_alive_progress, "alive_bar", _fake_alive_bar)
 sys.modules.setdefault("alive_progress", fake_alive_progress)
 
 from core.engine.downloader import RecordDownloader
@@ -78,7 +79,7 @@ class DownloaderPlanningTests(unittest.TestCase):
             record_path.write_text("record", encoding="utf-8")
 
             downloader = RecordDownloader(
-                _FakeSession(root_path),
+                cast(Any, _FakeSession(root_path)),
                 metadata_repository=MetadataRepository(),
             )
             task_entry = TaskEntry.from_manifest_parts(
@@ -102,7 +103,7 @@ class DownloaderPlanningTests(unittest.TestCase):
             record_path.write_text("record", encoding="utf-8")
 
             downloader = RecordDownloader(
-                _FakeSession(root_path),
+                cast(Any, _FakeSession(root_path)),
                 metadata_repository=MetadataRepository(),
             )
             task_entry = TaskEntry.from_manifest_parts(

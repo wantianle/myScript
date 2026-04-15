@@ -1,7 +1,8 @@
 import logging
+from datetime import datetime
 from utils import parser
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 from core.errors import RecordInfoError, RecordSplitError
 from core.models import RecordInfo
 
@@ -22,8 +23,8 @@ class Recorder:
         self,
         host_in: str,
         host_out: Optional[str],
-        start_dt: Optional[str],
-        end_dt: Optional[str],
+        start_dt: Optional[Union[str, datetime]],
+        end_dt: Optional[Union[str, datetime]],
         blacklist: Optional[List[str]] = None,
     ) -> None:
         """执行 record 切片，生成 .split 文件"""

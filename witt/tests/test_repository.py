@@ -34,6 +34,7 @@ class LibraryCacheRepositoryTests(unittest.TestCase):
             loaded_entries = repository.load("fp-1")
 
         self.assertIsNotNone(loaded_entries)
+        assert loaded_entries is not None
         self.assertEqual(loaded_entries[0].tag, "demo_tag")
         self.assertEqual(loaded_entries[0].socs["soc1"][0].path, "/tmp/a.record")
 
