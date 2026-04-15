@@ -1,9 +1,13 @@
 import re
 import questionary
 from questionary import Choice
-from typing import List
+from typing import List, Sequence, TypeVar
+
+from core.models import TaskEntry
 
 from interface import ui
+
+TaskLike = TypeVar("TaskLike")
 
 MAIN_MENU_CHOICES = [
     Choice(title="[全流程] 查询 -> 切片 -> 回放", value="1"),
@@ -25,7 +29,8 @@ MAIN_MENU_STYLE = questionary.Style(
 )
 
 
-def get_user_input(prompt: str, default_value: str):
+def get_user_input(prompt: str, default_value: str) -> str:
+    """读取带默认值的单行文本输入。"""
     try:
         val = input(f"\033[32m{prompt}\033[0m (默认 {default_value}): ").strip()
         return val if val else default_value
@@ -35,6 +40,7 @@ def get_user_input(prompt: str, default_value: str):
 
 
 def get_int_input(prompt: str, default_value) -> int:
+    """读取整数输入，直到用户提供合法整数。"""
     while True:
         raw_val = get_user_input(prompt, str(default_value))
         try:
@@ -43,7 +49,8 @@ def get_int_input(prompt: str, default_value) -> int:
             ui.print_status("请输入整数", "WARN")
 
 
-def choose_option(prompt: str, options: List[str], index: bool = False):
+def choose_option(prompt: str, options: Sequence[str], index: bool = False):
+    """显示简易选项列表并返回选中值或索引。"""
     for i, opt in enumerate(options, 1):
         print(f"[{i}] {opt}  ", end="")
     while True:
@@ -53,13 +60,11 @@ def choose_option(prompt: str, options: List[str], index: bool = False):
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
-def get_selected_indices(all_tasks: list, prompt="请输入要处理的序号") -> list:
-    """
-    通用序号获取方法 带预览与重试逻辑
-    :param all_tasks: 原始任务列表，用于获取长度和预览内容
-    :param prompt: 输入提示词
-    :return: 选中的任务对象列表
-    """
+def get_selected_indices(
+    all_tasks: Sequence[TaskLike],
+    prompt: str = "请输入要处理的序号",
+) -> List[TaskLike]:
+    """根据用户输入的序号表达式返回选中的任务对象列表。"""
     total_count = len(all_tasks)
     if total_count == 0:
         ui.print_status("任务列表为空", "ERROR")
@@ -132,6 +137,7 @@ def get_confirm_input(prompt: str, default: bool = False) -> bool:
 
 
 def select_main_menu_action():
+    """显示主菜单并返回用户选择的动作编号。"""
     return questionary.select(
         "请选择操作 :",
         choices=MAIN_MENU_CHOICES,
@@ -140,7 +146,8 @@ def select_main_menu_action():
     ).ask()
 
 
-def wait_for_continue():
+def wait_for_continue() -> None:
+    """等待用户确认后继续回到主菜单。"""
     try:
         input("按回车键继续...")
     except KeyboardInterrupt:

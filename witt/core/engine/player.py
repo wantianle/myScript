@@ -28,13 +28,16 @@ class RecordPlayer:
 
     @property
     def executor(self):
+        """返回当前会话对应的执行适配器。"""
         return self.session.executor
 
     @property
     def library_file(self):
+        """返回本地回放库缓存文件路径。"""
         return self.ctx.work_dir / ".witt" / "local_library.json"
 
     def load_library(self) -> LibraryLoadResult:
+        """加载本地回放库，必要时重扫目录并刷新缓存。"""
         fp = self.ctx.get_library_fingerprint()
         if self.library_file.exists():
             data = json.loads(self.library_file.read_text(encoding="utf-8"))
@@ -64,6 +67,7 @@ class RecordPlayer:
         )
 
     def _serialize_library(self, library_entries: List[LibraryEntry]):
+        """将回放库对象转换为可写入 JSON 的结构。"""
         serialized_entries = []
         for library_entry in library_entries:
             serialized_entries.append(
@@ -89,6 +93,7 @@ class RecordPlayer:
         return serialized_entries
 
     def _deserialize_library(self, raw_library) -> List[LibraryEntry]:
+        """将缓存文件中的原始结构还原为回放库对象。"""
         deserialized_entries = []
         for raw_entry in raw_library:
             deserialized_entries.append(
@@ -114,6 +119,7 @@ class RecordPlayer:
         return deserialized_entries
 
     def scan_local_library(self) -> List[LibraryEntry]:
+        """扫描工作目录中的 metadata，构建回放库对象。"""
         library_map = {}
         for meta_file in self.ctx.work_dir.rglob("meta.json"):
             tag_dir = meta_file.parent

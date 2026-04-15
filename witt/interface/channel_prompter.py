@@ -1,7 +1,7 @@
 import questionary
 from questionary import Choice
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 from core.errors import RecordInfoError
 from core.models import ChannelInfo, TaskEntry
@@ -58,17 +58,21 @@ def get_channels(session: AppSession, tasks: List[TaskEntry]) -> List[ChannelInf
         raise
     except Exception as e:
         ui.print_status("频道获取失败", "ERROR")
-        raise e
+        raise RuntimeError("频道获取失败") from e
     return sorted(channels_map.values(), key=lambda channel: channel.name)
 
 
-def get_tasks_channels(session: AppSession, tasks: List[TaskEntry], confirm_prompt) -> List[str]:
-    """过滤要播放的频道"""
+def get_tasks_channels(
+    session: AppSession,
+    tasks: List[TaskEntry],
+    confirm_prompt: Callable[[str, bool], bool],
+) -> List[str]:
+    """交互式选择要过滤掉的频道。"""
     if not confirm_prompt("是否过滤 Channel?"):
         return []
     try:
         unique_channels = get_channels(session, tasks)
     except Exception as e:
         ui.print_status("频道获取失败", "ERROR")
-        raise e
+        raise RuntimeError("频道获取失败") from e
     return select_channels_wizard(unique_channels, prompt="请【选中】要删除的频道:")

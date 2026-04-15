@@ -5,7 +5,8 @@ from . import prompter
 from . import ui
 
 
-def get_vehicle_name():
+def get_vehicle_name() -> str:
+    """交互式采集并格式化车辆编号。"""
     vehicle_prefix = prompter.choose_option("\n选择车辆类型", ["XZB6", "XZT5"])
     while True:
         vehicle_number = input("\033[32m输入车辆号: \033[0m").strip()
@@ -20,7 +21,8 @@ def get_vehicle_name():
     return vehicle_name
 
 
-def get_basic_params(ctx):
+def get_basic_params(ctx) -> None:
+    """采集基础业务参数，包括日期和车辆。"""
     ui.print_status("基本信息配置")
     ctx.logic.target_date = prompter.get_user_input(
         "数据日期",
@@ -29,7 +31,8 @@ def get_basic_params(ctx):
     ctx.logic.vehicle = get_vehicle_name()
 
 
-def get_split_params(ctx):
+def get_split_params(ctx) -> None:
+    """采集切片时间窗参数并完成基础校验。"""
     while True:
         before = prompter.get_int_input("切片 tag 前多少秒", ctx.logic.before)
         after = prompter.get_int_input("切片 tag 后多少秒", ctx.logic.after)
@@ -44,7 +47,8 @@ def get_split_params(ctx):
         return
 
 
-def get_path_params(ctx):
+def get_path_params(ctx) -> None:
+    """采集数据源路径和导出路径等与路径相关的配置。"""
     ctx.logic.mode = int(
         prompter.choose_option("\n数据输入模式", ["本地", "NAS", "车端"], True)
     )
@@ -78,6 +82,7 @@ def get_json_input() -> str:
 
 
 def update_dest_root(ctx, prompt: str) -> None:
+    """更新导出根目录。"""
     ctx.host.dest_root = prompter.get_user_input(
         prompt,
         ctx.host.dest_root,

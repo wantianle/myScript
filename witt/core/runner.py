@@ -10,10 +10,8 @@ class ScriptRunner:
         PROJECT_ROOT = Path(__file__).resolve().parents[1]
         self.scripts_dir = (PROJECT_ROOT / self.ctx.paths.scripts_dir).resolve()
 
-    def _run_script(self, script_name: str, quiet: bool = False, *args: str):
-        """
-        注入参数执行 Shell 脚本
-        """
+    def _run_script(self, script_name: str, quiet: bool = False, *args: str) -> None:
+        """注入环境变量并执行指定脚本。"""
         script_path = self.scripts_dir / script_name
         if not script_path.exists():
             script_path = Path(self.ctx.docker.docker_scripts) / script_name
@@ -27,42 +25,55 @@ class ScriptRunner:
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"{script_name} 脚本执行失败") from e
 
-    def run_find_record(self):
+    def run_find_record(self) -> None:
+        """执行 record 查询脚本。"""
         self._run_script("find_record.sh")
 
-    def restore_runtime_environment(self):
+    def restore_runtime_environment(self) -> None:
+        """恢复运行环境版本配置。"""
         self._run_script("restore_runtime_env.sh")
 
-    def start_replay_stack(self):
+    def start_replay_stack(self) -> None:
+        """启动标准回放相关模块。"""
         self._run_script("start_replay_stack.sh")
 
-    def start_traffic_light_stack(self):
+    def start_traffic_light_stack(self) -> None:
+        """启动红绿灯回灌相关模块。"""
         self._run_script("start_traffic_light_stack.sh")
 
-    def start_standard_replay_stack(self):
+    def start_standard_replay_stack(self) -> None:
+        """启动标准回放完整栈。"""
         self.start_replay_stack()
 
-    def start_traffic_light_replay_stack(self):
+    def start_traffic_light_replay_stack(self) -> None:
+        """启动红绿灯回灌所需的完整回放栈。"""
         self.start_standard_replay_stack()
         self.start_traffic_light_stack()
 
-    def run_restore_env(self):
+    def run_restore_env(self) -> None:
+        """兼容旧接口：恢复运行环境。"""
         self.restore_runtime_environment()
 
-    def run_tools(self):
+    def run_tools(self) -> None:
+        """兼容旧接口：启动标准回放栈。"""
         self.start_replay_stack()
 
-    def run_traffic_light(self):
+    def run_traffic_light(self) -> None:
+        """兼容旧接口：启动红绿灯栈。"""
         self.start_traffic_light_stack()
 
-    def run_standard_replay_stack(self):
+    def run_standard_replay_stack(self) -> None:
+        """兼容旧接口：启动标准回放完整栈。"""
         self.start_standard_replay_stack()
 
-    def run_traffic_light_replay_stack(self):
+    def run_traffic_light_replay_stack(self) -> None:
+        """兼容旧接口：启动红绿灯完整回放栈。"""
         self.start_traffic_light_replay_stack()
 
-    def run_docker(self):
+    def run_docker(self) -> None:
+        """启动底层 docker 开发容器。"""
         self._run_script("dev_start.sh", True, "--remove")
 
-    def into_docker(self):
+    def into_docker(self) -> None:
+        """进入运行中的 docker 容器。"""
         self._run_script("dev_into.sh")
