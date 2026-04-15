@@ -1,7 +1,91 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Union
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, TypedDict, Union
+
+
+class RawTaskEntry(TypedDict, total=False):
+    time: str
+    name: str
+    soc_paths: Dict[str, List[str]]
+    paths: List[str]
+    id: str
+
+
+class RawLogicConfig(TypedDict, total=False):
+    vehicle: str
+    target_date: str
+    mode: Union[int, str]
+    version: Union[str, Path]
+    soc: str
+    before: Union[int, str]
+    after: Union[int, str]
+    blacklist: Union[List[str], str]
+
+
+class RawHostConfig(TypedDict, total=False):
+    mdrive_root: str
+    nas_root: str
+    data_root: str
+    dest_root: str
+
+
+class RawRemoteConfig(TypedDict, total=False):
+    user: str
+    ip: str
+    data_root: str
+
+
+class RawDockerConfig(TypedDict, total=False):
+    container: str
+    host_mount: str
+    docker_mount: str
+    docker_scripts: str
+    setup_env: str
+
+
+class RawPathsConfig(TypedDict, total=False):
+    scripts_dir: str
+
+
+class RawAppConfig(TypedDict):
+    host: RawHostConfig
+    remote: RawRemoteConfig
+    docker: RawDockerConfig
+    paths: RawPathsConfig
+    logic: RawLogicConfig
+
+
+class RawReplayRecord(TypedDict):
+    path: str
+    begin: Union[str, datetime]
+    duration: int
+
+
+class RawLibraryEntry(TypedDict, total=False):
+    tag: str
+    time: str
+    vehicle: str
+    date: str
+    last_update: Dict[str, str]
+    socs: Dict[str, List[RawReplayRecord]]
+
+
+class RawTagInfo(TypedDict):
+    name: str
+    time: str
+    offset_bf: int
+    offset_af: int
+    abs_start: str
+    abs_end: str
+
+
+class RawRecordMeta(TypedDict, total=False):
+    tag_info: RawTagInfo
+    vehicle: str
+    date: str
+    last_update: Dict[str, str]
+    files: Dict[str, List[str]]
 
 
 @dataclass
@@ -49,7 +133,7 @@ class LogicConfig:
     blacklist: List[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, raw_logic: Dict[str, Any]) -> "LogicConfig":
+    def from_dict(cls, raw_logic: RawLogicConfig) -> "LogicConfig":
         raw_blacklist = raw_logic.get("blacklist")
         if isinstance(raw_blacklist, list):
             blacklist = [str(item) for item in raw_blacklist]
@@ -79,7 +163,7 @@ class HostConfig:
     dest_root: str
 
     @classmethod
-    def from_dict(cls, raw_host: Dict[str, Any]) -> "HostConfig":
+    def from_dict(cls, raw_host: RawHostConfig) -> "HostConfig":
         return cls(
             mdrive_root=str(raw_host.get("mdrive_root", "")),
             nas_root=str(raw_host.get("nas_root", "")),
@@ -95,7 +179,7 @@ class RemoteConfig:
     data_root: str
 
     @classmethod
-    def from_dict(cls, raw_remote: Dict[str, Any]) -> "RemoteConfig":
+    def from_dict(cls, raw_remote: RawRemoteConfig) -> "RemoteConfig":
         return cls(
             user=str(raw_remote.get("user", "")),
             ip=str(raw_remote.get("ip", "")),
@@ -112,7 +196,7 @@ class DockerConfig:
     setup_env: str
 
     @classmethod
-    def from_dict(cls, raw_docker: Dict[str, Any]) -> "DockerConfig":
+    def from_dict(cls, raw_docker: RawDockerConfig) -> "DockerConfig":
         return cls(
             container=str(raw_docker.get("container", "")),
             host_mount=str(raw_docker.get("host_mount", "")),
@@ -127,7 +211,7 @@ class PathsConfig:
     scripts_dir: str
 
     @classmethod
-    def from_dict(cls, raw_paths: Dict[str, Any]) -> "PathsConfig":
+    def from_dict(cls, raw_paths: RawPathsConfig) -> "PathsConfig":
         return cls(
             scripts_dir=str(raw_paths.get("scripts_dir", "")),
         )
@@ -142,7 +226,7 @@ class AppConfig:
     logic: LogicConfig
 
     @classmethod
-    def from_dict(cls, raw_config: Dict[str, Any]) -> "AppConfig":
+    def from_dict(cls, raw_config: RawAppConfig) -> "AppConfig":
         return cls(
             host=HostConfig.from_dict(raw_config["host"]),
             remote=RemoteConfig.from_dict(raw_config["remote"]),
@@ -172,14 +256,14 @@ class ReplayRecord:
         )
 
     @classmethod
-    def from_cache_dict(cls, raw_record: Mapping[str, Any]) -> "ReplayRecord":
+    def from_cache_dict(cls, raw_record: RawReplayRecord) -> "ReplayRecord":
         return cls(
             path=str(raw_record["path"]),
             begin=raw_record["begin"],
             duration=int(raw_record["duration"]),
         )
 
-    def to_cache_dict(self) -> Dict[str, Any]:
+    def to_cache_dict(self) -> RawReplayRecord:
         return {
             "path": self.path,
             "begin": self.begin,
@@ -197,7 +281,7 @@ class LibraryEntry:
     last_update: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def from_cache_dict(cls, raw_entry: Mapping[str, Any]) -> "LibraryEntry":
+    def from_cache_dict(cls, raw_entry: RawLibraryEntry) -> "LibraryEntry":
         return cls(
             tag=str(raw_entry["tag"]),
             time=str(raw_entry["time"]),
@@ -213,7 +297,7 @@ class LibraryEntry:
             },
         )
 
-    def to_cache_dict(self) -> Dict[str, Any]:
+    def to_cache_dict(self) -> RawLibraryEntry:
         return {
             "tag": self.tag,
             "time": self.time,
@@ -297,7 +381,7 @@ class TagInfo:
         )
 
     @classmethod
-    def from_dict(cls, raw_tag_info: Mapping[str, Any]) -> "TagInfo":
+    def from_dict(cls, raw_tag_info: RawTagInfo) -> "TagInfo":
         return cls(
             name=str(raw_tag_info["name"]),
             time=str(raw_tag_info["time"]),
@@ -307,7 +391,7 @@ class TagInfo:
             abs_end=str(raw_tag_info["abs_end"]),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> RawTagInfo:
         return {
             "name": self.name,
             "time": self.time,
@@ -342,7 +426,7 @@ class RecordMeta:
         )
 
     @classmethod
-    def from_dict(cls, raw_meta: Mapping[str, Any]) -> "RecordMeta":
+    def from_dict(cls, raw_meta: RawRecordMeta) -> "RecordMeta":
         return cls(
             tag_info=TagInfo.from_dict(raw_meta["tag_info"]),
             vehicle=str(raw_meta.get("vehicle", "")),
@@ -376,7 +460,7 @@ class RecordMeta:
             "%Y-%m-%d %H:%M:%S"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> RawRecordMeta:
         return {
             "tag_info": self.tag_info.to_dict(),
             "vehicle": self.vehicle,

@@ -2,9 +2,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
 
-from core.models import LibraryEntry, RecordMeta, ReplayRecord
+from core.models import LibraryEntry, RawLibraryEntry, RecordMeta, ReplayRecord
 
 
 @dataclass
@@ -69,13 +69,13 @@ class RecordPlayer:
     def _serialize_library(
         self,
         library_entries: List[LibraryEntry],
-    ) -> List[Dict[str, Any]]:
+    ) -> List[RawLibraryEntry]:
         """将回放库对象转换为可写入 JSON 的结构。"""
         return [library_entry.to_cache_dict() for library_entry in library_entries]
 
     def _deserialize_library(
         self,
-        raw_library: List[Dict[str, Any]],
+        raw_library: List[RawLibraryEntry],
     ) -> List[LibraryEntry]:
         """将缓存文件中的原始结构还原为回放库对象。"""
         return [LibraryEntry.from_cache_dict(raw_entry) for raw_entry in raw_library]
