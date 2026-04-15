@@ -3,17 +3,22 @@ import select
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
+from core.models import LibraryEntry, ReplayRecord
 from interface import ui
 from utils import parser
 
 
-def select_playback_entry(library: List[dict], vehicle: str, target_date: str):
+def select_playback_entry(
+    library: List[LibraryEntry],
+    vehicle: str,
+    target_date: str,
+) -> Optional[LibraryEntry]:
     filtered_library = [
         entry
         for entry in library
-        if entry["date"] == target_date and entry["vehicle"] == vehicle
+        if entry.date == target_date and entry.vehicle == vehicle
     ]
     if not filtered_library:
         ui.print_status("当前目录下没有符合条件的回播数据", "WARN")
@@ -30,8 +35,8 @@ def select_playback_entry(library: List[dict], vehicle: str, target_date: str):
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
-def select_replay_records(tag_entry: dict) -> List[dict]:
-    socs = sorted(list(tag_entry["socs"].keys()))
+def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
+    socs = sorted(list(tag_entry.socs.keys()))
     if not socs:
         ui.print_status("当前回播条目没有可用的 SOC 数据", "WARN")
         return []
@@ -45,11 +50,11 @@ def select_replay_records(tag_entry: dict) -> List[dict]:
         if choice.isdigit():
             soc_index = int(choice)
             if 1 <= soc_index <= len(socs):
-                return tag_entry["socs"][socs[soc_index - 1]]
+                return tag_entry.socs[socs[soc_index - 1]]
             if len(socs) > 1 and soc_index == len(socs) + 1:
                 target_records = []
                 for soc_name in socs:
-                    target_records.extend(tag_entry["socs"][soc_name])
+                    target_records.extend(tag_entry.socs[soc_name])
                 return target_records
         ui.print_status("输入无效，请重新选择", "WARN")
 
@@ -61,12 +66,12 @@ def get_playback_range() -> tuple:
     return parser.parse_range_logic(range_input)
 
 
-def get_manual_replay_paths() -> list:
+def get_manual_replay_paths() -> List[Path]:
     ui.show_manual_play_header()
     return get_dragged_input()
 
 
-def get_dragged_input() -> list:
+def get_dragged_input() -> List[Path]:
     """
     解决拖拽多文件自带换行的问题。
     嗅探标准输入缓冲区，把所有排队中的路径一次性读完。

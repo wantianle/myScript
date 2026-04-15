@@ -2,11 +2,13 @@ import os
 import sys
 import termios
 from pathlib import Path
+from typing import List
 
 from . import config_prompter
 from . import prompter
 from . import replay_prompter
 from . import ui
+from core.models import ReplayRecord
 from core.errors import RecordInfoError, PathMappingError
 from core.session import AppSession
 
@@ -65,13 +67,20 @@ def replay_flow(session: AppSession):
         auto_replay_flow(session, REPLAY_MODE_STANDARD)
 
 
-def _resolve_version_from_records(session: AppSession, records: list) -> bool:
-    version_path = next(Path(records[0]["path"]).parent.glob("version*"), None)
+def _resolve_version_from_records(
+    session: AppSession,
+    records: List[ReplayRecord],
+) -> bool:
+    version_path = next(Path(records[0].path).parent.glob("version*"), None)
     session.ctx.config["logic"]["version"] = version_path or ""
     return version_path is not None
 
 
-def _prepare_replay(session: AppSession, records: list, replay_mode: str) -> bool:
+def _prepare_replay(
+    session: AppSession,
+    records: List[ReplayRecord],
+    replay_mode: str,
+) -> bool:
     auto_version = _resolve_version_from_records(session, records)
     launch_mode = "prompt" if replay_mode == REPLAY_MODE_STANDARD else REPLAY_MODE_TRAFFIC_LIGHT
     return restore_environment_flow(
@@ -81,7 +90,12 @@ def _prepare_replay(session: AppSession, records: list, replay_mode: str) -> boo
     )
 
 
-def _replay_records(session: AppSession, records: list, replay_mode: str, loaded_msg: str):
+def _replay_records(
+    session: AppSession,
+    records: List[ReplayRecord],
+    replay_mode: str,
+    loaded_msg: str,
+):
     if not records:
         ui.print_status("回播列表为空", "WARN")
         return
@@ -126,7 +140,7 @@ def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDAR
         target_records = replay_prompter.select_replay_records(selected_tag)
         if not target_records:
             continue
-        total_duration = max(r["duration"] for r in target_records)
+        total_duration = max(replay_record.duration for replay_record in target_records)
         _replay_records(
             session,
             target_records,
@@ -152,8 +166,8 @@ def manual_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STAND
         tag_end = info_end["end"]
         tag_duration = int((tag_end - tag_start).total_seconds())
         current_records = [
-            {"path": str(p), "begin": tag_start, "duration": tag_duration}
-            for p in paths
+            ReplayRecord(path=str(path_obj), begin=tag_start, duration=tag_duration)
+            for path_obj in paths
         ]
         _replay_records(
             session,

@@ -10,10 +10,10 @@ def show_playback_library(library, vehicle, target_date) -> None:
     print("-" * 42)
     for index, entry in enumerate(library, 1):
         print(
-            f"{index:<3} ├── \033[3m{entry['time'][11:]} \033[1;32m{entry['tag']}\033[0m "
+            f"{index:<3} ├── \033[3m{entry.time[11:]} \033[1;32m{entry.tag}\033[0m "
         )
         indent = " " * 4
-        meta = entry.get("last_update", {})
+        meta = entry.last_update or {}
         soc1_update = meta.get("soc1", "N/A")
         soc2_update = meta.get("soc2", "N/A")
         print(f"{indent}├── soc1 update: \033[3;33m{soc1_update}\033[0m")
