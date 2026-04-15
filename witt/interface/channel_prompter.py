@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 
 from core.errors import RecordInfoError
+from core.models import TaskEntry
 from core.session import AppSession
 from interface import ui
 
@@ -31,14 +32,13 @@ def select_channels_wizard(channels: List[dict], prompt: str) -> List[str]:
     return selected if selected is not None else []
 
 
-def get_channels(session: AppSession, tasks: List[dict]) -> List[dict]:
+def get_channels(session: AppSession, tasks: List[TaskEntry]) -> List[dict]:
     """从多个 record 中提取频道并集，支持双 SOC 路径检查"""
     channels_map = {}
     socs = set()
     try:
-        for task in tasks:
-            path_list = task.get("paths", [])
-            for path_text in path_list:
+        for task_entry in tasks:
+            for path_text in task_entry.paths:
                 soc = Path(path_text).parent.name[-4:]
                 if soc in socs:
                     continue
@@ -61,7 +61,7 @@ def get_channels(session: AppSession, tasks: List[dict]) -> List[dict]:
     return sorted(channels_map.values(), key=lambda channel: channel["name"])
 
 
-def get_tasks_channels(session: AppSession, tasks: List[dict], confirm_prompt) -> List[str]:
+def get_tasks_channels(session: AppSession, tasks: List[TaskEntry], confirm_prompt) -> List[str]:
     """过滤要播放的频道"""
     if not confirm_prompt("是否过滤 Channel?"):
         return []

@@ -9,6 +9,7 @@ from shlex import quote
 from typing import List
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
+from core.models import TaskEntry
 from utils import parser
 
 
@@ -20,7 +21,7 @@ class DownloadItem:
 
 @dataclass
 class DownloadBatch:
-    task: dict
+    task: TaskEntry
     soc_name: str
     save_dir: Path
     items: List[DownloadItem]
@@ -115,19 +116,19 @@ class RecordDownloader:
                 synced_files.append(v_dest)
         return synced_files
 
-    def _save_contract(self, task, save_dir, file_infos):
+    def _save_contract(self, task_entry: TaskEntry, save_dir, file_infos):
         """保存元数据，实现数据信息缓存，减少底层重复计算，并为回播提供必要的上下文信息"""
         tag_dir = save_dir.parent
         meta_path = tag_dir / "meta.json"
-        dt_tag = parser.str_to_time(task["time"])
+        dt_tag = parser.str_to_time(task_entry.time)
         bf, af = (
             int(self.ctx.config["logic"]["before"]),
             int(self.ctx.config["logic"]["after"]),
         )
         contract = {
             "tag_info": {
-                "name": task["name"],
-                "time": task["time"],
+                "name": task_entry.name,
+                "time": task_entry.time,
                 "offset_bf": bf,
                 "offset_af": af,
                 "abs_start": (dt_tag - timedelta(seconds=bf)).isoformat(),
@@ -152,13 +153,13 @@ class RecordDownloader:
         )
         meta_path.write_text(json.dumps(contract, indent=4, ensure_ascii=False))
 
-    def _post_process_task(self, task, save_dir, file_infos):
+    def _post_process_task(self, task_entry: TaskEntry, save_dir, file_infos):
         """生成元数据、README 和 version"""
         # 同步 version
         src_dir = Path(file_infos[0][0]).parent
         version_files = self._sync_version_files(src_dir, save_dir)
         # 生成元数据文件
-        self._save_contract(task, save_dir, file_infos)
+        self._save_contract(task_entry, save_dir, file_infos)
 
         # 生成 README
         v_content = version_files[0].read_text(encoding="utf-8", errors="replace")
@@ -170,7 +171,7 @@ class RecordDownloader:
         target_start = before - play_lead
         play_start = target_start if 0 <= target_start < duration else 0
         records_str = " ".join([Path(f[1]).name for f in file_infos])
-        readme_content = f"""- **tag：** {task["time"]} {task["name"]} duration: {before + after}s
+        readme_content = f"""- **tag：** {task_entry.time} {task_entry.name} duration: {before + after}s
 - **问题描述：**
 > 填写补充描述
 - **预期结果：**
@@ -190,13 +191,13 @@ cyber_recorder play -s {play_start} -f {records_str}
 """
         readme_path = save_dir / "README.md"
         readme_path.write_text(readme_content, encoding="utf-8")
-        logging.info(f"[TASK_COMPLETE] Tag: {task['name']} | Saved to: {save_dir}")
+        logging.info(f"[TASK_COMPLETE] Tag: {task_entry.name} | Saved to: {save_dir}")
         logging.info(f"  Files: {[Path(f[1]).name for f in file_infos]}")
 
-    def _sync_file(self, src, dest, task) -> bool:
+    def _sync_file(self, src, dest, task_entry: TaskEntry) -> bool:
         """生成 .split 文件，全量覆盖，最后清理中间文件"""
         logic = self.ctx.config["logic"]
-        tag_dt = parser.str_to_time(task["time"])
+        tag_dt = parser.str_to_time(task_entry.time)
         t_start = tag_dt - timedelta(seconds=int(logic["before"]))
         t_end = tag_dt + timedelta(seconds=int(logic["after"]))
         blacklist = logic.get("blacklist")
@@ -237,13 +238,13 @@ cyber_recorder play -s {play_start} -f {records_str}
             except Exception:
                 pass
 
-    def _plan_task_batch(self, task, soc_name, paths):
+    def _plan_task_batch(self, task_entry: TaskEntry, soc_name, paths):
         src_dir = Path(paths[0]).parent
         self._ensure_version_files(src_dir)
-        save_dir = self.ctx.get_task_dir(task["id"], task["time"], soc_name)
+        save_dir = self.ctx.get_task_dir(task_entry.id, task_entry.time, soc_name)
         self._prepare_dir(save_dir)
         return DownloadBatch(
-            task=task,
+            task=task_entry,
             soc_name=soc_name,
             save_dir=save_dir,
             items=[
@@ -258,23 +259,23 @@ cyber_recorder play -s {play_start} -f {records_str}
     def _collect_task_batches(self, task_list):
         batches = []
         skipped_batches = []
-        for task in task_list:
-            for soc_name, paths in task["soc_paths"].items():
+        for task_entry in task_list:
+            for soc_name, paths in task_entry.soc_paths.items():
                 if not paths:
                     continue
                 try:
-                    batch = self._plan_task_batch(task, soc_name, paths)
+                    batch = self._plan_task_batch(task_entry, soc_name, paths)
                     batches.append(batch)
                 except TaskBatchPlanningError as e:
                     skipped_batches.append(
                         SkippedBatch(
-                            task_name=task["name"],
+                            task_name=task_entry.name,
                             soc_name=soc_name,
                             reason=str(e),
                         )
                     )
                     logging.warning(
-                        f"[TASK_SKIP] Tag: {task['name']} | Soc: {soc_name} | {e}"
+                        f"[TASK_SKIP] Tag: {task_entry.name} | Soc: {soc_name} | {e}"
                     )
         return batches, skipped_batches
 
@@ -286,25 +287,25 @@ cyber_recorder play -s {play_start} -f {records_str}
         )
 
     def _finalize_batch(self, batch, processed_files, batch_failed, summary: DownloadSummary):
-        task = batch.task
+        task_entry = batch.task
         if batch_failed or not processed_files:
             self._cleanup_failed_batch(batch.save_dir)
             summary.failed_batches.append(
                 FailedBatch(
-                    task_name=task["name"],
+                    task_name=task_entry.name,
                     soc_name=batch.soc_name,
                     reason="批次存在异常，已清理残留数据",
                 )
             )
             logging.warning(
-                f"[TASK_SKIP] Tag: {task['name']} | Soc: {batch.soc_name} | 批次存在异常，已清理残留数据"
+                f"[TASK_SKIP] Tag: {task_entry.name} | Soc: {batch.soc_name} | 批次存在异常，已清理残留数据"
             )
             return
         try:
-            self._post_process_task(task, batch.save_dir, processed_files)
+            self._post_process_task(task_entry, batch.save_dir, processed_files)
             summary.completed_batches.append(
                 CompletedBatch(
-                    task_name=task["name"],
+                    task_name=task_entry.name,
                     soc_name=batch.soc_name,
                     save_dir=batch.save_dir,
                     file_count=len(processed_files),
@@ -314,23 +315,23 @@ cyber_recorder play -s {play_start} -f {records_str}
             self._cleanup_failed_batch(batch.save_dir)
             summary.failed_batches.append(
                 FailedBatch(
-                    task_name=task["name"],
+                    task_name=task_entry.name,
                     soc_name=batch.soc_name,
                     reason=f"{batch.save_dir} 后处理失败，已清理当前批次",
                 )
             )
             logging.warning(
-                f"[TASK_POST_PROCESS_FAIL] Tag: {task['name']} | Soc: {batch.soc_name} | {e}"
+                f"[TASK_POST_PROCESS_FAIL] Tag: {task_entry.name} | Soc: {batch.soc_name} | {e}"
             )
 
     def _run_task_batch(self, batch, bar, summary: DownloadSummary):
-        task = batch.task
+        task_entry = batch.task
         processed_files = []
         batch_failed = False
         for item in batch.items:
-            bar.text = f"-> [Tag: {task['name'][:15]}]"
+            bar.text = f"-> [Tag: {task_entry.name[:15]}]"
             if not batch_failed:
-                if self._sync_file(item.src, item.dest, task):
+                if self._sync_file(item.src, item.dest, task_entry):
                     processed_files.append(
                         (str(item.src), str(item.dest), batch.soc_name)
                     )

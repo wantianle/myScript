@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
 
+from core.models import TaskEntry
 from interface import ui
 
 _RE_TIME = re.compile(
@@ -61,7 +62,7 @@ def time_to_str(dt: Any) -> str:
     return str(dt)
 
 
-def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
+def parse_manifest(manifest_path: Path) -> List[TaskEntry]:
     """解析 find_record.sh 生成的 manifest.list: time|tag|paths"""
     if not manifest_path.exists():
         return []
@@ -83,16 +84,16 @@ def parse_manifest(manifest_path: Path) -> List[Dict[str, Any]]:
             elif "soc2" in p:
                 soc_paths["soc2"].append(p)
         tasks.append(
-            {
-                "time": tag_time,
-                "name": tag_name,
-                "soc_paths": soc_paths,
-                "paths": raw_paths,
-            }
+            TaskEntry(
+                time=tag_time,
+                name=tag_name,
+                soc_paths=soc_paths,
+                paths=raw_paths,
+            )
         )
-    tasks.sort(key=lambda x: x["time"])
-    for i, task in enumerate(tasks, 1):
-        task["id"] = f"{i:02d}"
+    tasks.sort(key=lambda task_entry: task_entry.time)
+    for index, task_entry in enumerate(tasks, 1):
+        task_entry.id = f"{index:02d}"
     return tasks
 
 

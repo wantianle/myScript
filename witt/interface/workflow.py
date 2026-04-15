@@ -16,7 +16,7 @@ def full_progress(session: AppSession):
         selected_tasks = prompter.get_selected_indices(
             task_list, prompt="请选择要处理的 Tag 序号"
         )
-        valid_tasks = [t for t in selected_tasks if t.get("paths")]
+        valid_tasks = [task_entry for task_entry in selected_tasks if task_entry.paths]
         if not valid_tasks:
             ui.print_status("所选序号无效或无路径数据", "ERROR")
             return
