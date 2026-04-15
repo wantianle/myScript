@@ -2,8 +2,7 @@ import logging
 from utils import parser
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-
-from interface import ui
+from core.errors import RecordInfoError, RecordSplitError
 
 
 class Recorder:
@@ -16,8 +15,7 @@ class Recorder:
             stdout = self.session.executor.execute(f"cyber_recorder info {docker_path}")
             return parser.parse_record_info(stdout)
         except Exception as e:
-            ui.print_status(f"{docker_path} 损坏，解析元数据失败！", "ERROR")
-            raise e
+            raise RecordInfoError(f"{docker_path} 损坏，解析元数据失败！") from e
 
     def split(
         self,
@@ -26,7 +24,7 @@ class Recorder:
         start_dt: Optional[str],
         end_dt: Optional[str],
         blacklist: Optional[List[str]] = None,
-    ) -> bool:
+    ) -> None:
         """执行 record 切片，生成 .split 文件"""
         logging.info(f"[RECORDER_SLICE] File: {Path(host_in).name}")
         logging.info(f"  Range: {start_dt} -> {end_dt}")
@@ -44,11 +42,8 @@ class Recorder:
 
         try:
             self.session.executor.execute(split_cmd)
-            return True
         except Exception as e:
-            ui.print_status(
-                f"切片异常，跳过 {host_in} 请检查文件是否存在，是否有权限，是否损坏",
-                "WARN",
-            )
             logging.debug(f"{host_in} 切片异常: {e}")
-            return False
+            raise RecordSplitError(
+                f"切片异常，跳过 {host_in} 请检查文件是否存在，是否有权限，是否损坏"
+            ) from e

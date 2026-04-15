@@ -1,8 +1,8 @@
 import subprocess
 from pathlib import Path
 from typing import Union
-from interface import ui
 from .base import BaseAdapter
+from core.errors import PathMappingError
 
 
 class DockerAdapter(BaseAdapter):
@@ -26,10 +26,9 @@ class DockerAdapter(BaseAdapter):
             d_path = self.docker_mount / relative
             return d_path.as_posix()
         except ValueError:
-            ui.print_status(
-                f"{host_path} 不在 {self.host_mount} 里，请重新确认路径...", "ERROR"
+            raise PathMappingError(
+                f"{host_path} 不在 {self.host_mount} 里，请重新确认路径..."
             )
-            raise
 
     def execute(self, cmd: str) -> str:
         full_cmd = f"docker exec {self.container} /bin/bash -c '{self.wrap_env(cmd)}'"

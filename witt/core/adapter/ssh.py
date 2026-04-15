@@ -3,8 +3,8 @@ import subprocess
 import logging
 from typing import Union, List
 from pathlib import Path
-from interface import ui
 from .base import BaseAdapter
+from core.errors import CommandExecutionError
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,8 @@ class SSHAdapter(BaseAdapter):
             return result.stdout
         except subprocess.CalledProcessError as e:
             detail = e.stderr.strip() or e.stdout.strip()
-            ui.print_status(f"{error_msg}: {detail}", "ERROR")
             logger.error(f"CMD FAILED: {' '.join(cmd)} | DETAIL: {detail}")
-            raise e
+            raise CommandExecutionError(f"{error_msg}: {detail}") from e
 
     def remove(self, path: str) -> None:
         self.execute(f"rm -f {path}")

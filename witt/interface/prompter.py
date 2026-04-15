@@ -8,6 +8,7 @@ from questionary import Choice
 from pathlib import Path
 from typing import List
 
+from core.errors import RecordInfoError
 from core.session import AppSession
 from interface import ui
 from utils import parser
@@ -350,6 +351,9 @@ def get_channels(session: "AppSession", tasks: List[dict]) -> List[dict]:
                     else:
                         channels_map[name]["count"] += ch.get("count", 0)
                 socs.add(soc)
+    except RecordInfoError as e:
+        ui.print_status(str(e), "ERROR")
+        raise
     except Exception as e:
         ui.print_status("频道获取失败", "ERROR")
         raise e

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from shlex import quote
 
+from core.errors import RecordSplitError
 from interface import ui
 from utils import parser
 
@@ -157,18 +158,23 @@ cyber_recorder play -s {play_start} -f {records_str}
         if blacklist:
             logging.info(f"[RECORDER_COMPRESS] Blacklist: {','.join(blacklist)}")
         if self.ctx.config["logic"]["mode"] != 3:
-            success = self.session.recorder.split(src, dest, t_start, t_end, blacklist)
-            if not success and Path(dest).exists():
-                Path(dest).unlink()
-            return success
-
+            try:
+                self.session.recorder.split(src, dest, t_start, t_end, blacklist)
+                return True
+            except RecordSplitError as e:
+                ui.print_status(str(e), "WARN")
+                if Path(dest).exists():
+                    Path(dest).unlink()
+                return False
         remote_out = f"{src}.split"
         try:
             self.session.executor.remove(remote_out)
         except Exception:
             pass
-        success = self.session.recorder.split(src, remote_out, t_start, t_end, blacklist)
-        if not success:
+        try:
+            self.session.recorder.split(src, remote_out, t_start, t_end, blacklist)
+        except RecordSplitError as e:
+            ui.print_status(str(e), "WARN")
             try:
                 self.session.executor.remove(remote_out)
             except Exception:

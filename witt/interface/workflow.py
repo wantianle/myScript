@@ -4,6 +4,7 @@ import termios
 from pathlib import Path
 from . import prompter
 from . import ui
+from core.errors import RecordInfoError, PathMappingError
 from core.session import AppSession
 from utils import parser
 
@@ -112,7 +113,7 @@ def _replay_records(session: AppSession, records: list, replay_mode: str, loaded
         start, end = prompter.get_playback_range()
         try:
             playback_plan = session.player.build_playback_plan(records, start, end)
-        except ValueError as e:
+        except (ValueError, PathMappingError) as e:
             ui.print_status(str(e), "WARN")
             continue
         ui.show_playback_info(
@@ -169,8 +170,12 @@ def manual_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STAND
         # 清空缓冲区，避免污染
         if os.name == "posix":
             termios.tcflush(sys.stdin, termios.TCIFLUSH)
-        info_start = session.recorder.get_info(str(paths[0]))
-        info_end = session.recorder.get_info(str(paths[-1]))
+        try:
+            info_start = session.recorder.get_info(str(paths[0]))
+            info_end = session.recorder.get_info(str(paths[-1]))
+        except RecordInfoError as e:
+            ui.print_status(str(e), "ERROR")
+            return
         tag_start = info_start["begin"]
         tag_end = info_end["end"]
         tag_duration = int((tag_end - tag_start).total_seconds())
