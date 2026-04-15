@@ -72,10 +72,7 @@ def traffic_light_replay_flow(session: AppSession):
         manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
     else:
         prompter.get_basic_params(session.ctx.config)
-        session.ctx.config["host"]["dest_root"] = prompter.get_user_input(
-            "输入要扫描的回灌路径(限/media下)",
-            session.ctx.config["host"]["dest_root"],
-        )
+        prompter.update_dest_root(session.ctx.config, "输入要扫描的回灌路径(限/media下)")
         auto_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
 
 
@@ -85,10 +82,7 @@ def replay_flow(session: AppSession):
         manual_replay_flow(session, REPLAY_MODE_STANDARD)
     else:
         prompter.get_basic_params(session.ctx.config)
-        session.ctx.config["host"]["dest_root"] = prompter.get_user_input(
-            "输入要扫描的回播路径(限/media下)",
-            session.ctx.config["host"]["dest_root"],
-        )
+        prompter.update_dest_root(session.ctx.config, "输入要扫描的回播路径(限/media下)")
         auto_replay_flow(session, REPLAY_MODE_STANDARD)
 
 def _resolve_version_from_records(session: AppSession, records: list) -> bool:
@@ -115,10 +109,7 @@ def _replay_records(session: AppSession, records: list, replay_mode: str, loaded
         return
     while True:
         ui.print_status(loaded_msg)
-        range_in = input(
-            "调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播): "
-        ).strip()
-        start, end = parser.parse_range_logic(range_in)
+        start, end = prompter.get_playback_range()
         session.player.play(records, start, end)
         if not prompter.get_confirm_input("继续调整播放时间?"):
             break
@@ -133,25 +124,16 @@ def auto_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STANDAR
         if not library:
             ui.print_status("本地目录为空！", "WARN")
             return
-        ui.show_playback_library(library, session.ctx.vehicle, session.ctx.target_date)
-
-        tag_idx = input("\n选择播放序号 (回车取消): ").strip()
-        if not tag_idx:
+        selected_tag = prompter.select_playback_entry(
+            library,
+            session.ctx.vehicle,
+            session.ctx.target_date,
+        )
+        if not selected_tag:
             break
-        selected_tag = library[int(tag_idx) - 1]
-        socs = sorted(list(selected_tag["socs"].keys()))
-        for i, s in enumerate(socs, 1):
-            print(f"  [{i}] {s}")
-        if len(socs) > 1:
-            print(f"  [{len(socs) + 1}] All")
-
-        target_records = []
-        choice = input("选择要播放的 SOC (默认 1): ").strip() or "1"
-        if choice.isdigit() and int(choice) <= len(socs):
-            target_records = selected_tag["socs"][socs[int(choice) - 1]]
-        else:
-            for s in socs:
-                target_records.extend(selected_tag["socs"][s])
+        target_records = prompter.select_replay_records(selected_tag)
+        if not target_records:
+            continue
         total_duration = max(r["duration"] for r in target_records)
         _replay_records(
             session,
@@ -166,8 +148,7 @@ def manual_replay_flow(session: AppSession, replay_mode: str = REPLAY_MODE_STAND
     手动播放循环，保留文件列表，支持多次调整时间播放
     """
     try:
-        ui.show_manual_play_header()
-        paths = prompter.get_dragged_input()
+        paths = prompter.get_manual_replay_paths()
         if not paths:
             return
         # 清空缓冲区，避免污染

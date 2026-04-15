@@ -8,19 +8,16 @@ def show_playback_library(library, vehicle, target_date) -> None:
     """专门负责打印播放列表"""
     print(f"{'ID '} | {vehicle:<9} | {target_date}")
     print("-" * 42)
-    count = 1
-    for entry in library:
-        if entry["date"] == target_date and entry["vehicle"] == vehicle:
-            print(
-                f"{count:<3} ├── \033[3m{entry['time'][11:]} \033[1;32m{entry['tag']}\033[0m "
-            )
-            indent = " " * 4
-            meta = entry.get("last_update", {})
-            soc1_update = meta.get("soc1", "N/A")
-            soc2_update = meta.get("soc2", "N/A")
-            print(f"{indent}├── soc1 update: \033[3;33m{soc1_update}\033[0m")
-            print(f"{indent}└── soc2 update: \033[3;33m{soc2_update}\033[0m")
-            count += 1
+    for index, entry in enumerate(library, 1):
+        print(
+            f"{index:<3} ├── \033[3m{entry['time'][11:]} \033[1;32m{entry['tag']}\033[0m "
+        )
+        indent = " " * 4
+        meta = entry.get("last_update", {})
+        soc1_update = meta.get("soc1", "N/A")
+        soc2_update = meta.get("soc2", "N/A")
+        print(f"{indent}├── soc1 update: \033[3;33m{soc1_update}\033[0m")
+        print(f"{indent}└── soc2 update: \033[3;33m{soc2_update}\033[0m")
 
 
 def show_manual_play_header() -> None:
