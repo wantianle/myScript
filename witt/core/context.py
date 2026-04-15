@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
-from core.models import DockerConfig, HostConfig, LogicConfig, PathsConfig, RemoteConfig
+from core.models import AppConfig, DockerConfig, HostConfig, LogicConfig, PathsConfig, RemoteConfig
 
 class Formatter(logging.Formatter):
     """处理颜色与格式"""
@@ -33,24 +33,35 @@ class TaskContext:
     _logger_ready = False
     config_path: Path
 
-    config: dict = field(init=False)
-    host: HostConfig = field(init=False)
-    remote: RemoteConfig = field(init=False)
-    docker: DockerConfig = field(init=False)
-    paths: PathsConfig = field(init=False)
-    logic: LogicConfig = field(init=False)
+    app_config: AppConfig = field(init=False)
     temp_dir: Path = field(init=False)
 
     def __post_init__(self):
-        self.config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
-        self.host = HostConfig.from_dict(self.config["host"])
-        self.remote = RemoteConfig.from_dict(self.config["remote"])
-        self.docker = DockerConfig.from_dict(self.config["docker"])
-        self.paths = PathsConfig.from_dict(self.config["paths"])
-        self.logic = LogicConfig.from_dict(self.config["logic"])
+        raw_config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+        self.app_config = AppConfig.from_dict(raw_config)
         self.logic.target_date = datetime.now().strftime("%Y%m%d")
         self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
         atexit.register(self._cleanup_temp)
+
+    @property
+    def host(self) -> HostConfig:
+        return self.app_config.host
+
+    @property
+    def remote(self) -> RemoteConfig:
+        return self.app_config.remote
+
+    @property
+    def docker(self) -> DockerConfig:
+        return self.app_config.docker
+
+    @property
+    def paths(self) -> PathsConfig:
+        return self.app_config.paths
+
+    @property
+    def logic(self) -> LogicConfig:
+        return self.app_config.logic
 
     @property
     def vehicle(self) -> str:

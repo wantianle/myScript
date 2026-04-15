@@ -134,6 +134,25 @@ class PathsConfig:
 
 
 @dataclass
+class AppConfig:
+    host: HostConfig
+    remote: RemoteConfig
+    docker: DockerConfig
+    paths: PathsConfig
+    logic: LogicConfig
+
+    @classmethod
+    def from_dict(cls, raw_config: Dict[str, Any]) -> "AppConfig":
+        return cls(
+            host=HostConfig.from_dict(raw_config["host"]),
+            remote=RemoteConfig.from_dict(raw_config["remote"]),
+            docker=DockerConfig.from_dict(raw_config["docker"]),
+            paths=PathsConfig.from_dict(raw_config["paths"]),
+            logic=LogicConfig.from_dict(raw_config["logic"]),
+        )
+
+
+@dataclass
 class ReplayRecord:
     path: str
     begin: Union[str, datetime]
