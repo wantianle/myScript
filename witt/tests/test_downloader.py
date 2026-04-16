@@ -1,4 +1,5 @@
 import importlib
+import logging
 import sys
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ sys.modules.setdefault("alive_progress", fake_alive_progress)
 
 from core.models import HostConfig, LogicConfig, TaskEntry
 from core.repository import MetadataRepository
+from core.errors import RecordSplitError
 
 
 def _get_record_downloader_class():
@@ -69,9 +71,51 @@ class _FakeContext:
 
 
 class _FakeSession:
-    def __init__(self, root_dir: Path) -> None:
+    def __init__(
+        self,
+        root_dir: Path,
+        mode: int = 1,
+        recorder=None,
+        executor=None,
+    ) -> None:
         self.ctx = _FakeContext(root_dir)
-        self.recorder = None
+        self.ctx.logic.mode = mode
+        self.recorder = recorder
+        self.executor = executor
+
+
+class _FakeExecutor:
+    def __init__(self) -> None:
+        self.remove_calls = []
+        self.fetch_calls = []
+        self.remove_side_effects = []
+        self.fetch_error = None
+        self.write_partial_file = False
+
+    def remove(self, path_text: str) -> None:
+        self.remove_calls.append(path_text)
+        if self.remove_side_effects:
+            remove_error = self.remove_side_effects.pop(0)
+            if remove_error is not None:
+                raise remove_error
+
+    def fetch_file(self, remote_path: str, local_dest: Path) -> None:
+        self.fetch_calls.append((remote_path, local_dest))
+        if self.write_partial_file:
+            local_dest.write_text("partial", encoding="utf-8")
+        if self.fetch_error is not None:
+            raise self.fetch_error
+
+
+class _FakeRecorder:
+    def __init__(self, split_error=None) -> None:
+        self.split_calls = []
+        self.split_error = split_error
+
+    def split(self, src, dest, start_dt, end_dt, blacklist) -> None:
+        self.split_calls.append((src, dest, start_dt, end_dt, list(blacklist or [])))
+        if self.split_error is not None:
+            raise self.split_error
 
 
 class DownloaderPlanningTests(unittest.TestCase):
@@ -124,6 +168,109 @@ class DownloaderPlanningTests(unittest.TestCase):
         self.assertEqual(summary.total_files, 0)
         self.assertEqual(len(summary.skipped_batches), 1)
         self.assertIn("未找到 version 文件", summary.skipped_batches[0].reason)
+
+
+class DownloaderSyncFileTests(unittest.TestCase):
+    def test_sync_file_logs_remote_cleanup_failures_when_split_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_path = Path(tmpdir)
+            executor = _FakeExecutor()
+            executor.remove_side_effects = [
+                RuntimeError("cleanup before split failed"),
+                RuntimeError("cleanup after split failed"),
+            ]
+            recorder = _FakeRecorder(split_error=RecordSplitError("split failed"))
+            downloader = _get_record_downloader_class()(
+                cast(
+                    Any,
+                    _FakeSession(
+                        root_path,
+                        mode=3,
+                        recorder=recorder,
+                        executor=executor,
+                    ),
+                ),
+                metadata_repository=MetadataRepository(),
+            )
+            task_entry = TaskEntry.from_manifest_parts(
+                time="2026-04-15 12:00:00",
+                name="demo_tag",
+                paths=["/remote/soc1/demo.record"],
+            )
+            dest_path = root_path / "demo.record.split"
+
+            with self.assertLogs(level=logging.DEBUG) as captured_logs:
+                sync_result = downloader._sync_file(
+                    "/remote/soc1/demo.record",
+                    dest_path,
+                    task_entry,
+                )
+
+        self.assertFalse(sync_result)
+        self.assertEqual(
+            executor.remove_calls,
+            [
+                "/remote/soc1/demo.record.split",
+                "/remote/soc1/demo.record.split",
+            ],
+        )
+        self.assertEqual(len(recorder.split_calls), 1)
+        self.assertEqual(recorder.split_calls[0][1], "/remote/soc1/demo.record.split")
+        self.assertIn("REMOTE_SPLIT_CLEANUP_FAIL", "\n".join(captured_logs.output))
+
+    def test_sync_file_removes_partial_local_file_when_remote_fetch_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_path = Path(tmpdir)
+            executor = _FakeExecutor()
+            executor.remove_side_effects = [
+                None,
+                RuntimeError("cleanup after fetch failed"),
+            ]
+            executor.fetch_error = RuntimeError("scp failed")
+            executor.write_partial_file = True
+            recorder = _FakeRecorder()
+            downloader = _get_record_downloader_class()(
+                cast(
+                    Any,
+                    _FakeSession(
+                        root_path,
+                        mode=3,
+                        recorder=recorder,
+                        executor=executor,
+                    ),
+                ),
+                metadata_repository=MetadataRepository(),
+            )
+            task_entry = TaskEntry.from_manifest_parts(
+                time="2026-04-15 12:00:00",
+                name="demo_tag",
+                paths=["/remote/soc1/demo.record"],
+            )
+            dest_path = root_path / "demo.record.split"
+
+            with self.assertLogs(level=logging.DEBUG) as captured_logs:
+                sync_result = downloader._sync_file(
+                    "/remote/soc1/demo.record",
+                    dest_path,
+                    task_entry,
+                )
+
+        self.assertFalse(sync_result)
+        self.assertFalse(dest_path.exists())
+        self.assertEqual(
+            executor.fetch_calls,
+            [("/remote/soc1/demo.record.split", dest_path)],
+        )
+        self.assertEqual(
+            executor.remove_calls,
+            [
+                "/remote/soc1/demo.record.split",
+                "/remote/soc1/demo.record.split",
+            ],
+        )
+        captured_text = "\n".join(captured_logs.output)
+        self.assertIn("拉取异常", captured_text)
+        self.assertIn("REMOTE_SPLIT_CLEANUP_FAIL", captured_text)
 
 
 if __name__ == "__main__":

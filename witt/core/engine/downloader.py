@@ -206,17 +206,11 @@ cyber_recorder play -s {play_start} -f {records_str}
                     Path(dest).unlink()
                 return False
         remote_out = f"{src}.split"
-        try:
-            self.session.executor.remove(remote_out)
-        except Exception:
-            pass
+        self._cleanup_remote_temp_file(remote_out, "before_split")
         try:
             self.session.recorder.split(src, remote_out, t_start, t_end, blacklist)
         except RecordSplitError:
-            try:
-                self.session.executor.remove(remote_out)
-            except Exception:
-                pass
+            self._cleanup_remote_temp_file(remote_out, "after_split_error")
             return False
         try:
             self.session.executor.fetch_file(remote_out, dest)
@@ -227,10 +221,19 @@ cyber_recorder play -s {play_start} -f {records_str}
                 Path(dest).unlink()
             return False
         finally:
-            try:
-                self.session.executor.remove(remote_out)
-            except Exception:
-                pass
+            self._cleanup_remote_temp_file(remote_out, "after_fetch")
+
+    def _cleanup_remote_temp_file(self, remote_path: str, stage: str) -> None:
+        """清理远端临时文件，失败时保留调试信息。"""
+        try:
+            self.session.executor.remove(remote_path)
+        except Exception as e:
+            logging.debug(
+                "[REMOTE_SPLIT_CLEANUP_FAIL] File: %s | Stage: %s | %s",
+                remote_path,
+                stage,
+                e,
+            )
 
     def _plan_task_batch(self, task_entry: TaskEntry, soc_name, paths):
         src_dir = Path(paths[0]).parent
