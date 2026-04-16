@@ -16,14 +16,13 @@ def menu() -> None:
         menu_map = {
             "1": lambda: workflow.slice_progress(session),
             "2": lambda: workflow.full_source_progress(session),
-            "3": lambda: workflow.replay_flow(session),
-            "4": lambda: workflow.restore_environment_flow(session),
-            "5": lambda: session.runner.into_docker(),
-            "6": lambda: workflow.traffic_light_replay_flow(session),
+            "3": lambda: workflow.auto_replay_progress(session),
+            "4": lambda: workflow.manual_replay_progress(session),
+            "5": lambda: workflow.traffic_light_replay_flow(session),
         }
         choice = prompter.select_main_menu_action()
 
-        if choice is None or choice == "q":
+        if choice is None:
             sys.exit(0)
 
         action = menu_map.get(choice)

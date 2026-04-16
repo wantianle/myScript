@@ -73,7 +73,7 @@ class CliMenuTests(unittest.TestCase):
         ), patch.object(
             cli.prompter,
             "select_main_menu_action",
-            side_effect=["1", "q"],
+            side_effect=["1", None],
         ), patch.object(
             cli.prompter,
             "wait_for_continue",
@@ -99,7 +99,7 @@ class CliMenuTests(unittest.TestCase):
         ), patch.object(
             cli.prompter,
             "select_main_menu_action",
-            side_effect=["2", "q"],
+            side_effect=["2", None],
         ), patch.object(
             cli.prompter,
             "wait_for_continue",
@@ -115,6 +115,72 @@ class CliMenuTests(unittest.TestCase):
 
         full_source_progress.assert_called_once_with(session)
         slice_progress.assert_not_called()
+
+    def test_menu_routes_choice_3_to_auto_replay_progress(self) -> None:
+        session = object()
+
+        with patch.object(cli, "AppSession", return_value=session), patch.object(
+            cli.ui,
+            "print_banner",
+        ), patch.object(
+            cli.prompter,
+            "select_main_menu_action",
+            side_effect=["3", None],
+        ), patch.object(
+            cli.prompter,
+            "wait_for_continue",
+        ), patch.object(
+            cli.workflow,
+            "auto_replay_progress",
+        ) as auto_replay_progress:
+            with self.assertRaises(SystemExit):
+                cli.menu()
+
+        auto_replay_progress.assert_called_once_with(session)
+
+    def test_menu_routes_choice_4_to_manual_replay_progress(self) -> None:
+        session = object()
+
+        with patch.object(cli, "AppSession", return_value=session), patch.object(
+            cli.ui,
+            "print_banner",
+        ), patch.object(
+            cli.prompter,
+            "select_main_menu_action",
+            side_effect=["4", None],
+        ), patch.object(
+            cli.prompter,
+            "wait_for_continue",
+        ), patch.object(
+            cli.workflow,
+            "manual_replay_progress",
+        ) as manual_replay_progress:
+            with self.assertRaises(SystemExit):
+                cli.menu()
+
+        manual_replay_progress.assert_called_once_with(session)
+
+    def test_menu_routes_choice_5_to_traffic_light_replay_flow(self) -> None:
+        session = object()
+
+        with patch.object(cli, "AppSession", return_value=session), patch.object(
+            cli.ui,
+            "print_banner",
+        ), patch.object(
+            cli.prompter,
+            "select_main_menu_action",
+            side_effect=["5", None],
+        ), patch.object(
+            cli.prompter,
+            "wait_for_continue",
+        ), patch.object(
+            cli.workflow,
+            "traffic_light_replay_flow",
+        ) as traffic_light_replay_flow:
+            with self.assertRaises(SystemExit):
+                cli.menu()
+
+        traffic_light_replay_flow.assert_called_once_with(session)
 
 
 class WorkflowTests(unittest.TestCase):
@@ -146,6 +212,47 @@ class WorkflowTests(unittest.TestCase):
 
         search_flow.assert_called_once_with(raw_session, need_export_path=False)
         full_source_replay_flow.assert_called_once_with(raw_session, [valid_task])
+
+    def test_auto_replay_progress_collects_params_then_starts_standard_auto_replay(self) -> None:
+        raw_session = SimpleNamespace(ctx=SimpleNamespace())
+        session = cast(Any, raw_session)
+
+        with patch.object(
+            workflow.config_prompter,
+            "get_basic_params",
+        ) as get_basic_params, patch.object(
+            workflow.config_prompter,
+            "update_dest_root",
+        ) as update_dest_root, patch.object(
+            workflow.replay_workflow,
+            "auto_replay_flow",
+        ) as auto_replay_flow:
+            workflow.auto_replay_progress(session)
+
+        get_basic_params.assert_called_once_with(raw_session.ctx)
+        update_dest_root.assert_called_once_with(
+            raw_session.ctx,
+            "输入要扫描的回播路径(限/media下)",
+        )
+        auto_replay_flow.assert_called_once_with(
+            raw_session,
+            replay_workflow.REPLAY_MODE_STANDARD,
+        )
+
+    def test_manual_replay_progress_starts_standard_manual_replay(self) -> None:
+        raw_session = SimpleNamespace()
+        session = cast(Any, raw_session)
+
+        with patch.object(
+            workflow.replay_workflow,
+            "manual_replay_flow",
+        ) as manual_replay_flow:
+            workflow.manual_replay_progress(session)
+
+        manual_replay_flow.assert_called_once_with(
+            raw_session,
+            replay_workflow.REPLAY_MODE_STANDARD,
+        )
 
 
 class ReplayWorkflowTests(unittest.TestCase):
