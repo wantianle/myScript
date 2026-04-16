@@ -8,8 +8,6 @@ from typing import List, Union
 @dataclass
 class IssueDraft:
     tag_text: str
-    replay_mode: str
-    replay_status: str
     vehicle: str
     target_date: str
     playback_command: str
@@ -18,7 +16,6 @@ class IssueDraft:
     playback_rate: float = 1.0
     playback_range_text: str = "全播"
     playback_channels: List[str] = field(default_factory=list)
-    record_paths: List[str] = field(default_factory=list)
     issue_description: str = "填写补充描述"
     expected_result: str = "填写正确情况"
 
@@ -38,14 +35,26 @@ def build_issue_path(
     return work_dir / "issues" / build_issue_filename(issue_timestamp, issue_name)
 
 
+def build_issue_data_path_text(
+    path_texts: List[str],
+    target_date: str,
+    vehicle: str,
+    issue_root: Union[str, Path] = "/media/nas/00.raw",
+) -> str:
+    """按日期和车号截断原始路径，统一映射到 issue 展示路径。"""
+    return "\n".join(
+        [
+            _format_issue_data_path(path_text, target_date, vehicle, issue_root)
+            for path_text in path_texts
+        ]
+    )
+
+
 def render_issue_markdown(issue_draft: IssueDraft) -> str:
     """渲染 issue 草稿 Markdown 内容。"""
     version_block = issue_draft.version_text or "未提供版本文件"
-    record_block = "\n".join(issue_draft.record_paths) if issue_draft.record_paths else "未记录"
     channels_text = ", ".join(issue_draft.playback_channels) if issue_draft.playback_channels else "无"
     return f"""- **tag：** {issue_draft.tag_text}
-- **模式：** {issue_draft.replay_mode}
-- **回播结果：** {issue_draft.replay_status}
 - **车辆日期：** {issue_draft.vehicle} | {issue_draft.target_date}
 - **问题描述：**
 > {issue_draft.issue_description}
@@ -65,13 +74,9 @@ def render_issue_markdown(issue_draft: IssueDraft) -> str:
 ```
 - **回播参数：**
 ```text
-range: {issue_draft.playback_range_text}
-rate: x{issue_draft.playback_rate:g}
-channels: {channels_text}
-```
-- **Record 列表：**
-```text
-{record_block}
+range(-s): {issue_draft.playback_range_text}
+rate(-r): x{issue_draft.playback_rate:g}
+channels(-k): {channels_text}
 ```
 """
 
@@ -105,3 +110,29 @@ def _normalize_issue_name(issue_name: str) -> str:
     """清理预留 issue 名称，便于后续改成中文 tag 或自定义标题。"""
     cleaned_name = issue_name.strip().replace("/", "_").replace("\\", "_")
     return re.sub(r"\s+", "_", cleaned_name)
+
+
+def _format_issue_data_path(
+    path_text: str,
+    target_date: str,
+    vehicle: str,
+    issue_root: Union[str, Path],
+) -> str:
+    """将路径从日期和车号开始截断，并挂到统一 issue 根目录。"""
+    path_parts = Path(path_text).parts
+    start_index = _find_issue_path_start(path_parts, target_date, vehicle)
+    if start_index < 0:
+        return path_text
+    return str(Path(issue_root).joinpath(*path_parts[start_index:]))
+
+
+def _find_issue_path_start(
+    path_parts: tuple,
+    target_date: str,
+    vehicle: str,
+) -> int:
+    """寻找日期与车号连续出现的位置。"""
+    for index in range(len(path_parts) - 1):
+        if path_parts[index] == target_date and path_parts[index + 1] == vehicle:
+            return index
+    return -1

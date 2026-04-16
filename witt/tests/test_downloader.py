@@ -169,6 +169,40 @@ class DownloaderPlanningTests(unittest.TestCase):
         self.assertEqual(len(summary.skipped_batches), 1)
         self.assertIn("未找到 version 文件", summary.skipped_batches[0].reason)
 
+    def test_post_process_task_keeps_version_and_meta_without_generating_readme(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_path = Path(tmpdir)
+            source_dir = root_path / "source" / "soc1"
+            source_dir.mkdir(parents=True, exist_ok=True)
+            version_path = source_dir / "version.txt"
+            version_path.write_text("demo-version", encoding="utf-8")
+            record_path = source_dir / "demo.record"
+            record_path.write_text("record", encoding="utf-8")
+            save_dir = root_path / "dest" / "01.20260415_120000" / "soc1"
+            save_dir.mkdir(parents=True, exist_ok=True)
+            split_path = save_dir / "demo.record.split"
+            split_path.write_text("split", encoding="utf-8")
+
+            downloader = _get_record_downloader_class()(
+                cast(Any, _FakeSession(root_path)),
+                metadata_repository=MetadataRepository(),
+            )
+            task_entry = TaskEntry.from_manifest_parts(
+                time="2026-04-15 12:00:00",
+                name="demo_tag",
+                paths=[str(record_path)],
+            )
+
+            downloader._post_process_task(
+                task_entry,
+                save_dir,
+                [(str(record_path), str(split_path), "soc1")],
+            )
+
+            self.assertTrue((save_dir / "version.txt").exists())
+            self.assertTrue((save_dir.parent / "meta.json").exists())
+            self.assertFalse((save_dir / "README.md").exists())
+
 
 class DownloaderSyncFileTests(unittest.TestCase):
     def test_sync_file_logs_remote_cleanup_failures_when_split_fails(self) -> None:

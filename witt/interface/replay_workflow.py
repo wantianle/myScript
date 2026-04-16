@@ -11,7 +11,12 @@ from . import prompter
 from . import replay_prompter
 from . import ui
 from core.models import ReplayRecord
-from core.issue_draft import IssueDraft, load_version_text, save_issue_draft
+from core.issue_draft import (
+    IssueDraft,
+    build_issue_data_path_text,
+    load_version_text,
+    save_issue_draft,
+)
 from core.errors import RecordInfoError, PathMappingError
 from core.session import AppSession
 from utils import parser
@@ -163,17 +168,18 @@ def _post_replay_issue_draft(
         return
     issue_draft = IssueDraft(
         tag_text=display_tag or playback_plan.display_tag,
-        replay_mode=replay_mode,
-        replay_status="用户中断" if interrupted else "正常结束",
         vehicle=session.ctx.vehicle,
         target_date=session.ctx.target_date,
         playback_command=playback_plan.command,
-        data_path_text="\n".join([replay_record.path for replay_record in records]),
+        data_path_text=build_issue_data_path_text(
+            [replay_record.path for replay_record in records],
+            session.ctx.target_date,
+            session.ctx.vehicle,
+        ),
         version_text=load_version_text(session.ctx.logic.version),
         playback_rate=playback_plan.rate,
         playback_range_text=_format_playback_range(start_sec, end_sec),
         playback_channels=list(getattr(session.ctx, "playback_blacklist", [])),
-        record_paths=[replay_record.path for replay_record in records],
     )
     try:
         issue_path = save_issue_draft(session.ctx.work_dir, issue_draft)
