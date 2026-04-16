@@ -4,6 +4,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Union
 
+SUGGESTED_TITLE_TEMPLATE = "[车型-模块-车号]问题简述"
+
+
+@dataclass
+class ReplayIssueMarker:
+    playback_start_sec: int
+    issue_description: str
+
 
 @dataclass
 class IssueDraft:
@@ -16,6 +24,7 @@ class IssueDraft:
     playback_rate: float = 1.0
     playback_range_text: str = "全播"
     playback_channels: List[str] = field(default_factory=list)
+    suggested_title: str = SUGGESTED_TITLE_TEMPLATE
     issue_description: str = "填写补充描述"
     expected_result: str = "填写正确情况"
 
@@ -54,7 +63,8 @@ def render_issue_markdown(issue_draft: IssueDraft) -> str:
     """渲染 issue 草稿 Markdown 内容。"""
     version_block = issue_draft.version_text or "未提供版本文件"
     channels_text = ", ".join(issue_draft.playback_channels) if issue_draft.playback_channels else "无"
-    return f"""- **tag：** {issue_draft.tag_text}
+    return f"""- **建议标题：** {issue_draft.suggested_title}
+- **tag：** {issue_draft.tag_text}
 - **车辆/日期：** {issue_draft.vehicle} | {issue_draft.target_date}
 - **问题描述：**
 > {issue_draft.issue_description}

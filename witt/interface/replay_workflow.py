@@ -3,7 +3,7 @@ import sys
 import termios
 from datetime import timedelta
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from . import channel_prompter
 from . import config_prompter
@@ -13,6 +13,7 @@ from . import ui
 from core.models import ReplayRecord
 from core.issue_draft import (
     IssueDraft,
+    ReplayIssueMarker,
     build_issue_data_path_text,
     load_version_text,
     save_issue_draft,
@@ -159,8 +160,17 @@ def _post_replay_issue_draft(
     start_sec: int,
     end_sec: int,
     interrupted: bool,
+    issue_marker: Optional[ReplayIssueMarker] = None,
 ) -> None:
     """回播结束后统一处理 issue 草稿生成。"""
+    playback_range_text = _format_playback_range(start_sec, end_sec)
+    issue_description = IssueDraft.issue_description
+    if issue_marker is not None:
+        playback_range_text = _format_playback_range(
+            issue_marker.playback_start_sec,
+            end_sec,
+        )
+        issue_description = issue_marker.issue_description
     issue_draft = IssueDraft(
         tag_text=display_tag or playback_plan.display_tag,
         vehicle=session.ctx.vehicle,
@@ -173,8 +183,9 @@ def _post_replay_issue_draft(
         ),
         version_text=load_version_text(session.ctx.logic.version),
         playback_rate=playback_plan.rate,
-        playback_range_text=_format_playback_range(start_sec, end_sec),
+        playback_range_text=playback_range_text,
         playback_channels=list(getattr(session.ctx, "playback_blacklist", [])),
+        issue_description=issue_description,
     )
     try:
         issue_path = save_issue_draft(
@@ -186,6 +197,15 @@ def _post_replay_issue_draft(
         ui.print_status("生成 issue.md 失败: {0}".format(e), "ERROR")
         return
     ui.print_status("issue 草稿已生成: {0}".format(issue_path))
+
+
+def _collect_issue_marker() -> Optional[ReplayIssueMarker]:
+    """在回播结束后采集问题时间点标记。"""
+    try:
+        return replay_prompter.get_issue_marker()
+    except KeyboardInterrupt:
+        ui.print_status("已跳过问题时间点标记", "WARN")
+        return None
 
 
 def _replay_records(
@@ -245,6 +265,7 @@ def _replay_records(
         if not continue_replay:
             break
     if last_playback_plan is not None:
+        issue_marker = _collect_issue_marker()
         _post_replay_issue_draft(
             session,
             records,
@@ -255,6 +276,7 @@ def _replay_records(
             last_start,
             last_end,
             interrupted,
+            issue_marker=issue_marker,
         )
 
 

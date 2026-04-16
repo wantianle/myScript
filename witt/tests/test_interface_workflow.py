@@ -59,6 +59,7 @@ setattr(fake_alive_progress, "alive_bar", _fake_alive_bar)
 sys.modules.setdefault("alive_progress", fake_alive_progress)
 
 from interface import cli
+from interface import replay_prompter
 from interface import replay_workflow
 from interface import workflow
 
@@ -305,6 +306,59 @@ class ReplayWorkflowTests(unittest.TestCase):
             "2026-04-15 12:00:00",
         )
 
+    def test_post_replay_issue_draft_uses_issue_marker_range_and_description(self) -> None:
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(
+                vehicle="XZB600013",
+                target_date="20260415",
+                logic=SimpleNamespace(version=""),
+                work_dir="/tmp/work",
+                playback_blacklist=[],
+            ),
+        )
+        session = cast(Any, raw_session)
+        records = [
+            ReplayRecord(
+                path="/media/road_test/20260415/XZB600013/01.demo/soc1/a.record.split",
+                begin="2026-04-15T11:59:45",
+                duration=20,
+            )
+        ]
+        playback_plan = SimpleNamespace(
+            command="cyber_recorder play ...",
+            rate=1.0,
+            display_tag="demo_tag",
+        )
+        issue_marker = replay_workflow.ReplayIssueMarker(
+            playback_start_sec=37,
+            issue_description="第37秒画面抖动",
+        )
+
+        with patch.object(
+            replay_workflow,
+            "save_issue_draft",
+            return_value="/tmp/work/issues/issue_20260415_120000.md",
+        ) as save_issue_draft, patch.object(
+            replay_workflow.ui,
+            "print_status",
+        ):
+            replay_workflow._post_replay_issue_draft(
+                session,
+                records,
+                playback_plan,
+                replay_workflow.REPLAY_MODE_STANDARD,
+                "demo_tag",
+                "2026-04-15 12:00:00",
+                5,
+                0,
+                False,
+                issue_marker=issue_marker,
+            )
+
+        saved_issue_draft = save_issue_draft.call_args.args[1]
+        self.assertEqual(saved_issue_draft.playback_range_text, "37s")
+        self.assertEqual(saved_issue_draft.issue_description, "第37秒画面抖动")
+
     def test_update_playback_blacklist_clears_standard_replay_filters(self) -> None:
         raw_session = SimpleNamespace(
             ctx=SimpleNamespace(playback_blacklist=["/apollo/old"]),
@@ -392,6 +446,10 @@ class ReplayWorkflowTests(unittest.TestCase):
             "_prepare_replay",
             return_value=True,
         ), patch.object(
+            replay_workflow,
+            "_collect_issue_marker",
+            return_value=None,
+        ), patch.object(
             replay_workflow.replay_prompter,
             "get_playback_range",
             return_value=(0, 0),
@@ -458,6 +516,10 @@ class ReplayWorkflowTests(unittest.TestCase):
             "_prepare_replay",
             return_value=True,
         ), patch.object(
+            replay_workflow,
+            "_collect_issue_marker",
+            return_value=None,
+        ), patch.object(
             replay_workflow.replay_prompter,
             "get_playback_range",
             return_value=(0, 0),
@@ -513,6 +575,10 @@ class ReplayWorkflowTests(unittest.TestCase):
             "_prepare_replay",
             return_value=True,
         ), patch.object(
+            replay_workflow,
+            "_collect_issue_marker",
+            return_value=None,
+        ), patch.object(
             replay_workflow.replay_prompter,
             "get_playback_range",
             return_value=(0, 0),
@@ -544,6 +610,37 @@ class ReplayWorkflowTests(unittest.TestCase):
         post_replay_issue_draft.assert_called_once()
         self.assertTrue(post_replay_issue_draft.call_args.args[8])
 
+
+class ReplayPrompterTests(unittest.TestCase):
+    def test_get_issue_marker_skips_when_confirmation_uses_default_no(self) -> None:
+        with patch.object(
+            replay_prompter.prompter,
+            "get_confirm_input",
+            return_value=False,
+        ) as get_confirm_input, patch("builtins.input") as mock_input:
+            issue_marker = replay_prompter.get_issue_marker()
+
+        self.assertIsNone(issue_marker)
+        get_confirm_input.assert_called_once_with("是否记录问题时间点标记？")
+        mock_input.assert_not_called()
+
+    def test_get_issue_marker_collects_start_sec_and_description(self) -> None:
+        with patch.object(
+            replay_prompter.prompter,
+            "get_confirm_input",
+            return_value=True,
+        ), patch(
+            "builtins.input",
+            side_effect=["37", "第37秒相机画面冻结"],
+        ):
+            issue_marker = replay_prompter.get_issue_marker()
+
+        self.assertIsNotNone(issue_marker)
+        self.assertEqual(issue_marker.playback_start_sec, 37)
+        self.assertEqual(issue_marker.issue_description, "第37秒相机画面冻结")
+
+
+class ReplayEntryFlowTests(unittest.TestCase):
     def test_auto_replay_flow_replays_selected_library_records(self) -> None:
         target_record = ReplayRecord(
             path="/data/soc1/20260414103914.record.00000.103914",

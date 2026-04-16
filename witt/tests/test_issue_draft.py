@@ -35,6 +35,7 @@ class IssueDraftTests(unittest.TestCase):
         markdown_text = render_issue_markdown(issue_draft)
 
         self.assertIn("demo_tag", markdown_text)
+        self.assertIn("[车型-模块-车号]问题简述", markdown_text)
         self.assertIn("XZB600013 | 20260416", markdown_text)
         self.assertIn("cyber_recorder play -r 2", markdown_text)
         self.assertIn("range(-s): 5s", markdown_text)

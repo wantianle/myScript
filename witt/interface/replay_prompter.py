@@ -5,8 +5,9 @@ import urllib.parse
 from pathlib import Path
 from typing import List, Optional
 
+from core.issue_draft import ReplayIssueMarker
 from core.models import LibraryEntry, ReplayRecord, TaskEntry
-from interface import ui
+from interface import prompter, ui
 from utils import parser
 
 
@@ -102,6 +103,34 @@ def get_playback_rate() -> float:
         if 0.1 <= playback_rate <= 10:
             return playback_rate
         ui.print_status("播放倍速需在 0.1 到 10 之间", "WARN")
+
+
+def get_issue_marker() -> Optional[ReplayIssueMarker]:
+    """回播结束后读取问题时间点和备注。"""
+    if not prompter.get_confirm_input("是否记录问题时间点标记？"):
+        return None
+    return ReplayIssueMarker(
+        playback_start_sec=_get_issue_start_sec(),
+        issue_description=_get_issue_description(),
+    )
+
+
+def _get_issue_start_sec() -> int:
+    """读取问题时间点秒数，用于覆盖 issue 草稿中的 range(-s)。"""
+    while True:
+        raw_value = input("问题时间点秒数(-s，例 37): ").strip()
+        if raw_value.isdigit():
+            return int(raw_value)
+        ui.print_status("请输入非负整数秒数", "WARN")
+
+
+def _get_issue_description() -> str:
+    """读取问题现象备注。"""
+    while True:
+        issue_description = input("简短备注: ").strip()
+        if issue_description:
+            return issue_description
+        ui.print_status("备注不能为空", "WARN")
 
 
 def get_manual_replay_paths() -> List[Path]:
