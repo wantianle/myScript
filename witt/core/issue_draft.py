@@ -1,0 +1,107 @@
+import re
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import List, Union
+
+
+@dataclass
+class IssueDraft:
+    tag_text: str
+    replay_mode: str
+    replay_status: str
+    vehicle: str
+    target_date: str
+    playback_command: str
+    data_path_text: str
+    version_text: str = ""
+    playback_rate: float = 1.0
+    playback_range_text: str = "全播"
+    playback_channels: List[str] = field(default_factory=list)
+    record_paths: List[str] = field(default_factory=list)
+    issue_description: str = "填写补充描述"
+    expected_result: str = "填写正确情况"
+
+
+def build_issue_filename(issue_timestamp: str, issue_name: str = "") -> str:
+    """根据时间戳和预留名称生成 issue 文件名。"""
+    suffix = _normalize_issue_name(issue_name) or issue_timestamp
+    return "issue_{0}.md".format(suffix)
+
+
+def build_issue_path(
+    work_dir: Path,
+    issue_timestamp: str,
+    issue_name: str = "",
+) -> Path:
+    """构造 issue 草稿文件路径。"""
+    return work_dir / "issues" / build_issue_filename(issue_timestamp, issue_name)
+
+
+def render_issue_markdown(issue_draft: IssueDraft) -> str:
+    """渲染 issue 草稿 Markdown 内容。"""
+    version_block = issue_draft.version_text or "未提供版本文件"
+    record_block = "\n".join(issue_draft.record_paths) if issue_draft.record_paths else "未记录"
+    channels_text = ", ".join(issue_draft.playback_channels) if issue_draft.playback_channels else "无"
+    return f"""- **tag：** {issue_draft.tag_text}
+- **模式：** {issue_draft.replay_mode}
+- **回播结果：** {issue_draft.replay_status}
+- **车辆日期：** {issue_draft.vehicle} | {issue_draft.target_date}
+- **问题描述：**
+> {issue_draft.issue_description}
+- **预期结果：**
+> {issue_draft.expected_result}
+- **车辆软硬件信息：**
+```json
+{version_block}
+```
+- **数据路径：**
+```bash
+{issue_draft.data_path_text}
+```
+- **回播命令：**
+```bash
+{issue_draft.playback_command}
+```
+- **回播参数：**
+```text
+range: {issue_draft.playback_range_text}
+rate: x{issue_draft.playback_rate:g}
+channels: {channels_text}
+```
+- **Record 列表：**
+```text
+{record_block}
+```
+"""
+
+
+def save_issue_draft(
+    work_dir: Path,
+    issue_draft: IssueDraft,
+    issue_name: str = "",
+    issue_timestamp: str = "",
+) -> Path:
+    """保存 issue 草稿到 work_dir/issues。"""
+    timestamp_text = issue_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+    issue_path = build_issue_path(work_dir, timestamp_text, issue_name)
+    issue_path.parent.mkdir(parents=True, exist_ok=True)
+    issue_path.write_text(render_issue_markdown(issue_draft), encoding="utf-8")
+    return issue_path
+
+
+def load_version_text(version_source: Union[str, Path]) -> str:
+    """读取版本文件内容，失败时返回可读占位信息。"""
+    if not version_source:
+        return ""
+    version_path = Path(version_source)
+    try:
+        return version_path.read_text(encoding="utf-8", errors="replace")
+    except (OSError, TypeError, ValueError):
+        return str(version_source)
+
+
+def _normalize_issue_name(issue_name: str) -> str:
+    """清理预留 issue 名称，便于后续改成中文 tag 或自定义标题。"""
+    cleaned_name = issue_name.strip().replace("/", "_").replace("\\", "_")
+    return re.sub(r"\s+", "_", cleaned_name)

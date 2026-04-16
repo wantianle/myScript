@@ -11,6 +11,7 @@ from . import prompter
 from . import replay_prompter
 from . import ui
 from core.models import ReplayRecord
+from core.issue_draft import IssueDraft, load_version_text, save_issue_draft
 from core.errors import RecordInfoError, PathMappingError
 from core.session import AppSession
 from utils import parser
@@ -137,6 +138,51 @@ def _build_source_replay_records(
     ]
 
 
+def _format_playback_range(start_sec: int, end_sec: int) -> str:
+    """格式化播放时间范围，便于写入 issue 草稿。"""
+    if start_sec <= 0 and end_sec <= 0:
+        return "全播"
+    if end_sec <= 0:
+        return "{0}s-结束".format(start_sec)
+    return "{0}s-{1}s".format(start_sec, end_sec)
+
+
+def _post_replay_issue_draft(
+    session: AppSession,
+    records: List[ReplayRecord],
+    playback_plan,
+    replay_mode: str,
+    display_tag: str,
+    start_sec: int,
+    end_sec: int,
+    interrupted: bool,
+) -> None:
+    """回播结束后统一处理 issue 草稿生成。"""
+    prompt = "回播已中断，是否生成 issue.md 草稿?" if interrupted else "回播结束，是否生成 issue.md 草稿?"
+    if not prompter.get_confirm_input(prompt, True):
+        return
+    issue_draft = IssueDraft(
+        tag_text=display_tag or playback_plan.display_tag,
+        replay_mode=replay_mode,
+        replay_status="用户中断" if interrupted else "正常结束",
+        vehicle=session.ctx.vehicle,
+        target_date=session.ctx.target_date,
+        playback_command=playback_plan.command,
+        data_path_text="\n".join([replay_record.path for replay_record in records]),
+        version_text=load_version_text(session.ctx.logic.version),
+        playback_rate=playback_plan.rate,
+        playback_range_text=_format_playback_range(start_sec, end_sec),
+        playback_channels=list(getattr(session.ctx, "playback_blacklist", [])),
+        record_paths=[replay_record.path for replay_record in records],
+    )
+    try:
+        issue_path = save_issue_draft(session.ctx.work_dir, issue_draft)
+    except OSError as e:
+        ui.print_status("生成 issue.md 失败: {0}".format(e), "ERROR")
+        return
+    ui.print_status("issue 草稿已生成: {0}".format(issue_path))
+
+
 def _replay_records(
     session: AppSession,
     records: List[ReplayRecord],
@@ -150,6 +196,10 @@ def _replay_records(
         return
     if not _prepare_replay(session, records, replay_mode):
         return
+    last_playback_plan = None
+    last_start = 0
+    last_end = 0
+    interrupted = False
     while True:
         ui.print_status(loaded_msg)
         start, end = replay_prompter.get_playback_range()
@@ -164,6 +214,9 @@ def _replay_records(
         except (ValueError, PathMappingError) as e:
             ui.print_status(str(e), "WARN")
             continue
+        last_playback_plan = playback_plan
+        last_start = start
+        last_end = end
         ui.show_playback_info(
             tag=display_tag or playback_plan.display_tag,
             duration=playback_plan.duration,
@@ -171,9 +224,25 @@ def _replay_records(
             channels=getattr(session.ctx, "playback_blacklist", []) or None,
         )
         print(f"执行指令: \033[1;32m{playback_plan.command}\033[0m")
-        session.executor.execute_interactive(playback_plan.command)
+        try:
+            session.executor.execute_interactive(playback_plan.command)
+        except KeyboardInterrupt:
+            interrupted = True
+            ui.print_status("回播已中断", "WARN")
+            break
         if not prompter.get_confirm_input("继续调整播放时间?"):
             break
+    if last_playback_plan is not None:
+        _post_replay_issue_draft(
+            session,
+            records,
+            last_playback_plan,
+            replay_mode,
+            display_tag or last_playback_plan.display_tag,
+            last_start,
+            last_end,
+            interrupted,
+        )
 
 
 def auto_replay_flow(

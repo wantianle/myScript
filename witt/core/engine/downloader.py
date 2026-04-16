@@ -8,6 +8,7 @@ from shlex import quote
 from typing import List, TYPE_CHECKING
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
+from core.issue_draft import IssueDraft, render_issue_markdown
 from core.models import RecordMeta, TaskEntry
 from core.repository import MetadataRepository
 from utils import parser
@@ -165,24 +166,27 @@ class RecordDownloader:
         target_start = before - play_lead
         play_start = target_start if 0 <= target_start < duration else 0
         records_str = " ".join([Path(f[1]).name for f in file_infos])
-        readme_content = f"""- **tag：** {task_entry.time} {task_entry.name} duration: {before + after}s
-- **问题描述：**
-> 填写补充描述
-- **预期结果：**
-> 填写正确情况
-- **车辆软硬件信息：**
-```json
-{v_content}
-```
-- **数据路径：**
-```bash
-cd {self.ctx.host.nas_root}/{nas_path}
-```
-- **数据时刻：**
-```bash
-cyber_recorder play -s {play_start} -f {records_str}
-```
-"""
+        issue_draft = IssueDraft(
+            tag_text="{0} {1} duration: {2}s".format(
+                task_entry.time,
+                task_entry.name,
+                before + after,
+            ),
+            replay_mode="slice",
+            replay_status="待回放验证",
+            vehicle=self.ctx.vehicle,
+            target_date=self.ctx.target_date,
+            playback_command="cyber_recorder play -s {0} -f {1}".format(
+                play_start,
+                records_str,
+            ),
+            data_path_text="cd {0}/{1}".format(self.ctx.host.nas_root, nas_path),
+            version_text=v_content,
+            playback_range_text="{0}s".format(before + after),
+            playback_channels=list(self.ctx.logic.blacklist),
+            record_paths=[Path(file_info[1]).name for file_info in file_infos],
+        )
+        readme_content = render_issue_markdown(issue_draft)
         readme_path = save_dir / "README.md"
         readme_path.write_text(readme_content, encoding="utf-8")
         logging.info(f"[TASK_COMPLETE] Tag: {task_entry.name} | Saved to: {save_dir}")

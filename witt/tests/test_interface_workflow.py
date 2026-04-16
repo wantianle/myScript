@@ -357,6 +357,9 @@ class ReplayWorkflowTests(unittest.TestCase):
             replay_workflow.ui,
             "show_playback_info",
         ) as show_playback_info, patch.object(
+            replay_workflow,
+            "_post_replay_issue_draft",
+        ) as post_replay_issue_draft, patch.object(
             replay_workflow.prompter,
             "get_confirm_input",
             return_value=False,
@@ -375,6 +378,63 @@ class ReplayWorkflowTests(unittest.TestCase):
             rate=2.0,
             channels=["/apollo/foo"],
         )
+        post_replay_issue_draft.assert_called_once()
+
+    def test_replay_records_runs_issue_post_process_after_keyboard_interrupt(self) -> None:
+        build_playback_plan = Mock(
+            return_value=SimpleNamespace(
+                command="cyber_recorder play ...",
+                duration=20,
+                display_tag="demo_tag",
+                rate=1.0,
+            )
+        )
+        execute_interactive = Mock(side_effect=KeyboardInterrupt())
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(playback_blacklist=[]),
+            player=SimpleNamespace(build_playback_plan=build_playback_plan),
+            executor=SimpleNamespace(execute_interactive=execute_interactive),
+        )
+        session = cast(Any, raw_session)
+        records = [
+            ReplayRecord(
+                path="/data/soc1/a.record",
+                begin="2026-04-15T11:59:45",
+                duration=20,
+            )
+        ]
+
+        with patch.object(
+            replay_workflow,
+            "_prepare_replay",
+            return_value=True,
+        ), patch.object(
+            replay_workflow.replay_prompter,
+            "get_playback_range",
+            return_value=(0, 0),
+        ), patch.object(
+            replay_workflow.replay_prompter,
+            "get_playback_rate",
+            return_value=1.0,
+        ), patch.object(
+            replay_workflow.ui,
+            "print_status",
+        ), patch.object(
+            replay_workflow.ui,
+            "show_playback_info",
+        ), patch.object(
+            replay_workflow,
+            "_post_replay_issue_draft",
+        ) as post_replay_issue_draft:
+            replay_workflow._replay_records(
+                session,
+                records,
+                replay_workflow.REPLAY_MODE_STANDARD,
+                "已加载 1 个文件，总长 20s",
+            )
+
+        post_replay_issue_draft.assert_called_once()
+        self.assertTrue(post_replay_issue_draft.call_args.args[7])
 
     def test_auto_replay_flow_replays_selected_library_records(self) -> None:
         target_record = ReplayRecord(
