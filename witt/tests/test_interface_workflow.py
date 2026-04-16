@@ -256,6 +256,55 @@ class WorkflowTests(unittest.TestCase):
 
 
 class ReplayWorkflowTests(unittest.TestCase):
+    def test_post_replay_issue_draft_saves_automatically_with_issue_timestamp(self) -> None:
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(
+                vehicle="XZB600013",
+                target_date="20260415",
+                logic=SimpleNamespace(version=""),
+                work_dir="/tmp/work",
+                playback_blacklist=[],
+            ),
+        )
+        session = cast(Any, raw_session)
+        records = [
+            ReplayRecord(
+                path="/media/road_test/20260415/XZB600013/01.demo/soc1/a.record.split",
+                begin="2026-04-15T11:59:45",
+                duration=20,
+            )
+        ]
+        playback_plan = SimpleNamespace(
+            command="cyber_recorder play ...",
+            rate=1.0,
+            display_tag="demo_tag",
+        )
+
+        with patch.object(
+            replay_workflow,
+            "save_issue_draft",
+            return_value="/tmp/work/issues/issue_20260415_120000.md",
+        ) as save_issue_draft, patch.object(
+            replay_workflow.ui,
+            "print_status",
+        ):
+            replay_workflow._post_replay_issue_draft(
+                session,
+                records,
+                playback_plan,
+                replay_workflow.REPLAY_MODE_STANDARD,
+                "demo_tag",
+                "2026-04-15 12:00:00",
+                0,
+                0,
+                False,
+            )
+
+        self.assertEqual(
+            save_issue_draft.call_args.kwargs["issue_timestamp"],
+            "2026-04-15 12:00:00",
+        )
+
     def test_update_playback_blacklist_clears_standard_replay_filters(self) -> None:
         raw_session = SimpleNamespace(
             ctx=SimpleNamespace(playback_blacklist=["/apollo/old"]),
@@ -434,7 +483,66 @@ class ReplayWorkflowTests(unittest.TestCase):
             )
 
         post_replay_issue_draft.assert_called_once()
-        self.assertTrue(post_replay_issue_draft.call_args.args[7])
+        self.assertTrue(post_replay_issue_draft.call_args.args[8])
+
+    def test_replay_records_runs_issue_post_process_when_continue_prompt_is_interrupted(self) -> None:
+        build_playback_plan = Mock(
+            return_value=SimpleNamespace(
+                command="cyber_recorder play ...",
+                duration=20,
+                display_tag="demo_tag",
+                rate=1.0,
+            )
+        )
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(playback_blacklist=[]),
+            player=SimpleNamespace(build_playback_plan=build_playback_plan),
+            executor=SimpleNamespace(execute_interactive=lambda command: None),
+        )
+        session = cast(Any, raw_session)
+        records = [
+            ReplayRecord(
+                path="/data/soc1/a.record",
+                begin="2026-04-15T11:59:45",
+                duration=20,
+            )
+        ]
+
+        with patch.object(
+            replay_workflow,
+            "_prepare_replay",
+            return_value=True,
+        ), patch.object(
+            replay_workflow.replay_prompter,
+            "get_playback_range",
+            return_value=(0, 0),
+        ), patch.object(
+            replay_workflow.replay_prompter,
+            "get_playback_rate",
+            return_value=1.0,
+        ), patch.object(
+            replay_workflow.ui,
+            "print_status",
+        ), patch.object(
+            replay_workflow.ui,
+            "show_playback_info",
+        ), patch.object(
+            replay_workflow.prompter,
+            "get_confirm_input",
+            side_effect=KeyboardInterrupt(),
+        ), patch.object(
+            replay_workflow,
+            "_post_replay_issue_draft",
+        ) as post_replay_issue_draft:
+            replay_workflow._replay_records(
+                session,
+                records,
+                replay_workflow.REPLAY_MODE_STANDARD,
+                "已加载 1 个文件，总长 20s",
+            )
+
+        post_replay_issue_draft.assert_called_once()
+        self.assertTrue(post_replay_issue_draft.call_args.args[8])
 
     def test_auto_replay_flow_replays_selected_library_records(self) -> None:
         target_record = ReplayRecord(
@@ -489,10 +597,11 @@ class ReplayWorkflowTests(unittest.TestCase):
             )
 
         replay_records.assert_called_once()
-        args, _ = replay_records.call_args
+        args, kwargs = replay_records.call_args
         self.assertEqual(args[0], raw_session)
         self.assertEqual(args[1], [target_record])
         self.assertEqual(args[2], replay_workflow.REPLAY_MODE_STANDARD)
+        self.assertEqual(kwargs["issue_timestamp"], library_entry.time)
 
     def test_full_source_replay_flow_replays_selected_task(self) -> None:
         raw_session = SimpleNamespace(
@@ -530,10 +639,11 @@ class ReplayWorkflowTests(unittest.TestCase):
             replay_workflow.full_source_replay_flow(session, [task_entry])
 
         replay_records.assert_called_once()
-        args, _ = replay_records.call_args
+        args, kwargs = replay_records.call_args
         self.assertEqual(args[0], raw_session)
         self.assertEqual(args[1], source_records)
         self.assertEqual(args[2], replay_workflow.REPLAY_MODE_STANDARD)
+        self.assertEqual(kwargs["issue_timestamp"], task_entry.time)
 
 
 if __name__ == "__main__":

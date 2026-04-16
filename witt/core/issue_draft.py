@@ -85,10 +85,12 @@ def save_issue_draft(
     work_dir: Path,
     issue_draft: IssueDraft,
     issue_name: str = "",
-    issue_timestamp: str = "",
+    issue_timestamp: Union[str, datetime] = "",
 ) -> Path:
     """保存 issue 草稿到 work_dir/issues。"""
-    timestamp_text = issue_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp_text = _normalize_issue_timestamp(issue_timestamp)
+    if not timestamp_text:
+        timestamp_text = datetime.now().strftime("%Y%m%d_%H%M%S")
     issue_path = build_issue_path(work_dir, timestamp_text, issue_name)
     issue_path.parent.mkdir(parents=True, exist_ok=True)
     issue_path.write_text(render_issue_markdown(issue_draft), encoding="utf-8")
@@ -110,6 +112,26 @@ def _normalize_issue_name(issue_name: str) -> str:
     """清理预留 issue 名称，便于后续改成中文 tag 或自定义标题。"""
     cleaned_name = issue_name.strip().replace("/", "_").replace("\\", "_")
     return re.sub(r"\s+", "_", cleaned_name)
+
+
+def _normalize_issue_timestamp(issue_timestamp: Union[str, datetime]) -> str:
+    """将原始时间文本规范化为 issue 文件名时间戳。"""
+    if isinstance(issue_timestamp, datetime):
+        return issue_timestamp.strftime("%Y%m%d_%H%M%S")
+    timestamp_text = str(issue_timestamp).strip()
+    if not timestamp_text:
+        return ""
+    for time_format in (
+        "%Y%m%d_%H%M%S",
+        "%Y%m%d%H%M%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(timestamp_text, time_format).strftime("%Y%m%d_%H%M%S")
+        except ValueError:
+            continue
+    return timestamp_text
 
 
 def _format_issue_data_path(

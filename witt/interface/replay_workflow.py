@@ -158,14 +158,12 @@ def _post_replay_issue_draft(
     playback_plan,
     replay_mode: str,
     display_tag: str,
+    issue_timestamp: str,
     start_sec: int,
     end_sec: int,
     interrupted: bool,
 ) -> None:
     """回播结束后统一处理 issue 草稿生成。"""
-    prompt = "回播已中断，是否生成 issue.md 草稿?" if interrupted else "回播结束，是否生成 issue.md 草稿?"
-    if not prompter.get_confirm_input(prompt, True):
-        return
     issue_draft = IssueDraft(
         tag_text=display_tag or playback_plan.display_tag,
         vehicle=session.ctx.vehicle,
@@ -182,7 +180,11 @@ def _post_replay_issue_draft(
         playback_channels=list(getattr(session.ctx, "playback_blacklist", [])),
     )
     try:
-        issue_path = save_issue_draft(session.ctx.work_dir, issue_draft)
+        issue_path = save_issue_draft(
+            session.ctx.work_dir,
+            issue_draft,
+            issue_timestamp=issue_timestamp,
+        )
     except OSError as e:
         ui.print_status("生成 issue.md 失败: {0}".format(e), "ERROR")
         return
@@ -195,6 +197,7 @@ def _replay_records(
     replay_mode: str,
     loaded_msg: str,
     display_tag: str = "",
+    issue_timestamp: str = "",
 ) -> None:
     """执行一轮可重复调整时间窗的回放循环。"""
     if not records:
@@ -236,7 +239,13 @@ def _replay_records(
             interrupted = True
             ui.print_status("回播已中断", "WARN")
             break
-        if not prompter.get_confirm_input("继续调整播放时间?"):
+        try:
+            continue_replay = prompter.get_confirm_input("继续调整播放时间?")
+        except KeyboardInterrupt:
+            interrupted = True
+            ui.print_status("回播已中断", "WARN")
+            break
+        if not continue_replay:
             break
     if last_playback_plan is not None:
         _post_replay_issue_draft(
@@ -245,6 +254,7 @@ def _replay_records(
             last_playback_plan,
             replay_mode,
             display_tag or last_playback_plan.display_tag,
+            issue_timestamp,
             last_start,
             last_end,
             interrupted,
@@ -284,6 +294,7 @@ def auto_replay_flow(
             replay_mode,
             f"已加载 {len(target_records)} 个文件，总长 {total_duration}s",
             display_tag=selected_tag.tag,
+            issue_timestamp=selected_tag.time,
         )
 
 
@@ -316,6 +327,7 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
             f"\033[1;32m{task_entry.name}\033[0m"
             f" | 共 {len(source_records)} 个文件 | 总长 {source_records[0].duration}s",
             display_tag=task_entry.name,
+            issue_timestamp=task_entry.time,
         )
 
 
@@ -348,4 +360,5 @@ def manual_replay_flow(
         current_records,
         replay_mode,
         f"已加载 {len(paths)} 个文件，总长 {tag_duration}s",
+        issue_timestamp=tag_start.strftime("%Y-%m-%d %H:%M:%S"),
     )

@@ -63,6 +63,28 @@ class IssueDraftTests(unittest.TestCase):
             )
             self.assertTrue(issue_path.exists())
 
+    def test_save_issue_draft_normalizes_human_readable_timestamp(self) -> None:
+        issue_draft = IssueDraft(
+            tag_text="demo_tag",
+            vehicle="XZB600013",
+            target_date="20260416",
+            playback_command="cyber_recorder play -r 1",
+            data_path_text="/tmp/data",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_dir = Path(tmpdir)
+            issue_path = save_issue_draft(
+                work_dir,
+                issue_draft,
+                issue_timestamp="2026-04-16 12:00:00",
+            )
+            self.assertEqual(
+                issue_path,
+                work_dir / "issues" / "issue_20260416_120000.md",
+            )
+            self.assertTrue(issue_path.exists())
+
     def test_load_version_text_reads_file_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             version_path = Path(tmpdir) / "version.txt"
