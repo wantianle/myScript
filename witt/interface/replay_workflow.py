@@ -144,12 +144,9 @@ def _build_source_replay_records(
 
 
 def _format_playback_range(start_sec: int, end_sec: int) -> str:
-    """格式化播放时间范围，便于写入 issue 草稿。"""
-    if start_sec <= 0 and end_sec <= 0:
-        return "全播"
-    if end_sec <= 0:
-        return "{0}s-结束".format(start_sec)
-    return "{0}s-{1}s".format(start_sec, end_sec)
+    """格式化回播起始偏移，便于写入 issue 草稿的 range(-s)。"""
+    del end_sec
+    return "{0}s".format(max(0, start_sec))
 
 
 def _post_replay_issue_draft(

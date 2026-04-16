@@ -28,7 +28,7 @@ class IssueDraftTests(unittest.TestCase):
             data_path_text="/tmp/data",
             version_text='{"version":"demo"}',
             playback_rate=2.0,
-            playback_range_text="5s-10s",
+            playback_range_text="5s",
             playback_channels=["/apollo/foo"],
         )
 
@@ -37,7 +37,7 @@ class IssueDraftTests(unittest.TestCase):
         self.assertIn("demo_tag", markdown_text)
         self.assertIn("XZB600013 | 20260416", markdown_text)
         self.assertIn("cyber_recorder play -r 2", markdown_text)
-        self.assertIn("range(-s): 5s-10s", markdown_text)
+        self.assertIn("range(-s): 5s", markdown_text)
         self.assertIn("rate(-r): x2", markdown_text)
         self.assertIn("channels(-k): /apollo/foo", markdown_text)
 

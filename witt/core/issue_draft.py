@@ -55,7 +55,7 @@ def render_issue_markdown(issue_draft: IssueDraft) -> str:
     version_block = issue_draft.version_text or "未提供版本文件"
     channels_text = ", ".join(issue_draft.playback_channels) if issue_draft.playback_channels else "无"
     return f"""- **tag：** {issue_draft.tag_text}
-- **车辆日期：** {issue_draft.vehicle} | {issue_draft.target_date}
+- **车辆/日期：** {issue_draft.vehicle} | {issue_draft.target_date}
 - **问题描述：**
 > {issue_draft.issue_description}
 - **预期结果：**
