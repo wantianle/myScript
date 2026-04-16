@@ -153,14 +153,21 @@ def _replay_records(
     while True:
         ui.print_status(loaded_msg)
         start, end = replay_prompter.get_playback_range()
+        playback_rate = replay_prompter.get_playback_rate()
         try:
-            playback_plan = session.player.build_playback_plan(records, start, end)
+            playback_plan = session.player.build_playback_plan(
+                records,
+                start,
+                end,
+                playback_rate,
+            )
         except (ValueError, PathMappingError) as e:
             ui.print_status(str(e), "WARN")
             continue
         ui.show_playback_info(
             tag=display_tag or playback_plan.display_tag,
             duration=playback_plan.duration,
+            rate=playback_plan.rate,
             channels=getattr(session.ctx, "playback_blacklist", []) or None,
         )
         print(f"执行指令: \033[1;32m{playback_plan.command}\033[0m")

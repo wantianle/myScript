@@ -22,6 +22,7 @@ class PlaybackPlan:
     command: str
     duration: int
     display_tag: str
+    rate: float
 
 
 class RecordPlayer:
@@ -80,6 +81,7 @@ class RecordPlayer:
         records: List[ReplayRecord],
         start_sec: int = 0,
         end_sec: int = 0,
+        playback_rate: float = 1.0,
     ) -> PlaybackPlan:
         """根据回放记录和时间窗构建最终执行计划。"""
         if not records:
@@ -92,9 +94,12 @@ class RecordPlayer:
         total_duration = max(replay_record.duration for replay_record in records)
         if total_duration <= 0:
             raise ValueError("数据总时长无效，无法播放")
+        if playback_rate < 0.1 or playback_rate > 10:
+            raise ValueError("播放倍速需在 0.1 到 10 之间")
         # 构造指令
         docker_paths = [self.executor.map_path(replay_record.path) for replay_record in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]
+        cmd_parts.append("-r {0:g}".format(playback_rate))
         blacklist = getattr(self.ctx, "playback_blacklist", [])
         if blacklist:
             for channel_name in blacklist:
@@ -117,4 +122,5 @@ class RecordPlayer:
             command=" ".join(cmd_parts),
             duration=total_duration,
             display_tag=Path(records[0].path).name[:20] + "...",
+            rate=playback_rate,
         )

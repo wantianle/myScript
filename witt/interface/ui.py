@@ -46,11 +46,13 @@ def show_manual_play_header() -> None:
 def show_playback_info(
     tag: str,
     duration: int,
+    rate: float = 1.0,
     channels: Optional[List[str]] = None,
 ) -> None:
     """打印当前回放的概要信息。"""
     print(f"当前回播: \033[1;32m{tag}\033[0m")
     print(f"总时长: \033[1;33m{duration}s\033[0m")
+    print(f"播放倍速: \033[1;36mx{rate:g}\033[0m")
     if channels:
         print(f"频道过滤: \033[1;34m{', '.join(channels)}\033[0m")
 

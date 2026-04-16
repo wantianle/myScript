@@ -88,6 +88,22 @@ def get_playback_range() -> tuple:
     return parser.parse_range_logic(range_input)
 
 
+def get_playback_rate() -> float:
+    """读取播放倍速，范围限制在 0.1 到 10 之间。"""
+    while True:
+        rate_input = input("播放倍速 (0.1-10 | 回车 1.0): ").strip()
+        if not rate_input:
+            return 1.0
+        try:
+            playback_rate = float(rate_input)
+        except ValueError:
+            ui.print_status("请输入合法倍速", "WARN")
+            continue
+        if 0.1 <= playback_rate <= 10:
+            return playback_rate
+        ui.print_status("播放倍速需在 0.1 到 10 之间", "WARN")
+
+
 def get_manual_replay_paths() -> List[Path]:
     """获取手动回放模式下用户提供的文件路径列表。"""
     ui.show_manual_play_header()

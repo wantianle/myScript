@@ -2,7 +2,7 @@ import sys
 import unittest
 from types import ModuleType, SimpleNamespace
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from core.models import LibraryEntry, ReplayRecord, TaskEntry
 
@@ -314,14 +314,18 @@ class ReplayWorkflowTests(unittest.TestCase):
         )
 
     def test_replay_records_shows_playback_channels_when_blacklist_exists(self) -> None:
+        build_playback_plan = Mock(
+            return_value=SimpleNamespace(
+                command="cyber_recorder play ...",
+                duration=20,
+                display_tag="demo_tag",
+                rate=2.0,
+            )
+        )
         raw_session = SimpleNamespace(
             ctx=SimpleNamespace(playback_blacklist=["/apollo/foo"]),
             player=SimpleNamespace(
-                build_playback_plan=lambda records, start, end: SimpleNamespace(
-                    command="cyber_recorder play ...",
-                    duration=20,
-                    display_tag="demo_tag",
-                )
+                build_playback_plan=build_playback_plan,
             ),
             executor=SimpleNamespace(execute_interactive=lambda command: None),
         )
@@ -343,6 +347,10 @@ class ReplayWorkflowTests(unittest.TestCase):
             "get_playback_range",
             return_value=(0, 0),
         ), patch.object(
+            replay_workflow.replay_prompter,
+            "get_playback_rate",
+            return_value=2.0,
+        ), patch.object(
             replay_workflow.ui,
             "print_status",
         ), patch.object(
@@ -360,9 +368,11 @@ class ReplayWorkflowTests(unittest.TestCase):
                 "已加载 1 个文件，总长 20s",
             )
 
+        build_playback_plan.assert_called_once_with(records, 0, 0, 2.0)
         show_playback_info.assert_called_once_with(
             tag="demo_tag",
             duration=20,
+            rate=2.0,
             channels=["/apollo/foo"],
         )
 
