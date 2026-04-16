@@ -10,7 +10,7 @@ readonly DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 readonly CAMERA_CONFIG_NAME="h26x_to_nv12.pb.txt"
 readonly LOCAL_CAMERA_CONFIG_PATH="${DIR}/../config/${CAMERA_CONFIG_NAME}"
 readonly CONTAINER_CAMERA_CONFIG_PATH="/mdrive/mdrive_conf/modules/perception_trafficlights/${CAMERA_CONFIG_NAME}"
-readonly LOCAL_TRAFFIC_LIGHT_CONFIG_PATH="$MDRIVE_ROOT/mdrive_conf/modules/perception_trafficlights/perception_traffic_light.pb.txt"
+readonly LOCAL_TRAFFIC_LIGHT_CONFIG_PATH="$MDRIVE_ROOT/mdrive_conf//modules/perception_trafficlights/perception_traffic_light.pb.txt"
 source "$DIR/utils.sh"
 
 trap 'failure ${BASH_SOURCE[0]} ${LINENO} "$BASH_COMMAND"' ERR

@@ -5,6 +5,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import List
 
+from . import channel_prompter
 from . import config_prompter
 from . import prompter
 from . import replay_prompter
@@ -16,13 +17,12 @@ from utils import parser
 
 REPLAY_MODE_STANDARD = "standard"
 REPLAY_MODE_TRAFFIC_LIGHT = "traffic_light"
-LAUNCH_MODE_STANDARD_PROMPT = "standard_prompt"
 
 
 def restore_environment_flow(
     session: AppSession,
     auto: bool = False,
-    launch_mode: str = "prompt",
+    replay_mode: str = REPLAY_MODE_STANDARD,
 ) -> bool:
     """恢复运行环境并按模式启动回放相关栈。"""
     if not auto:
@@ -31,7 +31,7 @@ def restore_environment_flow(
             ui.print_status("未提供版本文件，已取消环境恢复", "WARN")
             return False
     session.runner.restore_runtime_environment()
-    if launch_mode == "prompt":
+    if replay_mode == REPLAY_MODE_TRAFFIC_LIGHT:
         if prompter.get_confirm_input(
             "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
         ):
@@ -40,15 +40,11 @@ def restore_environment_flow(
             "是否需要打开 Debug_Driver-Camera & Perception-TrafficLight？"
         ):
             session.runner.start_traffic_light_stack()
-    elif launch_mode == LAUNCH_MODE_STANDARD_PROMPT:
+    elif replay_mode == REPLAY_MODE_STANDARD:
         if prompter.get_confirm_input(
             "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
         ):
             session.runner.start_standard_replay_stack()
-    elif launch_mode == REPLAY_MODE_STANDARD:
-        session.runner.start_standard_replay_stack()
-    elif launch_mode == REPLAY_MODE_TRAFFIC_LIGHT:
-        session.runner.start_traffic_light_replay_stack()
     return True
 
 
@@ -97,15 +93,25 @@ def _prepare_replay(
 ) -> bool:
     """为回放准备环境和工具栈。"""
     auto_version = _resolve_version_from_records(session, records)
-    launch_mode = (
-        LAUNCH_MODE_STANDARD_PROMPT
-        if replay_mode == REPLAY_MODE_STANDARD
-        else REPLAY_MODE_TRAFFIC_LIGHT
-    )
     return restore_environment_flow(
         session,
         auto=auto_version,
-        launch_mode=launch_mode,
+        replay_mode=replay_mode,
+    )
+
+
+def _update_playback_blacklist(
+    session: AppSession,
+    records: List[ReplayRecord],
+) -> None:
+    """根据当前回放记录更新频道过滤列表。"""
+    session.ctx.logic.blacklist = (
+        channel_prompter.get_paths_channels(
+            session,
+            [replay_record.path for replay_record in records],
+            prompter.get_confirm_input,
+        )
+        or []
     )
 
 
@@ -183,6 +189,7 @@ def auto_replay_flow(
         target_records = replay_prompter.select_replay_records(selected_tag)
         if not target_records:
             continue
+        _update_playback_blacklist(session, target_records)
         total_duration = max(replay_record.duration for replay_record in target_records)
         _replay_records(
             session,
@@ -213,6 +220,7 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
         if not source_records:
             ui.print_status(f"{task_entry.name} 未匹配到可回放的原始数据", "WARN")
             continue
+        _update_playback_blacklist(session, source_records)
         _replay_records(
             session,
             source_records,
@@ -247,16 +255,10 @@ def manual_replay_flow(
         ReplayRecord(path=str(path_obj), begin=tag_start, duration=tag_duration)
         for path_obj in paths
     ]
+    _update_playback_blacklist(session, current_records)
     _replay_records(
         session,
         current_records,
         replay_mode,
         f"已加载 {len(paths)} 个文件，总长 {tag_duration}s",
     )
-
-
-restore_env_flow = restore_environment_flow
-replay_traffic_light_flow = traffic_light_replay_flow
-play_flow = replay_flow
-auto_play = auto_replay_flow
-manual_play = manual_replay_flow

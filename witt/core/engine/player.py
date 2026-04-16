@@ -95,6 +95,10 @@ class RecordPlayer:
         # 构造指令
         docker_paths = [self.executor.map_path(replay_record.path) for replay_record in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]
+        blacklist = self.ctx.logic.blacklist
+        if blacklist:
+            for channel_name in blacklist:
+                cmd_parts.append(f"-k {channel_name}")
         # 时间窗
         fmt = "%Y-%m-%d %H:%M:%S"
         final_start = max(0, start_sec)

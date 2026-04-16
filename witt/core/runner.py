@@ -102,26 +102,6 @@ class ScriptRunner:
         self.start_standard_replay_stack()
         self.start_traffic_light_stack()
 
-    def run_restore_env(self) -> None:
-        """兼容旧接口：恢复运行环境。"""
-        self.restore_runtime_environment()
-
-    def run_tools(self) -> None:
-        """兼容旧接口：启动标准回放栈。"""
-        self.start_replay_stack()
-
-    def run_traffic_light(self) -> None:
-        """兼容旧接口：启动红绿灯栈。"""
-        self.start_traffic_light_stack()
-
-    def run_standard_replay_stack(self) -> None:
-        """兼容旧接口：启动标准回放完整栈。"""
-        self.start_standard_replay_stack()
-
-    def run_traffic_light_replay_stack(self) -> None:
-        """兼容旧接口：启动红绿灯完整回放栈。"""
-        self.start_traffic_light_replay_stack()
-
     def run_docker(self) -> None:
         """启动底层 docker 开发容器。"""
         self._run_script("dev_start.sh", True, "--remove")

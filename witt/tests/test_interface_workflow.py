@@ -191,6 +191,9 @@ class ReplayWorkflowTests(unittest.TestCase):
             return_value=[target_record],
         ), patch.object(
             replay_workflow,
+            "_update_playback_blacklist",
+        ), patch.object(
+            replay_workflow,
             "_replay_records",
         ) as replay_records:
             replay_workflow.auto_replay_flow(
@@ -230,6 +233,9 @@ class ReplayWorkflowTests(unittest.TestCase):
             replay_workflow,
             "_build_source_replay_records",
             return_value=source_records,
+        ), patch.object(
+            replay_workflow,
+            "_update_playback_blacklist",
         ), patch.object(
             replay_workflow,
             "_replay_records",

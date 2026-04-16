@@ -109,9 +109,3 @@ traffic_light_replay_flow = replay_workflow.traffic_light_replay_flow
 replay_flow = replay_workflow.replay_flow
 auto_replay_flow = replay_workflow.auto_replay_flow
 manual_replay_flow = replay_workflow.manual_replay_flow
-
-restore_env_flow = restore_environment_flow
-replay_traffic_light_flow = traffic_light_replay_flow
-play_flow = replay_flow
-auto_play = auto_replay_flow
-manual_play = manual_replay_flow

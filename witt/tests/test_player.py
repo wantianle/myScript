@@ -1,0 +1,48 @@
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
+
+from core.engine.player import RecordPlayer
+from core.models import ReplayRecord
+
+
+class _FakeExecutor:
+    def map_path(self, path_text: str) -> str:
+        return "/docker{0}".format(path_text)
+
+
+class RecordPlayerTests(unittest.TestCase):
+    def test_build_playback_plan_appends_blacklist_args(self) -> None:
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(
+                logic=SimpleNamespace(
+                    blacklist=["/apollo/foo", "/apollo/bar"],
+                )
+            ),
+            executor=_FakeExecutor(),
+        )
+        player = RecordPlayer(
+            cast(Any, raw_session),
+            cast(Any, SimpleNamespace(cache_path=Path("/tmp/library.json"))),
+            cast(Any, SimpleNamespace()),
+        )
+        records = [
+            ReplayRecord(
+                path="/data/demo.record",
+                begin="2026-04-15T12:00:00",
+                duration=20,
+            )
+        ]
+
+        playback_plan = player.build_playback_plan(records, 1, 3)
+
+        self.assertIn("cyber_recorder play -l -f /docker/data/demo.record", playback_plan.command)
+        self.assertIn("-k /apollo/foo", playback_plan.command)
+        self.assertIn("-k /apollo/bar", playback_plan.command)
+        self.assertIn('-b "2026-04-15 12:00:01"', playback_plan.command)
+        self.assertIn('-e "2026-04-15 12:00:03"', playback_plan.command)
+
+
+if __name__ == "__main__":
+    unittest.main()
