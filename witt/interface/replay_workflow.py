@@ -199,13 +199,16 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
         ui.print_status("没有可回放的 Tag", "WARN")
         return
     find_record_output = getattr(session.ctx, "find_record_output", "")
+    prompt_find_record_output = ""
     while True:
         task_entry = replay_prompter.select_source_task_entry(
             task_entries,
-            find_record_output=find_record_output,
+            find_record_output=prompt_find_record_output,
         )
         if task_entry is None:
             return
+        # 首轮查询结果已由 find_record 脚本实时输出，回到选择页后再复用缓存文本。
+        prompt_find_record_output = find_record_output
         source_records = _build_source_replay_records(session, task_entry)
         if not source_records:
             ui.print_status(f"{task_entry.name} 未匹配到可回放的原始数据", "WARN")
