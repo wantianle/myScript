@@ -7,7 +7,7 @@ import yaml
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 from core.models import AppConfig, DockerConfig, HostConfig, LogicConfig, PathsConfig, RemoteConfig
 
@@ -36,6 +36,7 @@ class TaskContext:
     app_config: AppConfig = field(init=False)
     temp_dir: Path = field(init=False)
     find_record_output: str = field(init=False, default="")
+    playback_blacklist: List[str] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         """加载配置并初始化当前会话的上下文目录。"""

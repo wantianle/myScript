@@ -103,9 +103,13 @@ def _prepare_replay(
 def _update_playback_blacklist(
     session: AppSession,
     records: List[ReplayRecord],
+    replay_mode: str,
 ) -> None:
     """根据当前回放记录更新频道过滤列表。"""
-    session.ctx.logic.blacklist = (
+    if replay_mode != REPLAY_MODE_TRAFFIC_LIGHT:
+        session.ctx.playback_blacklist = []
+        return
+    session.ctx.playback_blacklist = (
         channel_prompter.get_paths_channels(
             session,
             [replay_record.path for replay_record in records],
@@ -157,6 +161,7 @@ def _replay_records(
         ui.show_playback_info(
             tag=display_tag or playback_plan.display_tag,
             duration=playback_plan.duration,
+            channels=getattr(session.ctx, "playback_blacklist", []) or None,
         )
         print(f"执行指令: \033[1;32m{playback_plan.command}\033[0m")
         session.executor.execute_interactive(playback_plan.command)
@@ -189,7 +194,7 @@ def auto_replay_flow(
         target_records = replay_prompter.select_replay_records(selected_tag)
         if not target_records:
             continue
-        _update_playback_blacklist(session, target_records)
+        _update_playback_blacklist(session, target_records, replay_mode)
         total_duration = max(replay_record.duration for replay_record in target_records)
         _replay_records(
             session,
@@ -220,7 +225,7 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
         if not source_records:
             ui.print_status(f"{task_entry.name} 未匹配到可回放的原始数据", "WARN")
             continue
-        _update_playback_blacklist(session, source_records)
+        _update_playback_blacklist(session, source_records, REPLAY_MODE_STANDARD)
         _replay_records(
             session,
             source_records,
@@ -255,7 +260,7 @@ def manual_replay_flow(
         ReplayRecord(path=str(path_obj), begin=tag_start, duration=tag_duration)
         for path_obj in paths
     ]
-    _update_playback_blacklist(session, current_records)
+    _update_playback_blacklist(session, current_records, replay_mode)
     _replay_records(
         session,
         current_records,

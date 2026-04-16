@@ -256,6 +256,116 @@ class WorkflowTests(unittest.TestCase):
 
 
 class ReplayWorkflowTests(unittest.TestCase):
+    def test_update_playback_blacklist_clears_standard_replay_filters(self) -> None:
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(playback_blacklist=["/apollo/old"]),
+        )
+        session = cast(Any, raw_session)
+        records = [
+            ReplayRecord(
+                path="/data/soc1/a.record",
+                begin="2026-04-15T11:59:45",
+                duration=20,
+            )
+        ]
+
+        with patch.object(
+            replay_workflow.channel_prompter,
+            "get_paths_channels",
+        ) as get_paths_channels:
+            replay_workflow._update_playback_blacklist(
+                session,
+                records,
+                replay_workflow.REPLAY_MODE_STANDARD,
+            )
+
+        self.assertEqual(raw_session.ctx.playback_blacklist, [])
+        get_paths_channels.assert_not_called()
+
+    def test_update_playback_blacklist_collects_filters_for_traffic_light_replay(self) -> None:
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(playback_blacklist=[]),
+        )
+        session = cast(Any, raw_session)
+        records = [
+            ReplayRecord(
+                path="/data/soc1/a.record",
+                begin="2026-04-15T11:59:45",
+                duration=20,
+            )
+        ]
+
+        with patch.object(
+            replay_workflow.channel_prompter,
+            "get_paths_channels",
+            return_value=["/apollo/foo"],
+        ) as get_paths_channels:
+            replay_workflow._update_playback_blacklist(
+                session,
+                records,
+                replay_workflow.REPLAY_MODE_TRAFFIC_LIGHT,
+            )
+
+        self.assertEqual(raw_session.ctx.playback_blacklist, ["/apollo/foo"])
+        get_paths_channels.assert_called_once_with(
+            raw_session,
+            ["/data/soc1/a.record"],
+            replay_workflow.prompter.get_confirm_input,
+        )
+
+    def test_replay_records_shows_playback_channels_when_blacklist_exists(self) -> None:
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(playback_blacklist=["/apollo/foo"]),
+            player=SimpleNamespace(
+                build_playback_plan=lambda records, start, end: SimpleNamespace(
+                    command="cyber_recorder play ...",
+                    duration=20,
+                    display_tag="demo_tag",
+                )
+            ),
+            executor=SimpleNamespace(execute_interactive=lambda command: None),
+        )
+        session = cast(Any, raw_session)
+        records = [
+            ReplayRecord(
+                path="/data/soc1/a.record",
+                begin="2026-04-15T11:59:45",
+                duration=20,
+            )
+        ]
+
+        with patch.object(
+            replay_workflow,
+            "_prepare_replay",
+            return_value=True,
+        ), patch.object(
+            replay_workflow.replay_prompter,
+            "get_playback_range",
+            return_value=(0, 0),
+        ), patch.object(
+            replay_workflow.ui,
+            "print_status",
+        ), patch.object(
+            replay_workflow.ui,
+            "show_playback_info",
+        ) as show_playback_info, patch.object(
+            replay_workflow.prompter,
+            "get_confirm_input",
+            return_value=False,
+        ):
+            replay_workflow._replay_records(
+                session,
+                records,
+                replay_workflow.REPLAY_MODE_TRAFFIC_LIGHT,
+                "已加载 1 个文件，总长 20s",
+            )
+
+        show_playback_info.assert_called_once_with(
+            tag="demo_tag",
+            duration=20,
+            channels=["/apollo/foo"],
+        )
+
     def test_auto_replay_flow_replays_selected_library_records(self) -> None:
         target_record = ReplayRecord(
             path="/data/soc1/20260414103914.record.00000.103914",

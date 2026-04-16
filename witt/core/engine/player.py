@@ -95,7 +95,7 @@ class RecordPlayer:
         # 构造指令
         docker_paths = [self.executor.map_path(replay_record.path) for replay_record in records]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(docker_paths)]
-        blacklist = self.ctx.logic.blacklist
+        blacklist = getattr(self.ctx, "playback_blacklist", [])
         if blacklist:
             for channel_name in blacklist:
                 cmd_parts.append(f"-k {channel_name}")

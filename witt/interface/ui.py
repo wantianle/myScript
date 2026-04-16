@@ -51,8 +51,8 @@ def show_playback_info(
     """打印当前回放的概要信息。"""
     print(f"当前回播: \033[1;32m{tag}\033[0m")
     print(f"总时长: \033[1;33m{duration}s\033[0m")
-    # if channels:
-    #     print(f"频道过滤: \033[1;34m{channels}\033[0m")
+    if channels:
+        print(f"频道过滤: \033[1;34m{', '.join(channels)}\033[0m")
 
 
 def print_status(msg: str, level: str = "INFO") -> None:

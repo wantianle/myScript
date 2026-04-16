@@ -16,9 +16,7 @@ class RecordPlayerTests(unittest.TestCase):
     def test_build_playback_plan_appends_blacklist_args(self) -> None:
         raw_session = SimpleNamespace(
             ctx=SimpleNamespace(
-                logic=SimpleNamespace(
-                    blacklist=["/apollo/foo", "/apollo/bar"],
-                )
+                playback_blacklist=["/apollo/foo", "/apollo/bar"],
             ),
             executor=_FakeExecutor(),
         )
