@@ -113,6 +113,71 @@ class TaskContextTests(unittest.TestCase):
         self.assertEqual(env_vars["CONTAINER"], "demo_container")
         self.assertEqual(env_vars["REMOTE_IP"], "192.168.10.2")
 
+    def test_setup_logger_writes_into_current_work_dir_and_reinitializes_for_new_vehicle_date(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_path = Path(tmpdir)
+            dest_root = root_path / "dest"
+            config_path = root_path / "settings.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "remote:",
+                        '  user: "nvidia"',
+                        '  ip: "192.168.10.2"',
+                        '  data_root: "/remote/data"',
+                        "host:",
+                        '  mdrive_root: "/host/mdrive"',
+                        '  nas_root: "/host/nas"',
+                        '  data_root: "/host/data"',
+                        '  dest_root: "{0}"'.format(dest_root),
+                        "docker:",
+                        '  container: "demo_container"',
+                        '  host_mount: "/media"',
+                        '  docker_mount: "/media"',
+                        '  docker_scripts: "/scripts"',
+                        '  setup_env: "/env/setup.sh"',
+                        "logic:",
+                        '  vehicle: "XZB600013"',
+                        '  target_date: "20260415"',
+                        "  mode: 1",
+                        '  version: ""',
+                        '  soc: "soc"',
+                        "  before: 15",
+                        "  after: 5",
+                        "  blacklist:",
+                        "paths:",
+                        '  scripts_dir: "./scripts"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            task_context = TaskContext(config_path)
+            task_context.logic.target_date = "20260415"
+            task_context.logic.vehicle = "XZB600013"
+            task_context.setup_logger()
+
+            first_log_dir = task_context.log_dir
+            first_logs = list(first_log_dir.glob("witt_*.log"))
+
+            task_context.logic.target_date = "20260416"
+            task_context.logic.vehicle = "XZB600007"
+            task_context.setup_logger()
+
+            second_log_dir = task_context.log_dir
+            second_logs = list(second_log_dir.glob("witt_*.log"))
+
+        self.assertEqual(
+            first_log_dir,
+            dest_root / "20260415" / "XZB600013" / ".witt" / "log",
+        )
+        self.assertTrue(first_logs)
+        self.assertEqual(
+            second_log_dir,
+            dest_root / "20260416" / "XZB600007" / ".witt" / "log",
+        )
+        self.assertTrue(second_logs)
+
 
 if __name__ == "__main__":
     unittest.main()

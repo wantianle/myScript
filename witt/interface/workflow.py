@@ -103,6 +103,7 @@ def full_source_progress(session: AppSession) -> None:
 def auto_replay_progress(session: AppSession) -> None:
     """采集参数后自动扫描本地目录并执行标准回放。"""
     config_prompter.get_basic_params(session.ctx)
+    session.init_logging()
     config_prompter.update_dest_root(
         session.ctx,
         "输入要扫描的回播路径(限/media下)",
@@ -116,6 +117,7 @@ def auto_replay_progress(session: AppSession) -> None:
 def manual_replay_progress(session: AppSession) -> None:
     """手动选择回播文件并执行标准回放。"""
     config_prompter.get_basic_params(session.ctx)
+    session.init_logging()
     replay_workflow.manual_replay_flow(
         session,
         replay_workflow.REPLAY_MODE_STANDARD,
@@ -139,6 +141,7 @@ def search_flow(
 ) -> None:
     """采集查询条件并执行 Record 检索脚本。"""
     config_prompter.get_basic_params(session.ctx)
+    session.init_logging()
     config_prompter.get_source_path_params(
         session.ctx,
         allow_remote=allow_remote,

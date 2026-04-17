@@ -37,6 +37,7 @@ class TaskContext:
     temp_dir: Path = field(init=False)
     find_record_output: str = field(init=False, default="")
     playback_blacklist: List[str] = field(init=False, default_factory=list)
+    active_log_key: str = field(init=False, default="")
 
     def __post_init__(self):
         """加载配置并初始化当前会话的上下文目录。"""
@@ -103,7 +104,8 @@ class TaskContext:
 
     def setup_logger(self) -> None:
         """初始化全局日志器。"""
-        if self._logger_ready:
+        current_log_key = "{0}:{1}".format(self.target_date, self.vehicle)
+        if self._logger_ready and self.active_log_key == current_log_key:
             return
         self.log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -113,7 +115,9 @@ class TaskContext:
         logger.setLevel(logging.DEBUG)
 
         if logger.hasHandlers():
-            logger.handlers.clear()
+            for handler in list(logger.handlers):
+                handler.close()
+                logger.removeHandler(handler)
 
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
@@ -127,6 +131,7 @@ class TaskContext:
         fh.setLevel(logging.DEBUG)
         logger.addHandler(fh)
         TaskContext._logger_ready = True
+        self.active_log_key = current_log_key
         logging.info("=" * 50)
         logging.info(
             "Witt Logger Initialized. Data_root: %s", self.host.data_root

@@ -64,9 +64,11 @@ def traffic_light_replay_flow(session: AppSession) -> None:
     manual = prompter.get_confirm_input("手动选择文件回灌？")
     if manual:
         config_prompter.get_basic_params(session.ctx)
+        session.init_logging()
         manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
     else:
         config_prompter.get_basic_params(session.ctx)
+        session.init_logging()
         config_prompter.update_dest_root(
             session.ctx,
             "输入要扫描的回灌路径(限/media下)",
@@ -79,9 +81,11 @@ def replay_flow(session: AppSession) -> None:
     manual = prompter.get_confirm_input("手动选择文件播放？")
     if manual:
         config_prompter.get_basic_params(session.ctx)
+        session.init_logging()
         manual_replay_flow(session, REPLAY_MODE_STANDARD)
     else:
         config_prompter.get_basic_params(session.ctx)
+        session.init_logging()
         config_prompter.update_dest_root(
             session.ctx,
             "输入要扫描的回播路径(限/media下)",
@@ -500,6 +504,7 @@ def replay_last_history_flow(session: AppSession) -> None:
         ui.print_status("当前没有可重放的回播历史", "WARN")
         return
     _restore_replay_history_context(session, history_entry)
+    session.init_logging()
     if not _validate_history_records(history_entry.records):
         return
     _replay_records(
@@ -529,6 +534,7 @@ def replay_history_flow(session: AppSession) -> None:
     if history_entry is None:
         return
     _restore_replay_history_context(session, history_entry)
+    session.init_logging()
     if not _validate_history_records(history_entry.records):
         return
     _replay_records(
