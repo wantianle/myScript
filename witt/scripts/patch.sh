@@ -40,6 +40,19 @@ check_wayland_nvidia() {
     fi
 }
 
+ensure_media_rslave_mount() {
+    if grep -q -- '-v /media:/media:rslave' "$TARGET_SCRIPT"; then
+        return 0
+    fi
+
+    if grep -q -- '-v /media:/media' "$TARGET_SCRIPT"; then
+        printf "\033[0;33m[WARN] %s\033[0m\n" "正在为 $TARGET_SCRIPT 修正 /media 挂载为 :rslave ..."
+        sed -i 's#-v /media:/media\([[:space:]]*\\\)#-v /media:/media:rslave\1#' "$TARGET_SCRIPT"
+    fi
+}
+
+ensure_media_rslave_mount
+
 if check_wayland_nvidia; then
     printf "\033[0;33m[WARN] %s\033[0m\n" "正在为 $TARGET_SCRIPT 打入 Wayland + NVIDIA 兼容性补丁..."
 
