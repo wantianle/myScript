@@ -74,15 +74,14 @@ def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
         print(
             "[{0}] 播放时间 {1} | {2} | {3}".format(
                 index,
-                history_entry.created_at or "未知时间",
+                history_entry.issue_timestamp or history_entry.created_at or "未知时间",
                 history_entry.vehicle or "未知车型",
                 source_mode_text,
             )
         )
         print(
-            "    tag: {0} | tag时间: {1} | range: {2} | rate: x{3:g} | -k: {4}".format(
+            "    tag: {0} | range: {1} | rate: x{2:g} | -k: {3}".format(
                 history_entry.display_tag or history_entry.selection_label or "未命名回播",
-                history_entry.issue_timestamp or "未知时间",
                 range_text,
                 history_entry.playback_rate,
                 channels_text,
