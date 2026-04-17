@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence, TypeVar
 
 import questionary
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import FileHistory
@@ -20,6 +21,13 @@ class CommandSpec:
     aliases: List[str]
     summary: str
     example: str
+
+
+@dataclass(frozen=True)
+class CommandInvocation:
+    name: str
+    args: List[str]
+    raw: str
 
 
 MAIN_MENU_ITEMS = [
@@ -81,6 +89,8 @@ def create_command_prompt_session() -> PromptSession:
     return PromptSession(
         history=FileHistory(str(history_path)),
         completer=command_completer,
+        auto_suggest=AutoSuggestFromHistory(),
+        bottom_toolbar=_build_command_toolbar,
     )
 
 
@@ -103,9 +113,35 @@ def normalize_command(command_text: str) -> str:
     return alias_map.get(command_parts[0].lower(), command_parts[0].lower())
 
 
+def parse_command(command_text: str) -> Optional[CommandInvocation]:
+    """将原始输入解析为标准命令和参数列表。"""
+    raw_text = command_text.strip()
+    if not raw_text:
+        return None
+    command_parts = raw_text.split()
+    return CommandInvocation(
+        name=normalize_command(command_parts[0]),
+        args=command_parts[1:],
+        raw=raw_text,
+    )
+
+
 def get_command_specs() -> List[CommandSpec]:
     """返回命令定义列表。"""
     return list(COMMAND_SPECS)
+
+
+def find_command_spec(command_name: str) -> Optional[CommandSpec]:
+    """按标准命令名查找命令定义。"""
+    for command_spec in COMMAND_SPECS:
+        if command_spec.name == command_name:
+            return command_spec
+    return None
+
+
+def _build_command_toolbar() -> str:
+    """构建 REPL 底部快捷提示。"""
+    return " help  slice  full  scan  manual  history  traffic  env  clear  quit "
 
 
 def get_user_input(prompt: str, default_value: str) -> str:

@@ -22,20 +22,25 @@ def menu() -> None:
         raw_command = prompter.get_command_input(prompt_session)
         if raw_command is None:
             sys.exit(0)
-        normalized_command = prompter.normalize_command(raw_command)
-        if not normalized_command:
+        command_invocation = prompter.parse_command(raw_command)
+        if command_invocation is None:
             continue
-        if normalized_command == "quit":
+        if command_invocation.name == "quit":
             sys.exit(0)
-        if normalized_command == "help":
-            ui.show_command_help(prompter.get_command_specs())
+        if command_invocation.name == "help":
+            _handle_help_command(command_invocation)
             continue
-        if normalized_command == "clear":
+        if command_invocation.name == "clear":
             _clear_screen()
             ui.print_banner()
             continue
+        if command_invocation.name == "history" and _handle_history_subcommand(
+            session,
+            command_invocation,
+        ):
+            continue
 
-        action = command_map.get(normalized_command)
+        action = command_map.get(command_invocation.name)
         if action is None:
             ui.print_status("未知命令: {0}".format(raw_command), "WARN")
             ui.print_status("输入 help 查看可用命令", "WARN")
@@ -46,7 +51,7 @@ def menu() -> None:
         except KeyboardInterrupt:
             ui.print_status("用户终止程序...", "WARN")
         except Exception as e:
-            logging.error(f"执行命令 {normalized_command} 时发生异常: {e}")
+            logging.error(f"执行命令 {command_invocation.name} 时发生异常: {e}")
 
 
 def _build_command_map(session: AppSession) -> Dict[str, Callable[[], None]]:
@@ -65,3 +70,34 @@ def _build_command_map(session: AppSession) -> Dict[str, Callable[[], None]]:
 def _clear_screen() -> None:
     """清空终端显示。"""
     os.system("clear")
+
+
+def _handle_help_command(command_invocation: prompter.CommandInvocation) -> None:
+    """处理 help 命令。"""
+    if not command_invocation.args:
+        ui.show_command_help(prompter.get_command_specs())
+        return
+    target_command_name = prompter.normalize_command(command_invocation.args[0])
+    ui.show_command_help(
+        prompter.get_command_specs(),
+        target_command_name=target_command_name,
+    )
+
+
+def _handle_history_subcommand(
+    session: AppSession,
+    command_invocation: prompter.CommandInvocation,
+) -> bool:
+    """处理 history 命令下的轻量子命令。"""
+    if not command_invocation.args:
+        return False
+    subcommand = command_invocation.args[0].lower()
+    if subcommand != "clear":
+        ui.print_status("不支持的 history 子命令: {0}".format(subcommand), "WARN")
+        ui.print_status("当前仅支持: history clear", "WARN")
+        return True
+    if not prompter.get_confirm_input("确认清空全部历史记录？"):
+        return True
+    session.replay_history_repository.clear()
+    ui.print_status("已清空全部回播历史")
+    return True

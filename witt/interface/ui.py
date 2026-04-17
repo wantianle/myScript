@@ -49,7 +49,7 @@ def print_banner() -> None:
     )
 
 
-def show_command_help(command_specs) -> None:
+def show_command_help(command_specs, target_command_name: str = "") -> None:
     """打印命令帮助面板。"""
     help_table = Table(
         title="命令帮助",
@@ -61,13 +61,26 @@ def show_command_help(command_specs) -> None:
     help_table.add_column("别名", style="label", min_width=12)
     help_table.add_column("说明", style="label", min_width=24)
     help_table.add_column("示例", style="muted", min_width=16)
+    filtered_specs = []
     for command_spec in command_specs:
+        if not target_command_name or command_spec.name == target_command_name:
+            filtered_specs.append(command_spec)
+    for command_spec in filtered_specs:
         help_table.add_row(
             command_spec.name,
             ", ".join(command_spec.aliases) or "-",
             command_spec.summary,
             command_spec.example,
         )
+    if not filtered_specs:
+        _CONSOLE.print(
+            Panel.fit(
+                Text("未找到对应命令帮助", style="warn"),
+                title="命令帮助",
+                border_style="border",
+            )
+        )
+        return
     _CONSOLE.print(help_table)
 
 
