@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import sys
 from typing import Callable, Dict
 
@@ -29,6 +30,9 @@ def menu() -> None:
             sys.exit(0)
         if command_invocation.name == "help":
             _handle_help_command(command_invocation)
+            continue
+        if command_invocation.name == "set":
+            _handle_set_command(session, command_invocation)
             continue
         if command_invocation.name == "clear":
             _clear_screen()
@@ -82,6 +86,45 @@ def _handle_help_command(command_invocation: prompter.CommandInvocation) -> None
         prompter.get_command_specs(),
         target_command_name=target_command_name,
     )
+
+
+def _handle_set_command(
+    session: AppSession,
+    command_invocation: prompter.CommandInvocation,
+) -> None:
+    """处理 set 命令，更新当前会话默认参数。"""
+    if len(command_invocation.args) < 2:
+        ui.print_status(
+            "用法: set date <YYYYMMDD> | set vehicle <车号> | set source-root <path> | set dest-root <path>",
+            "WARN",
+        )
+        return
+    key = command_invocation.args[0].lower()
+    value = " ".join(command_invocation.args[1:]).strip()
+    if key == "date":
+        if not re.fullmatch(r"\d{8}", value):
+            ui.print_status("日期格式必须是 YYYYMMDD", "WARN")
+            return
+        session.ctx.logic.target_date = value
+        ui.print_status("已设置日期: {0}".format(value))
+        return
+    if key == "vehicle":
+        if not re.fullmatch(r"(XZB6|XZT5)\d{5}", value):
+            ui.print_status("车号格式必须是 XZB6xxxxx 或 XZT5xxxxx", "WARN")
+            return
+        session.ctx.logic.vehicle = value
+        ui.print_status("已设置车号: {0}".format(value))
+        return
+    if key == "source-root":
+        session.ctx.host.data_root = value
+        ui.print_status("已设置源路径: {0}".format(value))
+        return
+    if key == "dest-root":
+        session.ctx.host.dest_root = value
+        ui.print_status("已设置扫描/导出路径: {0}".format(value))
+        return
+    ui.print_status("不支持的 set 项: {0}".format(key), "WARN")
+    ui.print_status("当前支持: date | vehicle | source-root | dest-root", "WARN")
 
 
 def _handle_history_subcommand(

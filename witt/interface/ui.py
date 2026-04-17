@@ -98,6 +98,8 @@ def show_environment_summary(session) -> None:
     env_table.add_row("车号", session.ctx.vehicle or "未设置")
     env_table.add_row("日期", session.ctx.target_date or "未设置")
     env_table.add_row("模式", str(getattr(session.ctx.logic, "mode", "")) or "未设置")
+    env_table.add_row("源路径", str(session.ctx.host.data_root))
+    env_table.add_row("扫描/导出路径", str(session.ctx.host.dest_root))
     env_table.add_row("工作目录", str(session.ctx.work_dir))
     env_table.add_row(
         "历史文件",

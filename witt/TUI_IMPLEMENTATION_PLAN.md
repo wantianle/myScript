@@ -74,6 +74,7 @@ Witt >
 推荐一级命令：
 
 - `help`
+- `set`
 - `slice`
 - `full`
 - `scan`
@@ -87,6 +88,10 @@ Witt >
 基础子命令：
 
 - `help <command>`
+- `set date <YYYYMMDD>`
+- `set vehicle <XZB600007>`
+- `set source-root <path>`
+- `set dest-root <path>`
 - `history clear`
 - `history last`
 - `history <序号>`

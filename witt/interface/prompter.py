@@ -51,6 +51,7 @@ MAIN_MENU_STYLE = questionary.Style(
 
 COMMAND_SPECS = [
     CommandSpec("help", ["h", "?"], "显示命令帮助", "help"),
+    CommandSpec("set", ["cfg"], "设置会话默认参数", "set date 20260418"),
     CommandSpec("slice", ["s"], "查询、切片并可选回播", "slice"),
     CommandSpec("full", ["f"], "全量模式查询后直接回播", "full"),
     CommandSpec("scan", ["auto", "a"], "扫描回播目录并回播", "scan"),
@@ -139,6 +140,14 @@ def find_command_spec(command_name: str) -> Optional[CommandSpec]:
     return None
 
 
+def find_command_spec(command_name: str) -> Optional[CommandSpec]:
+    """按标准命令名查找命令定义。"""
+    for command_spec in COMMAND_SPECS:
+        if command_spec.name == command_name:
+            return command_spec
+    return None
+
+
 def _build_command_toolbar() -> str:
     """构建 REPL 底部快捷提示。"""
     return " help  slice  full  scan  manual  history  traffic  env  clear  quit "
@@ -164,12 +173,23 @@ def get_int_input(prompt: str, default_value) -> int:
             ui.print_status("请输入整数", "WARN")
 
 
-def choose_option(prompt: str, options: Sequence[str], index: bool = False):
+def choose_option(
+    prompt: str,
+    options: Sequence[str],
+    index: bool = False,
+    default_index: int = 0,
+):
     """显示简易选项列表并返回选中值或索引。"""
     for i, opt in enumerate(options, 1):
         print(f"[{i}] {opt}  ", end="")
     while True:
-        val = input(f"\033[32m{prompt}: \033[0m").strip()
+        if default_index and 1 <= default_index <= len(options):
+            prompt_suffix = " (默认 {0})".format(default_index)
+        else:
+            prompt_suffix = ""
+        val = input(f"\033[32m{prompt}{prompt_suffix}: \033[0m").strip()
+        if not val and default_index and 1 <= default_index <= len(options):
+            return default_index if index else options[default_index - 1]
         if val.isdigit() and 1 <= int(val) <= len(options):
             return int(val) if index else options[int(val) - 1]
         ui.print_status("输入无效，请重新选择", "WARN")

@@ -5,13 +5,22 @@ from . import prompter
 from . import ui
 
 
-def get_vehicle_name() -> str:
+def get_vehicle_name(default_vehicle: str = "") -> str:
     """交互式采集并格式化车辆编号。"""
-    vehicle_prefix = prompter.choose_option("\n选择车辆类型", ["XZB6", "XZT5"])
+    default_prefix = default_vehicle[:4] if len(default_vehicle) >= 4 else ""
+    default_vehicle_number = default_vehicle[-5:] if len(default_vehicle) >= 5 else "00000"
+    default_index = 1 if default_prefix == "XZB6" else 2 if default_prefix == "XZT5" else 0
+    vehicle_prefix = prompter.choose_option(
+        "\n选择车辆类型",
+        ["XZB6", "XZT5"],
+        default_index=default_index,
+    )
     while True:
-        vehicle_number = input("\033[32m输入车辆号: \033[0m").strip()
+        vehicle_number = input(
+            "\033[32m输入车辆号 (默认 {0}): \033[0m".format(default_vehicle_number)
+        ).strip()
         if not vehicle_number:
-            vehicle_number = "00000"
+            vehicle_number = default_vehicle_number
         if vehicle_number.isdigit() and 0 <= int(vehicle_number) <= 99999:
             vehicle_number = vehicle_number.zfill(5)
             break
@@ -28,7 +37,7 @@ def get_basic_params(ctx) -> None:
         "数据日期",
         ctx.logic.target_date,
     )
-    ctx.logic.vehicle = get_vehicle_name()
+    ctx.logic.vehicle = get_vehicle_name(ctx.logic.vehicle)
 
 
 def get_split_params(ctx) -> None:
