@@ -1,4 +1,5 @@
 import re
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, TypeVar
@@ -119,7 +120,10 @@ def parse_command(command_text: str) -> Optional[CommandInvocation]:
     raw_text = command_text.strip()
     if not raw_text:
         return None
-    command_parts = raw_text.split()
+    try:
+        command_parts = shlex.split(raw_text)
+    except ValueError:
+        command_parts = raw_text.split()
     return CommandInvocation(
         name=normalize_command(command_parts[0]),
         args=command_parts[1:],
@@ -130,14 +134,6 @@ def parse_command(command_text: str) -> Optional[CommandInvocation]:
 def get_command_specs() -> List[CommandSpec]:
     """返回命令定义列表。"""
     return list(COMMAND_SPECS)
-
-
-def find_command_spec(command_name: str) -> Optional[CommandSpec]:
-    """按标准命令名查找命令定义。"""
-    for command_spec in COMMAND_SPECS:
-        if command_spec.name == command_name:
-            return command_spec
-    return None
 
 
 def find_command_spec(command_name: str) -> Optional[CommandSpec]:

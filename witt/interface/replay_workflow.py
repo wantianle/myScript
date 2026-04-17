@@ -691,6 +691,17 @@ def manual_replay_flow(
     paths = replay_prompter.get_manual_replay_paths()
     if not paths:
         return
+    manual_replay_paths_flow(session, paths, replay_mode)
+
+
+def manual_replay_paths_flow(
+    session: AppSession,
+    paths: List[Path],
+    replay_mode: str = REPLAY_MODE_STANDARD,
+) -> None:
+    """基于已给定文件路径列表执行手动回放。"""
+    if not paths:
+        return
     if os.name == "posix":
         termios.tcflush(sys.stdin, termios.TCIFLUSH)
     try:

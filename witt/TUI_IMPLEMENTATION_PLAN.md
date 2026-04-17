@@ -92,6 +92,10 @@ Witt >
 - `set vehicle <XZB600007>`
 - `set source-root <path>`
 - `set dest-root <path>`
+- `scan <path>`
+- `manual <path...>`
+- `full local [path]`
+- `full nas`
 - `history clear`
 - `history last`
 - `history <序号>`

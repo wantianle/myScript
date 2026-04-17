@@ -1,5 +1,6 @@
 import os
 import urllib.parse
+from typing import Optional
 
 from . import prompter
 from . import ui
@@ -56,14 +57,21 @@ def get_split_params(ctx) -> None:
         return
 
 
-def get_source_path_params(ctx, allow_remote: bool = True) -> None:
+def get_source_path_params(
+    ctx,
+    allow_remote: bool = True,
+    preset_mode: Optional[int] = None,
+) -> None:
     """采集数据源路径参数。"""
-    options = ["本地", "NAS"]
-    if allow_remote:
-        options.append("车端")
-    ctx.logic.mode = int(
-        prompter.choose_option("\n数据输入模式", options, True)
-    )
+    if preset_mode is not None:
+        ctx.logic.mode = int(preset_mode)
+    else:
+        options = ["本地", "NAS"]
+        if allow_remote:
+            options.append("车端")
+        ctx.logic.mode = int(
+            prompter.choose_option("\n数据输入模式", options, True)
+        )
     if ctx.logic.mode == 1:
         ctx.host.data_root = prompter.get_user_input(
             "原始数据路径 (限/media下)",

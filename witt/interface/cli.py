@@ -43,6 +43,21 @@ def menu() -> None:
             command_invocation,
         ):
             continue
+        if command_invocation.name == "scan" and _handle_scan_command(
+            session,
+            command_invocation,
+        ):
+            continue
+        if command_invocation.name == "manual" and _handle_manual_command(
+            session,
+            command_invocation,
+        ):
+            continue
+        if command_invocation.name == "full" and _handle_full_command(
+            session,
+            command_invocation,
+        ):
+            continue
 
         action = command_map.get(command_invocation.name)
         if action is None:
@@ -149,4 +164,47 @@ def _handle_history_subcommand(
         return True
     ui.print_status("不支持的 history 子命令: {0}".format(subcommand), "WARN")
     ui.print_status("当前支持: history clear | history last | history <序号>", "WARN")
+    return True
+
+
+def _handle_scan_command(
+    session: AppSession,
+    command_invocation: prompter.CommandInvocation,
+) -> bool:
+    """处理 scan 命令的轻量参数。"""
+    if not command_invocation.args:
+        return False
+    session.ctx.host.dest_root = command_invocation.args[0]
+    workflow.auto_replay_progress(session)
+    return True
+
+
+def _handle_manual_command(
+    session: AppSession,
+    command_invocation: prompter.CommandInvocation,
+) -> bool:
+    """处理 manual 命令的直接路径输入。"""
+    if not command_invocation.args:
+        return False
+    workflow.manual_replay_progress_with_paths(session, command_invocation.args)
+    return True
+
+
+def _handle_full_command(
+    session: AppSession,
+    command_invocation: prompter.CommandInvocation,
+) -> bool:
+    """处理 full 命令的轻量参数。"""
+    if not command_invocation.args:
+        return False
+    source_name = command_invocation.args[0].lower()
+    if source_name == "local":
+        if len(command_invocation.args) > 1:
+            session.ctx.host.data_root = command_invocation.args[1]
+        workflow.full_source_progress(session, preset_mode=1)
+        return True
+    if source_name == "nas":
+        workflow.full_source_progress(session, preset_mode=2)
+        return True
+    ui.print_status("full 仅支持: full local [路径] | full nas", "WARN")
     return True

@@ -29,12 +29,14 @@ def _load_task_entries(
     session: AppSession,
     need_export_path: bool = True,
     allow_remote: bool = True,
+    preset_mode=None,
 ):
     """执行查询并加载 manifest 中的任务列表。"""
     search_flow(
         session,
         need_export_path=need_export_path,
         allow_remote=allow_remote,
+        preset_mode=preset_mode,
     )
     task_list = parser.parse_manifest(session.ctx.manifest_path)
     if not task_list:
@@ -84,12 +86,13 @@ def slice_progress(session: AppSession) -> None:
         )
 
 
-def full_source_progress(session: AppSession) -> None:
+def full_source_progress(session: AppSession, preset_mode=None) -> None:
     """执行查询后直接回放原始 record 数据。"""
     task_list = _load_task_entries(
         session,
         need_export_path=False,
         allow_remote=False,
+        preset_mode=preset_mode,
     )
     if not task_list:
         return
@@ -124,6 +127,18 @@ def manual_replay_progress(session: AppSession) -> None:
     )
 
 
+def manual_replay_progress_with_paths(session: AppSession, path_texts: List[str]) -> None:
+    """手动回播入口，直接使用命令提供的路径列表。"""
+    config_prompter.get_basic_params(session.ctx)
+    session.init_logging()
+    replay_paths = [Path(path_text) for path_text in path_texts]
+    replay_workflow.manual_replay_paths_flow(
+        session,
+        replay_paths,
+        replay_workflow.REPLAY_MODE_STANDARD,
+    )
+
+
 def replay_history_progress(session: AppSession) -> None:
     """先浏览历史记录，再选择一次回播。"""
     replay_workflow.replay_history_flow(session)
@@ -133,6 +148,7 @@ def search_flow(
     session: AppSession,
     need_export_path: bool = True,
     allow_remote: bool = True,
+    preset_mode=None,
 ) -> None:
     """采集查询条件并执行 Record 检索脚本。"""
     config_prompter.get_basic_params(session.ctx)
@@ -140,6 +156,7 @@ def search_flow(
     config_prompter.get_source_path_params(
         session.ctx,
         allow_remote=allow_remote,
+        preset_mode=preset_mode,
     )
     if need_export_path:
         config_prompter.get_export_path_params(session.ctx)
