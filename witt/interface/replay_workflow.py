@@ -14,7 +14,6 @@ from core.models import ReplayHistoryEntry, ReplayRecord
 from core.issue_draft import (
     IssueDraft,
     ReplayIssueMarker,
-    build_issue_data_path_text,
     format_issue_data_path,
     load_version_text,
     save_issue_draft,
