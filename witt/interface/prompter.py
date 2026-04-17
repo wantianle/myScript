@@ -1,11 +1,26 @@
 import re
-import questionary
-from questionary import Choice
+from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Sequence, TypeVar
+
+import questionary
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.history import FileHistory
+from questionary import Choice
 
 from interface import ui
 
 TaskLike = TypeVar("TaskLike")
+
+
+@dataclass(frozen=True)
+class CommandSpec:
+    name: str
+    aliases: List[str]
+    summary: str
+    example: str
+
 
 MAIN_MENU_ITEMS = [
     ("[切片模式] 查询 -> 切片 -> 回播", "1"),
@@ -25,6 +40,72 @@ MAIN_MENU_STYLE = questionary.Style(
         ("selected", "fg:green"),
     ]
 )
+
+COMMAND_SPECS = [
+    CommandSpec("help", ["h", "?"], "显示命令帮助", "help"),
+    CommandSpec("slice", ["s"], "查询、切片并可选回播", "slice"),
+    CommandSpec("full", ["f"], "全量模式查询后直接回播", "full"),
+    CommandSpec("scan", ["auto", "a"], "扫描回播目录并回播", "scan"),
+    CommandSpec("manual", ["m"], "手动拖包回播", "manual"),
+    CommandSpec("history", ["his"], "浏览历史并回播", "history"),
+    CommandSpec("traffic", ["tl"], "红绿灯回灌模式", "traffic"),
+    CommandSpec("env", ["e"], "查看当前环境摘要", "env"),
+    CommandSpec("clear", ["cls"], "清空当前终端显示", "clear"),
+    CommandSpec("quit", ["q", "exit"], "退出工具", "quit"),
+]
+
+
+def build_command_alias_map() -> dict:
+    """构建命令名与别名到标准命令的映射。"""
+    alias_map = {}
+    for command_spec in COMMAND_SPECS:
+        alias_map[command_spec.name] = command_spec.name
+        for alias in command_spec.aliases:
+            alias_map[alias] = command_spec.name
+    return alias_map
+
+
+def create_command_prompt_session() -> PromptSession:
+    """创建命令行 REPL 会话。"""
+    history_path = Path.home() / ".witt" / "command_history"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    completer_words = []
+    for command_spec in COMMAND_SPECS:
+        completer_words.append(command_spec.name)
+        completer_words.extend(command_spec.aliases)
+    command_completer = WordCompleter(
+        sorted(set(completer_words)),
+        ignore_case=True,
+        sentence=True,
+    )
+    return PromptSession(
+        history=FileHistory(str(history_path)),
+        completer=command_completer,
+    )
+
+
+def get_command_input(prompt_session: PromptSession) -> Optional[str]:
+    """读取一条命令输入。"""
+    try:
+        command_text = prompt_session.prompt("Witt > ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    return command_text
+
+
+def normalize_command(command_text: str) -> str:
+    """将原始命令映射到标准命令名。"""
+    command_parts = command_text.strip().split()
+    if not command_parts:
+        return ""
+    alias_map = build_command_alias_map()
+    return alias_map.get(command_parts[0].lower(), command_parts[0].lower())
+
+
+def get_command_specs() -> List[CommandSpec]:
+    """返回命令定义列表。"""
+    return list(COMMAND_SPECS)
 
 
 def get_user_input(prompt: str, default_value: str) -> str:
@@ -70,9 +151,7 @@ def get_selected_indices(
 
     while True:
         raw_input = input(f"{prompt}\n单选 1,3,5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0: ").strip()
-        # 预清洗：只保留数字、横杠、逗号、空白、换行
         clean_input = re.sub(r"[^\d\-,\s\n]", "", raw_input)
-        # 分词
         tokens = [t for t in re.split(r"[,\s\n]+", clean_input) if t]
         if not tokens:
             ui.print_status("输入为空，请重新输入", "WARN")
@@ -80,8 +159,6 @@ def get_selected_indices(
 
         full_set = set(range(1, total_count + 1))
         result_set = set()
-
-        # 核心解析
         is_exclude_mode = tokens[0] == "0"
         if is_exclude_mode:
             result_set = full_set.copy()
@@ -89,7 +166,6 @@ def get_selected_indices(
         for token in tokens:
             try:
                 if "-" in token and not token.startswith("-"):
-                    # 处理范围 (如 10-12)
                     parts = token.split("-")
                     start, end = int(parts[0]), int(parts[1])
                     scope = set(range(min(start, end), max(start, end) + 1))
@@ -98,7 +174,6 @@ def get_selected_indices(
                     else:
                         result_set |= scope
                 else:
-                    # 处理单点 (如 5 或 -20)
                     val = abs(int(token))
                     if is_exclude_mode:
                         result_set.discard(val)
@@ -107,13 +182,11 @@ def get_selected_indices(
             except (ValueError, IndexError):
                 ui.print_status("输入无效，请重新输入", "WARN")
                 continue
-        # 过滤越界序号并排序
         final_ids = sorted([i for i in result_set if 1 <= i <= total_count])
         if not final_ids:
             ui.print_status("未选中任何有效序号，请检查输入", "ERROR")
             continue
 
-        # 预览
         preview_limit = 10
         display_ids = final_ids[:preview_limit]
         preview_str = ", ".join(map(str, display_ids))

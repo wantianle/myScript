@@ -49,6 +49,51 @@ def print_banner() -> None:
     )
 
 
+def show_command_help(command_specs) -> None:
+    """打印命令帮助面板。"""
+    help_table = Table(
+        title="命令帮助",
+        box=box.SIMPLE_HEAVY,
+        header_style="header",
+        expand=True,
+    )
+    help_table.add_column("命令", style="accent", min_width=12)
+    help_table.add_column("别名", style="label", min_width=12)
+    help_table.add_column("说明", style="label", min_width=24)
+    help_table.add_column("示例", style="muted", min_width=16)
+    for command_spec in command_specs:
+        help_table.add_row(
+            command_spec.name,
+            ", ".join(command_spec.aliases) or "-",
+            command_spec.summary,
+            command_spec.example,
+        )
+    _CONSOLE.print(help_table)
+
+
+def show_environment_summary(session) -> None:
+    """打印当前会话环境摘要。"""
+    env_table = Table(
+        title="当前环境",
+        box=box.SIMPLE_HEAVY,
+        header_style="header",
+        expand=True,
+        show_header=False,
+    )
+    env_table.add_column("字段", style="label", width=16)
+    env_table.add_column("值", style="accent")
+    env_table.add_row("车号", session.ctx.vehicle or "未设置")
+    env_table.add_row("日期", session.ctx.target_date or "未设置")
+    env_table.add_row("模式", str(getattr(session.ctx.logic, "mode", "")) or "未设置")
+    env_table.add_row("工作目录", str(session.ctx.work_dir))
+    env_table.add_row(
+        "历史文件",
+        str(getattr(getattr(session, "replay_history_repository", None), "history_path", "")),
+    )
+    env_table.add_row("日志目录", str(session.ctx.log_dir))
+    _CONSOLE.print(env_table)
+
+
 def show_playback_library(
     library: List[LibraryEntry],
     vehicle: str,
