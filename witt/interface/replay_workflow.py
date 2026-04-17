@@ -493,35 +493,8 @@ def _replay_records(
         )
 
 
-def replay_last_history_flow(session: AppSession) -> None:
-    """重放最近一次回播历史。"""
-    history_repository = getattr(session, "replay_history_repository", None)
-    if history_repository is None:
-        ui.print_status("当前会话未启用回播历史", "WARN")
-        return
-    history_entry = history_repository.load_last()
-    if history_entry is None:
-        ui.print_status("当前没有可重放的回播历史", "WARN")
-        return
-    _restore_replay_history_context(session, history_entry)
-    session.init_logging()
-    if not _validate_history_records(history_entry.records):
-        return
-    _replay_records(
-        session,
-        history_entry.records,
-        history_entry.replay_mode,
-        "重放上一次: {0}".format(history_entry.selection_label),
-        display_tag=history_entry.display_tag,
-        issue_timestamp=history_entry.issue_timestamp,
-        source_type=REPLAY_SOURCE_HISTORY,
-        selection_label=history_entry.selection_label,
-        replay_history_entry=history_entry,
-    )
-
-
 def replay_history_flow(session: AppSession) -> None:
-    """从历史记录中选择一次回播。"""
+    """先浏览历史记录，再选择一次回播。"""
     history_repository = getattr(session, "replay_history_repository", None)
     if history_repository is None:
         ui.print_status("当前会话未启用回播历史", "WARN")
@@ -530,6 +503,7 @@ def replay_history_flow(session: AppSession) -> None:
     if not history_entries:
         ui.print_status("当前没有可重放的回播历史", "WARN")
         return
+    ui.browse_replay_history(history_entries)
     history_entry = replay_prompter.select_replay_history_entry(history_entries)
     if history_entry is None:
         return

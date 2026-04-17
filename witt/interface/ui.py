@@ -1,3 +1,5 @@
+import subprocess
+from shutil import which
 from typing import List, Optional
 
 from core.models import LibraryEntry, ReplayHistoryEntry
@@ -59,8 +61,28 @@ def show_playback_info(
 
 def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
     """打印回播历史列表。"""
-    print("回播历史:")
-    print("-" * 108)
+    print(render_replay_history(history_entries), end="")
+
+
+def browse_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
+    """使用 less 浏览回播历史；不可用时退化为直接打印。"""
+    history_text = render_replay_history(history_entries)
+    if which("less") is None:
+        print(history_text, end="")
+        return
+    subprocess.run(
+        ["less", "-R"],
+        input=history_text,
+        text=True,
+        check=False,
+    )
+
+
+def render_replay_history(history_entries: List[ReplayHistoryEntry]) -> str:
+    """渲染回播历史文本，便于直接打印或交给 less。"""
+    lines = []
+    lines.append("回播历史:")
+    lines.append("-" * 108)
     for index, history_entry in enumerate(history_entries, 1):
         range_text = _format_history_range(
             history_entry.start_sec,
@@ -71,7 +93,7 @@ def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
             history_entry.replay_mode,
         )
         channels_text = _format_history_channels(history_entry.channel_filters)
-        print(
+        lines.append(
             "[{0}] 创建时间 {1} | tag时间 {2} | {3} | {4}".format(
                 index,
                 history_entry.created_at or "未知时间",
@@ -80,7 +102,7 @@ def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
                 source_mode_text,
             )
         )
-        print(
+        lines.append(
             "    tag: {0} | range: {1} | rate: x{2:g} | -k: {3}".format(
                 history_entry.display_tag or history_entry.selection_label or "未命名回播",
                 range_text,
@@ -88,6 +110,7 @@ def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
                 channels_text,
             )
         )
+    return "\n".join(lines) + "\n"
 
 
 def _format_history_range(start_sec: int, end_sec: int) -> str:

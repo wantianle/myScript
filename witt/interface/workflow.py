@@ -124,13 +124,8 @@ def manual_replay_progress(session: AppSession) -> None:
     )
 
 
-def replay_last_history_progress(session: AppSession) -> None:
-    """直接重放最近一次回播历史。"""
-    replay_workflow.replay_last_history_flow(session)
-
-
 def replay_history_progress(session: AppSession) -> None:
-    """从历史记录中选择一次回播。"""
+    """先浏览历史记录，再选择一次回播。"""
     replay_workflow.replay_history_flow(session)
 
 
@@ -157,5 +152,4 @@ traffic_light_replay_flow = replay_workflow.traffic_light_replay_flow
 replay_flow = replay_workflow.replay_flow
 auto_replay_flow = replay_workflow.auto_replay_flow
 manual_replay_flow = replay_workflow.manual_replay_flow
-replay_last_history_flow = replay_workflow.replay_last_history_flow
 replay_history_flow = replay_workflow.replay_history_flow
