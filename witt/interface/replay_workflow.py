@@ -495,11 +495,7 @@ def _replay_records(
 
 def replay_history_flow(session: AppSession) -> None:
     """先浏览历史记录，再选择一次回播。"""
-    history_repository = getattr(session, "replay_history_repository", None)
-    if history_repository is None:
-        ui.print_status("当前会话未启用回播历史", "WARN")
-        return
-    history_entries = _sort_replay_history_entries(history_repository.load())
+    history_entries = get_sorted_replay_history_entries(session)
     if not history_entries:
         ui.print_status("当前没有可重放的回播历史", "WARN")
         return
@@ -511,27 +507,71 @@ def replay_history_flow(session: AppSession) -> None:
         if history_index == 0:
             if not prompter.get_confirm_input("确认清空全部历史记录？"):
                 continue
-            history_repository.clear()
+            session.replay_history_repository.clear()
             ui.print_status("已清空全部回播历史")
             return
         history_entry = history_entries[history_index - 1]
-        if not _history_entry_is_replayable(history_entry):
-            ui.print_status("所选历史记录路径失效，无法回播，请重新选择或输入 0 清空历史", "WARN")
+        if not replay_history_entry(session, history_entry, validate_only=True):
             continue
-        _restore_replay_history_context(session, history_entry)
-        session.init_logging()
-        _replay_records(
-            session,
-            history_entry.records,
-            history_entry.replay_mode,
-            "历史回播已加载: {0}".format(history_entry.selection_label),
-            display_tag=history_entry.display_tag,
-            issue_timestamp=history_entry.issue_timestamp,
-            source_type=REPLAY_SOURCE_HISTORY,
-            selection_label=history_entry.selection_label,
-            replay_history_entry=history_entry,
-        )
+        replay_history_entry(session, history_entry)
         return
+
+
+def get_sorted_replay_history_entries(session: AppSession) -> List[ReplayHistoryEntry]:
+    """读取并按创建时间倒序返回历史记录。"""
+    history_repository = getattr(session, "replay_history_repository", None)
+    if history_repository is None:
+        ui.print_status("当前会话未启用回播历史", "WARN")
+        return []
+    return _sort_replay_history_entries(history_repository.load())
+
+
+def replay_latest_history_entry(session: AppSession) -> bool:
+    """直接回播最新一条历史记录。"""
+    history_entries = get_sorted_replay_history_entries(session)
+    if not history_entries:
+        ui.print_status("当前没有可重放的回播历史", "WARN")
+        return False
+    return replay_history_entry(session, history_entries[0])
+
+
+def replay_history_by_index(session: AppSession, history_index: int) -> bool:
+    """按展示序号回播一条历史记录。"""
+    history_entries = get_sorted_replay_history_entries(session)
+    if not history_entries:
+        ui.print_status("当前没有可重放的回播历史", "WARN")
+        return False
+    if history_index < 1 or history_index > len(history_entries):
+        ui.print_status("历史序号超出范围: {0}".format(history_index), "WARN")
+        return False
+    return replay_history_entry(session, history_entries[history_index - 1])
+
+
+def replay_history_entry(
+    session: AppSession,
+    history_entry: ReplayHistoryEntry,
+    validate_only: bool = False,
+) -> bool:
+    """校验并回播一条历史记录。"""
+    if not _history_entry_is_replayable(history_entry):
+        ui.print_status("所选历史记录路径失效，无法回播，请重新选择或输入 0 清空历史", "WARN")
+        return False
+    if validate_only:
+        return True
+    _restore_replay_history_context(session, history_entry)
+    session.init_logging()
+    _replay_records(
+        session,
+        history_entry.records,
+        history_entry.replay_mode,
+        "历史回播已加载: {0}".format(history_entry.selection_label),
+        display_tag=history_entry.display_tag,
+        issue_timestamp=history_entry.issue_timestamp,
+        source_type=REPLAY_SOURCE_HISTORY,
+        selection_label=history_entry.selection_label,
+        replay_history_entry=history_entry,
+    )
+    return True
 
 
 def _sort_replay_history_entries(

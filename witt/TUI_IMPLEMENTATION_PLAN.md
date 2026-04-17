@@ -88,6 +88,8 @@ Witt >
 
 - `help <command>`
 - `history clear`
+- `history last`
+- `history <序号>`
 
 ## 总体架构
 
@@ -156,6 +158,9 @@ Witt >
 - 命令帮助
 - 环境查看
 - 基础子命令
+  - `history clear`
+  - `history last`
+  - `history <序号>`
 
 #### 2. Banner
 
@@ -301,6 +306,8 @@ Witt >
 - Esc / 空输入返回
 - 命令 + 参数 组合
   - 例如 `history`
+  - 例如 `history last`
+  - 例如 `history 3`
   - 例如 `scan`
   - 后续可扩展 `history clear`
 

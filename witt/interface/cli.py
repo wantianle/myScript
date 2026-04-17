@@ -92,12 +92,18 @@ def _handle_history_subcommand(
     if not command_invocation.args:
         return False
     subcommand = command_invocation.args[0].lower()
-    if subcommand != "clear":
-        ui.print_status("不支持的 history 子命令: {0}".format(subcommand), "WARN")
-        ui.print_status("当前仅支持: history clear", "WARN")
+    if subcommand == "clear":
+        if not prompter.get_confirm_input("确认清空全部历史记录？"):
+            return True
+        session.replay_history_repository.clear()
+        ui.print_status("已清空全部回播历史")
         return True
-    if not prompter.get_confirm_input("确认清空全部历史记录？"):
+    if subcommand == "last":
+        workflow.replay_workflow.replay_latest_history_entry(session)
         return True
-    session.replay_history_repository.clear()
-    ui.print_status("已清空全部回播历史")
+    if subcommand.isdigit():
+        workflow.replay_workflow.replay_history_by_index(session, int(subcommand))
+        return True
+    ui.print_status("不支持的 history 子命令: {0}".format(subcommand), "WARN")
+    ui.print_status("当前支持: history clear | history last | history <序号>", "WARN")
     return True
