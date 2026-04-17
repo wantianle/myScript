@@ -526,7 +526,7 @@ def replay_history_flow(session: AppSession) -> None:
     if history_repository is None:
         ui.print_status("当前会话未启用回播历史", "WARN")
         return
-    history_entries = list(reversed(history_repository.load()))
+    history_entries = _sort_replay_history_entries(history_repository.load())
     if not history_entries:
         ui.print_status("当前没有可重放的回播历史", "WARN")
         return
@@ -548,6 +548,25 @@ def replay_history_flow(session: AppSession) -> None:
         selection_label=history_entry.selection_label,
         replay_history_entry=history_entry,
     )
+
+
+def _sort_replay_history_entries(
+    history_entries: List[ReplayHistoryEntry],
+) -> List[ReplayHistoryEntry]:
+    """按播放时间倒序排列回播历史。"""
+    return sorted(
+        history_entries,
+        key=lambda history_entry: _parse_history_created_at(history_entry.created_at),
+        reverse=True,
+    )
+
+
+def _parse_history_created_at(created_at: str) -> datetime:
+    """解析历史记录中的播放时间，失败时退化为最小时间。"""
+    try:
+        return datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return datetime.min
 
 
 def auto_replay_flow(

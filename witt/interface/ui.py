@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import List, Optional
 
 from core.models import LibraryEntry, ReplayHistoryEntry
@@ -61,7 +60,7 @@ def show_playback_info(
 def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
     """打印回播历史列表。"""
     print("回播历史:")
-    print("-" * 96)
+    print("-" * 108)
     for index, history_entry in enumerate(history_entries, 1):
         range_text = _format_history_range(
             history_entry.start_sec,
@@ -71,22 +70,21 @@ def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
             history_entry.source_type,
             history_entry.replay_mode,
         )
-        path_preview = _format_history_path_preview(history_entry)
         channels_text = _format_history_channels(history_entry.channel_filters)
         print(
-            "[{0}] {1} | tag时间 {2} | {3} | {4} x{5:g}".format(
+            "[{0}] 播放时间 {1} | {2} | {3}".format(
                 index,
+                history_entry.created_at or "未知时间",
                 history_entry.vehicle or "未知车型",
-                history_entry.issue_timestamp or "未知时间",
                 source_mode_text,
-                range_text,
-                history_entry.playback_rate,
             )
         )
         print(
-            "    {0} | {1} | ch: {2}".format(
+            "    tag: {0} | tag时间: {1} | range: {2} | rate: x{3:g} | -k: {4}".format(
                 history_entry.display_tag or history_entry.selection_label or "未命名回播",
-                path_preview,
+                history_entry.issue_timestamp or "未知时间",
+                range_text,
+                history_entry.playback_rate,
                 channels_text,
             )
         )
@@ -99,22 +97,6 @@ def _format_history_range(start_sec: int, end_sec: int) -> str:
     if end_sec > 0:
         return f"{start_sec}-{end_sec}s"
     return f"{start_sec}s-全播"
-
-
-def _format_history_path_preview(history_entry: ReplayHistoryEntry) -> str:
-    """展示历史回播中首个包路径的摘要。"""
-    if not history_entry.records:
-        return "path: N/A"
-    first_path = Path(history_entry.records[0].path)
-    path_parts = [part for part in first_path.parts if part not in ("/", "")]
-    preview_parts = path_parts[-5:]
-    preview_text = "/".join(preview_parts) if preview_parts else first_path.name
-    if len(path_parts) > len(preview_parts):
-        preview_text = ".../{0}".format(preview_text)
-    extra_count = len(history_entry.records) - 1
-    if extra_count > 0:
-        preview_text = "{0} (+{1})".format(preview_text, extra_count)
-    return preview_text
 
 
 def _format_history_channels(channel_filters: List[str]) -> str:
