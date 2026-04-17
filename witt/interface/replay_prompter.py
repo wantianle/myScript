@@ -81,21 +81,23 @@ def select_source_task_entry(
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
-def select_replay_history_entry(
+def select_replay_history_index(
     history_entries: List[ReplayHistoryEntry],
-) -> Optional[ReplayHistoryEntry]:
+) -> Optional[int]:
     """在浏览历史后输入序号选择一条回播记录。"""
     if not history_entries:
         ui.print_status("当前没有可用的回播历史", "WARN")
         return None
     while True:
-        raw_choice = input("输入要回播的历史序号 (回车返回): ").strip()
+        raw_choice = input("输入要回播的历史序号 (0 清空历史 | 回车返回): ").strip()
         if not raw_choice:
             return None
         if raw_choice.isdigit():
             selected_index = int(raw_choice)
+            if selected_index == 0:
+                return 0
             if 1 <= selected_index <= len(history_entries):
-                return history_entries[selected_index - 1]
+                return selected_index
         ui.print_status("输入无效，请重新选择", "WARN")
 
 

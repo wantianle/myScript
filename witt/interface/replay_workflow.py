@@ -504,24 +504,34 @@ def replay_history_flow(session: AppSession) -> None:
         ui.print_status("当前没有可重放的回播历史", "WARN")
         return
     ui.browse_replay_history(history_entries)
-    history_entry = replay_prompter.select_replay_history_entry(history_entries)
-    if history_entry is None:
+    while True:
+        history_index = replay_prompter.select_replay_history_index(history_entries)
+        if history_index is None:
+            return
+        if history_index == 0:
+            if not prompter.get_confirm_input("确认清空全部历史记录？"):
+                continue
+            history_repository.clear()
+            ui.print_status("已清空全部回播历史")
+            return
+        history_entry = history_entries[history_index - 1]
+        if not _history_entry_is_replayable(history_entry):
+            ui.print_status("所选历史记录路径失效，无法回播，请重新选择或输入 0 清空历史", "WARN")
+            continue
+        _restore_replay_history_context(session, history_entry)
+        session.init_logging()
+        _replay_records(
+            session,
+            history_entry.records,
+            history_entry.replay_mode,
+            "历史回播已加载: {0}".format(history_entry.selection_label),
+            display_tag=history_entry.display_tag,
+            issue_timestamp=history_entry.issue_timestamp,
+            source_type=REPLAY_SOURCE_HISTORY,
+            selection_label=history_entry.selection_label,
+            replay_history_entry=history_entry,
+        )
         return
-    _restore_replay_history_context(session, history_entry)
-    session.init_logging()
-    if not _validate_history_records(history_entry.records):
-        return
-    _replay_records(
-        session,
-        history_entry.records,
-        history_entry.replay_mode,
-        "历史回播已加载: {0}".format(history_entry.selection_label),
-        display_tag=history_entry.display_tag,
-        issue_timestamp=history_entry.issue_timestamp,
-        source_type=REPLAY_SOURCE_HISTORY,
-        selection_label=history_entry.selection_label,
-        replay_history_entry=history_entry,
-    )
 
 
 def _sort_replay_history_entries(
@@ -541,6 +551,14 @@ def _parse_history_created_at(created_at: str) -> datetime:
         return datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):
         return datetime.min
+
+
+def _history_entry_is_replayable(history_entry: ReplayHistoryEntry) -> bool:
+    """判断历史记录中的回播文件当前是否仍然有效。"""
+    return bool(history_entry.records) and all(
+        Path(replay_record.path).exists()
+        for replay_record in history_entry.records
+    )
 
 
 def auto_replay_flow(

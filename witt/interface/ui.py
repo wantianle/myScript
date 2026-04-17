@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 from shutil import which
 from typing import List, Optional
 
@@ -71,7 +72,7 @@ def browse_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
         print(history_text, end="")
         return
     subprocess.run(
-        ["less", "-R"],
+        ["less", "-R", "+G"],
         input=history_text,
         text=True,
         check=False,
@@ -94,12 +95,13 @@ def render_replay_history(history_entries: List[ReplayHistoryEntry]) -> str:
         )
         channels_text = _format_history_channels(history_entry.channel_filters)
         lines.append(
-            "[{0}] 创建时间 {1} | tag时间 {2} | {3} | {4}".format(
+            "[{0}] 创建时间 {1} | tag时间 {2} | {3} | {4} | {5}".format(
                 index,
                 history_entry.created_at or "未知时间",
                 history_entry.issue_timestamp or "未知时间",
                 history_entry.vehicle or "未知车型",
                 source_mode_text,
+                _format_history_status(history_entry),
             )
         )
         lines.append(
@@ -133,6 +135,20 @@ def _format_history_channels(channel_filters: List[str]) -> str:
         channel_filters[1],
         len(channel_filters) - 2,
     )
+
+
+def _format_history_status(history_entry: ReplayHistoryEntry) -> str:
+    """展示历史记录当前是否可直接回播。"""
+    if not history_entry.records:
+        return "空记录"
+    missing_paths = [
+        replay_record.path
+        for replay_record in history_entry.records
+        if not Path(replay_record.path).exists()
+    ]
+    if missing_paths:
+        return "路径失效"
+    return "可回播"
 
 
 def print_status(msg: str, level: str = "INFO") -> None:
