@@ -21,7 +21,7 @@ docker:
 
 # 业务逻辑配置
 logic:
-  vehicle: "XZ0000000"
+  vehicle: "XZB600007"
   target_date: ""
   mode: 1
   version: ""

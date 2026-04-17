@@ -211,7 +211,11 @@ class WorkflowTests(unittest.TestCase):
         ) as full_source_replay_flow:
             workflow.full_source_progress(session)
 
-        search_flow.assert_called_once_with(raw_session, need_export_path=False)
+        search_flow.assert_called_once_with(
+            raw_session,
+            need_export_path=False,
+            allow_remote=False,
+        )
         full_source_replay_flow.assert_called_once_with(raw_session, [valid_task])
 
     def test_auto_replay_progress_collects_params_then_starts_standard_auto_replay(self) -> None:
@@ -241,15 +245,19 @@ class WorkflowTests(unittest.TestCase):
         )
 
     def test_manual_replay_progress_starts_standard_manual_replay(self) -> None:
-        raw_session = SimpleNamespace()
+        raw_session = SimpleNamespace(ctx=SimpleNamespace())
         session = cast(Any, raw_session)
 
         with patch.object(
+            workflow.config_prompter,
+            "get_basic_params",
+        ) as get_basic_params, patch.object(
             workflow.replay_workflow,
             "manual_replay_flow",
         ) as manual_replay_flow:
             workflow.manual_replay_progress(session)
 
+        get_basic_params.assert_called_once_with(raw_session.ctx)
         manual_replay_flow.assert_called_once_with(
             raw_session,
             replay_workflow.REPLAY_MODE_STANDARD,
@@ -266,6 +274,7 @@ class ReplayWorkflowTests(unittest.TestCase):
                 work_dir="/tmp/work",
                 playback_blacklist=[],
             ),
+            executor=SimpleNamespace(map_path=lambda path_text: path_text),
         )
         session = cast(Any, raw_session)
         records = [
@@ -293,12 +302,10 @@ class ReplayWorkflowTests(unittest.TestCase):
                 session,
                 records,
                 playback_plan,
-                replay_workflow.REPLAY_MODE_STANDARD,
                 "demo_tag",
                 "2026-04-15 12:00:00",
                 0,
                 0,
-                False,
             )
 
         self.assertEqual(
@@ -315,6 +322,7 @@ class ReplayWorkflowTests(unittest.TestCase):
                 work_dir="/tmp/work",
                 playback_blacklist=[],
             ),
+            executor=SimpleNamespace(map_path=lambda path_text: path_text),
         )
         session = cast(Any, raw_session)
         records = [
@@ -346,12 +354,10 @@ class ReplayWorkflowTests(unittest.TestCase):
                 session,
                 records,
                 playback_plan,
-                replay_workflow.REPLAY_MODE_STANDARD,
                 "demo_tag",
                 "2026-04-15 12:00:00",
                 5,
                 0,
-                False,
                 issue_marker=issue_marker,
             )
 
@@ -545,7 +551,6 @@ class ReplayWorkflowTests(unittest.TestCase):
             )
 
         post_replay_issue_draft.assert_called_once()
-        self.assertTrue(post_replay_issue_draft.call_args.args[8])
 
     def test_replay_records_runs_issue_post_process_when_continue_prompt_is_interrupted(self) -> None:
         build_playback_plan = Mock(
@@ -608,7 +613,6 @@ class ReplayWorkflowTests(unittest.TestCase):
             )
 
         post_replay_issue_draft.assert_called_once()
-        self.assertTrue(post_replay_issue_draft.call_args.args[8])
 
 
 class ReplayPrompterTests(unittest.TestCase):

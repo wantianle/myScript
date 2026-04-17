@@ -5,7 +5,11 @@ from core.adapter.ssh import SSHAdapter
 from core.engine.downloader import RecordDownloader
 from core.engine.player import RecordPlayer
 from core.engine.recorder import Recorder
-from core.repository import LibraryCacheRepository, MetadataRepository
+from core.repository import (
+    LibraryCacheRepository,
+    MetadataRepository,
+    ReplayHistoryRepository,
+)
 from core.adapter.base import BaseAdapter
 
 from pathlib import Path
@@ -24,6 +28,9 @@ class AppSession:
         self.metadata_repository = MetadataRepository()
         self.library_cache_repository = LibraryCacheRepository(
             self.ctx.work_dir / ".witt" / "local_library.json"
+        )
+        self.replay_history_repository = ReplayHistoryRepository(
+            Path.home() / ".witt" / "replay_history.json"
         )
         self.record_downloader = RecordDownloader(
             self,

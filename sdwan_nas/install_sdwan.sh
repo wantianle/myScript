@@ -217,7 +217,7 @@ sleep 2
 # 检查静态 ip 冲突
 CURRENT_IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K\S+')
 if [[ $CURRENT_IP =~ ^192\.168\.2\. ]]; then
-    echo -e "❌ ${R}当前 IP 为 $CURRENT_IP，网段与公司内网冲突，请更换网段...${NC}"
+    echo -e "❌ ${R}当前 IP 为 $CURRENT_IP，网段与公司nas冲突，请更换网段...${NC}"
 fi
 sleep 2
 # 检查路由

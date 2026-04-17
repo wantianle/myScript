@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from core.issue_draft import ReplayIssueMarker
-from core.models import LibraryEntry, ReplayRecord, TaskEntry
+from core.models import LibraryEntry, ReplayHistoryEntry, ReplayRecord, TaskEntry
 from interface import prompter, ui
 from utils import parser
 
@@ -81,6 +81,25 @@ def select_source_task_entry(
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
+def select_replay_history_entry(
+    history_entries: List[ReplayHistoryEntry],
+) -> Optional[ReplayHistoryEntry]:
+    """从历史记录列表中选择一条回播记录。"""
+    if not history_entries:
+        ui.print_status("当前没有可用的回播历史", "WARN")
+        return None
+    while True:
+        ui.show_replay_history(history_entries)
+        raw_choice = input("\n选择历史回播序号 (回车返回): ").strip()
+        if not raw_choice:
+            return None
+        if raw_choice.isdigit():
+            selected_index = int(raw_choice)
+            if 1 <= selected_index <= len(history_entries):
+                return history_entries[selected_index - 1]
+        ui.print_status("输入无效，请重新选择", "WARN")
+
+
 def get_playback_range() -> tuple:
     """读取并解析回放时间范围输入。"""
     range_input = input(
@@ -131,6 +150,25 @@ def _get_issue_description() -> str:
         if issue_description:
             return issue_description
         ui.print_status("备注不能为空", "WARN")
+
+
+def get_issue_data_path_text(target_date: str, vehicle: str) -> str:
+    """在自动推断失败时手动补录准确 NAS 路径。"""
+    expected_prefix = "/media/nas/00.raw/{0}/{1}".format(target_date, vehicle)
+    ui.print_status("无法自动推断准确 NAS 路径，请手动补录 issue 草稿中的准确 NAS 路径", "WARN")
+    ui.print_status("路径需以 {0} 开头".format(expected_prefix))
+    issue_paths = []
+    while True:
+        raw_line = input("NAS路径(空行结束): ").strip()
+        if not raw_line:
+            if issue_paths:
+                return "\n".join(issue_paths)
+            ui.print_status("至少输入一条准确 NAS 路径，或按 Ctrl+C 取消", "WARN")
+            continue
+        if not raw_line.startswith(expected_prefix):
+            ui.print_status("路径必须以 {0} 开头".format(expected_prefix), "WARN")
+            continue
+        issue_paths.append(raw_line)
 
 
 def get_manual_replay_paths() -> List[Path]:

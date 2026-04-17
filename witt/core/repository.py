@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 
-from core.models import LibraryEntry, RawLibraryEntry, RecordMeta
+from core.models import LibraryEntry, RawLibraryEntry, RecordMeta, ReplayHistoryEntry
 
 
 class LibraryCacheRepository:
@@ -59,3 +59,51 @@ class MetadataRepository:
         meta_path.write_text(
             json.dumps(record_meta.to_dict(), indent=4, ensure_ascii=False)
         )
+
+
+class ReplayHistoryRepository:
+    """负责回播历史记录的读写。"""
+
+    def __init__(self, history_path: Path, limit: int = 50) -> None:
+        self.history_path = history_path
+        self.limit = limit
+
+    def load(self) -> List[ReplayHistoryEntry]:
+        """读取全部回播历史。"""
+        if not self.history_path.exists():
+            return []
+        raw_history = json.loads(self.history_path.read_text(encoding="utf-8"))
+        raw_entries = raw_history.get("entries", [])
+        return [
+            ReplayHistoryEntry.from_dict(raw_entry)
+            for raw_entry in raw_entries
+        ]
+
+    def load_last(self) -> Optional[ReplayHistoryEntry]:
+        """读取最近一次回播历史。"""
+        history_entries = self.load()
+        return history_entries[-1] if history_entries else None
+
+    def save(self, history_entries: List[ReplayHistoryEntry]) -> None:
+        """保存回播历史列表。"""
+        self.history_path.parent.mkdir(parents=True, exist_ok=True)
+        trimmed_entries = history_entries[-self.limit :] if self.limit > 0 else history_entries
+        self.history_path.write_text(
+            json.dumps(
+                {
+                    "entries": [
+                        history_entry.to_dict()
+                        for history_entry in trimmed_entries
+                    ]
+                },
+                indent=4,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    def append(self, history_entry: ReplayHistoryEntry) -> None:
+        """追加一条回播历史。"""
+        history_entries = self.load()
+        history_entries.append(history_entry)
+        self.save(history_entries)

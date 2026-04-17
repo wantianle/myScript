@@ -62,6 +62,22 @@ class RawReplayRecord(TypedDict):
     duration: int
 
 
+class RawReplayHistoryEntry(TypedDict, total=False):
+    created_at: str
+    source_type: str
+    replay_mode: str
+    selection_label: str
+    display_tag: str
+    issue_timestamp: str
+    vehicle: str
+    target_date: str
+    records: List[RawReplayRecord]
+    start_sec: int
+    end_sec: int
+    playback_rate: float
+    channel_filters: List[str]
+
+
 class RawLibraryEntryRequired(TypedDict):
     tag: str
     time: str
@@ -270,10 +286,72 @@ class ReplayRecord:
         )
 
     def to_cache_dict(self) -> RawReplayRecord:
+        begin_value = self.begin.isoformat() if isinstance(self.begin, datetime) else str(self.begin)
         return {
             "path": self.path,
-            "begin": self.begin,
+            "begin": begin_value,
             "duration": self.duration,
+        }
+
+
+@dataclass
+class ReplayHistoryEntry:
+    created_at: str
+    source_type: str
+    replay_mode: str
+    selection_label: str
+    display_tag: str
+    issue_timestamp: str
+    vehicle: str
+    target_date: str
+    records: List[ReplayRecord] = field(default_factory=list)
+    start_sec: int = 0
+    end_sec: int = 0
+    playback_rate: float = 1.0
+    channel_filters: List[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, raw_entry: RawReplayHistoryEntry) -> "ReplayHistoryEntry":
+        return cls(
+            created_at=str(raw_entry.get("created_at", "")),
+            source_type=str(raw_entry.get("source_type", "")),
+            replay_mode=str(raw_entry.get("replay_mode", "")),
+            selection_label=str(raw_entry.get("selection_label", "")),
+            display_tag=str(raw_entry.get("display_tag", "")),
+            issue_timestamp=str(raw_entry.get("issue_timestamp", "")),
+            vehicle=str(raw_entry.get("vehicle", "")),
+            target_date=str(raw_entry.get("target_date", "")),
+            records=[
+                ReplayRecord.from_cache_dict(raw_record)
+                for raw_record in raw_entry.get("records", [])
+            ],
+            start_sec=int(raw_entry.get("start_sec", 0)),
+            end_sec=int(raw_entry.get("end_sec", 0)),
+            playback_rate=float(raw_entry.get("playback_rate", 1.0)),
+            channel_filters=[
+                str(channel_name)
+                for channel_name in raw_entry.get("channel_filters", [])
+            ],
+        )
+
+    def to_dict(self) -> RawReplayHistoryEntry:
+        return {
+            "created_at": self.created_at,
+            "source_type": self.source_type,
+            "replay_mode": self.replay_mode,
+            "selection_label": self.selection_label,
+            "display_tag": self.display_tag,
+            "issue_timestamp": self.issue_timestamp,
+            "vehicle": self.vehicle,
+            "target_date": self.target_date,
+            "records": [
+                replay_record.to_cache_dict()
+                for replay_record in self.records
+            ],
+            "start_sec": self.start_sec,
+            "end_sec": self.end_sec,
+            "playback_rate": self.playback_rate,
+            "channel_filters": self.channel_filters,
         }
 
 

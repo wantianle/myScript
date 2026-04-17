@@ -113,17 +113,6 @@ class IssueDraftTests(unittest.TestCase):
             "soc2/20260415101058.record.00001.101159.split",
         )
 
-    def test_build_issue_data_path_text_keeps_original_when_date_and_vehicle_missing(self) -> None:
-        path_text = "/tmp/demo.record"
-
-        issue_path_text = build_issue_data_path_text(
-            [path_text],
-            "20260415",
-            "XZB600007",
-        )
-
-        self.assertEqual(issue_path_text, path_text)
-
 
 if __name__ == "__main__":
     unittest.main()

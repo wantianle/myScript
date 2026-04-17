@@ -28,9 +28,14 @@ def _show_failed_batches(failed_batches) -> None:
 def _load_task_entries(
     session: AppSession,
     need_export_path: bool = True,
+    allow_remote: bool = True,
 ):
     """执行查询并加载 manifest 中的任务列表。"""
-    search_flow(session, need_export_path=need_export_path)
+    search_flow(
+        session,
+        need_export_path=need_export_path,
+        allow_remote=allow_remote,
+    )
     task_list = parser.parse_manifest(session.ctx.manifest_path)
     if not task_list:
         ui.print_status("未找到相关 Record 记录", "ERROR")
@@ -81,7 +86,11 @@ def slice_progress(session: AppSession) -> None:
 
 def full_source_progress(session: AppSession) -> None:
     """执行查询后直接回放原始 record 数据。"""
-    task_list = _load_task_entries(session, need_export_path=False)
+    task_list = _load_task_entries(
+        session,
+        need_export_path=False,
+        allow_remote=False,
+    )
     if not task_list:
         return
     valid_tasks = [task_entry for task_entry in task_list if task_entry.paths]
@@ -106,19 +115,34 @@ def auto_replay_progress(session: AppSession) -> None:
 
 def manual_replay_progress(session: AppSession) -> None:
     """手动选择回播文件并执行标准回放。"""
+    config_prompter.get_basic_params(session.ctx)
     replay_workflow.manual_replay_flow(
         session,
         replay_workflow.REPLAY_MODE_STANDARD,
     )
 
 
+def replay_last_history_progress(session: AppSession) -> None:
+    """直接重放最近一次回播历史。"""
+    replay_workflow.replay_last_history_flow(session)
+
+
+def replay_history_progress(session: AppSession) -> None:
+    """从历史记录中选择一次回播。"""
+    replay_workflow.replay_history_flow(session)
+
+
 def search_flow(
     session: AppSession,
     need_export_path: bool = True,
+    allow_remote: bool = True,
 ) -> None:
     """采集查询条件并执行 Record 检索脚本。"""
     config_prompter.get_basic_params(session.ctx)
-    config_prompter.get_source_path_params(session.ctx)
+    config_prompter.get_source_path_params(
+        session.ctx,
+        allow_remote=allow_remote,
+    )
     if need_export_path:
         config_prompter.get_export_path_params(session.ctx)
     config_prompter.get_split_params(session.ctx)
@@ -130,3 +154,5 @@ traffic_light_replay_flow = replay_workflow.traffic_light_replay_flow
 replay_flow = replay_workflow.replay_flow
 auto_replay_flow = replay_workflow.auto_replay_flow
 manual_replay_flow = replay_workflow.manual_replay_flow
+replay_last_history_flow = replay_workflow.replay_last_history_flow
+replay_history_flow = replay_workflow.replay_history_flow

@@ -19,6 +19,8 @@ def menu() -> None:
             "3": lambda: workflow.auto_replay_progress(session),
             "4": lambda: workflow.manual_replay_progress(session),
             "5": lambda: workflow.traffic_light_replay_flow(session),
+            "6": lambda: workflow.replay_last_history_progress(session),
+            "7": lambda: workflow.replay_history_progress(session),
         }
         choice = prompter.select_main_menu_action()
 

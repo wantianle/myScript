@@ -47,10 +47,13 @@ def get_split_params(ctx) -> None:
         return
 
 
-def get_source_path_params(ctx) -> None:
+def get_source_path_params(ctx, allow_remote: bool = True) -> None:
     """采集数据源路径参数。"""
+    options = ["本地", "NAS"]
+    if allow_remote:
+        options.append("车端")
     ctx.logic.mode = int(
-        prompter.choose_option("\n数据输入模式", ["本地", "NAS", "车端"], True)
+        prompter.choose_option("\n数据输入模式", options, True)
     )
     if ctx.logic.mode == 1:
         ctx.host.data_root = prompter.get_user_input(
