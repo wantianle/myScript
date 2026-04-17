@@ -72,9 +72,10 @@ def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
         )
         channels_text = _format_history_channels(history_entry.channel_filters)
         print(
-            "[{0}] 播放时间 {1} | {2} | {3}".format(
+            "[{0}] 创建时间 {1} | tag时间 {2} | {3} | {4}".format(
                 index,
-                history_entry.issue_timestamp or history_entry.created_at or "未知时间",
+                history_entry.created_at or "未知时间",
+                history_entry.issue_timestamp or "未知时间",
                 history_entry.vehicle or "未知车型",
                 source_mode_text,
             )

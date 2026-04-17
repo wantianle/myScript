@@ -553,25 +553,20 @@ def replay_history_flow(session: AppSession) -> None:
 def _sort_replay_history_entries(
     history_entries: List[ReplayHistoryEntry],
 ) -> List[ReplayHistoryEntry]:
-    """按回播对应的 tag 时间倒序排列历史。"""
+    """按历史记录创建时间倒序排列。"""
     return sorted(
         history_entries,
-        key=lambda history_entry: _parse_history_issue_time(
-            history_entry.issue_timestamp,
-            history_entry.created_at,
-        ),
+        key=lambda history_entry: _parse_history_created_at(history_entry.created_at),
         reverse=True,
     )
 
 
-def _parse_history_issue_time(issue_timestamp: str, created_at: str) -> datetime:
-    """优先解析 tag 时间，失败时回退到历史创建时间。"""
-    for time_text in (issue_timestamp, created_at):
-        try:
-            return datetime.strptime(time_text, "%Y-%m-%d %H:%M:%S")
-        except (TypeError, ValueError):
-            continue
-    return datetime.min
+def _parse_history_created_at(created_at: str) -> datetime:
+    """解析历史记录创建时间，失败时退化为最小时间。"""
+    try:
+        return datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return datetime.min
 
 
 def auto_replay_flow(
