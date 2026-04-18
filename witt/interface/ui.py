@@ -2,7 +2,7 @@ import subprocess
 from io import StringIO
 from pathlib import Path
 from shutil import which
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from rich import box
 from rich.align import Align
@@ -110,7 +110,7 @@ def show_environment_summary(session) -> None:
 
 
 def show_playback_library(
-    library: List[LibraryEntry],
+    library: Sequence[LibraryEntry],
     vehicle: str,
     target_date: str,
     search_keyword: str = "",
@@ -143,7 +143,7 @@ def show_playback_library(
 
 
 def show_source_task_entries(
-    task_entries: List[TaskEntry],
+    task_entries: Sequence[TaskEntry],
     search_keyword: str = "",
 ) -> None:
     """打印原始查询结果列表。"""
@@ -171,7 +171,7 @@ def show_source_task_entries(
 
 
 def show_channel_candidates(
-    channels: List[ChannelInfo],
+    channels: Sequence[ChannelInfo],
     search_keyword: str = "",
 ) -> None:
     """打印频道候选列表。"""

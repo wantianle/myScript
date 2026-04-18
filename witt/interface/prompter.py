@@ -266,7 +266,7 @@ def resolve_filter_keyword(raw_input: str) -> Optional[str]:
     return raw_input[1:].strip()
 
 
-def matches_search_keyword(keyword: str, values: Sequence[str]) -> bool:
+def matches_search_keyword(keyword: str, values: Sequence[object]) -> bool:
     """判断关键字是否命中给定字段集合。"""
     normalized_keyword = keyword.strip().lower()
     if not normalized_keyword:
@@ -314,7 +314,7 @@ def get_selected_indices(
     all_tasks: Sequence[TaskLike],
     prompt: str = "请输入要处理的序号",
     render_items: Optional[Callable[[Sequence[TaskLike], str], None]] = None,
-    search_values_getter: Optional[Callable[[TaskLike], Sequence[str]]] = None,
+    search_values_getter: Optional[Callable[[TaskLike], Sequence[object]]] = None,
     history_name: str = "task_selection",
 ) -> List[TaskLike]:
     """根据用户输入的序号表达式返回选中的任务对象列表。"""
