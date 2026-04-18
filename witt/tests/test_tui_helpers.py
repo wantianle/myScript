@@ -191,42 +191,5 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("查询 Record -> 选择 Tag -> 切片 -> 可选回播", rendered)
         self.assertIn("适合先做批量切片", rendered)
 
-    def test_show_repl_home_renders_summary_and_commands(self) -> None:
-        class DummyLogic(object):
-            mode = 1
-
-        class DummyCtx(object):
-            vehicle = "XZB600001"
-            target_date = "20260415"
-            logic = DummyLogic()
-            work_dir = "/tmp/witt-demo"
-
-        class DummySession(object):
-            ctx = DummyCtx()
-
-        buffer = StringIO()
-        console = Console(
-            file=buffer,
-            width=120,
-            force_terminal=False,
-            highlight=False,
-            theme=ui._THEME,
-        )
-        previous_console = ui._CONSOLE
-        try:
-            ui._CONSOLE = console
-            ui.show_repl_home(DummySession(), prompter.get_command_specs())
-        finally:
-            ui._CONSOLE = previous_console
-
-        rendered = buffer.getvalue()
-        self.assertIn("命令首页", rendered)
-        self.assertIn("当前环境 XZB600001 | 20260415", rendered)
-        self.assertIn("快速摘要", rendered)
-        self.assertIn("常用命令", rendered)
-        self.assertIn("slice", rendered)
-        self.assertIn("history", rendered)
-
-
 if __name__ == "__main__":
     unittest.main()

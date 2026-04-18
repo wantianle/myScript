@@ -166,50 +166,6 @@ def show_environment_summary(session) -> None:
     _CONSOLE.print(env_table)
 
 
-def show_repl_home(session, command_specs) -> None:
-    """打印 REPL 顶层首页。"""
-    _CONSOLE.print(
-        _build_page_intro_panel(
-            "命令首页",
-            "当前环境 {0} | {1}".format(
-                session.ctx.vehicle or "未设置车号",
-                session.ctx.target_date or "未设置日期",
-            ),
-            "输入 help 查看完整命令说明，输入 quit 退出，输入 clear 重绘首页",
-        )
-    )
-
-    summary_table = Table(
-        title="快速摘要",
-        box=box.SIMPLE_HEAVY,
-        header_style="header",
-        expand=True,
-        show_header=False,
-    )
-    summary_table.add_column("字段", style="label", width=14)
-    summary_table.add_column("值", style="accent")
-    summary_table.add_row("车号", session.ctx.vehicle or "未设置")
-    summary_table.add_row("日期", session.ctx.target_date or "未设置")
-    summary_table.add_row("模式", str(getattr(session.ctx.logic, "mode", "")) or "未设置")
-    summary_table.add_row("工作目录", str(session.ctx.work_dir))
-    _CONSOLE.print(summary_table)
-
-    command_table = Table(
-        title="常用命令",
-        box=box.SIMPLE_HEAVY,
-        header_style="header",
-        expand=True,
-    )
-    command_table.add_column("命令", style="accent", min_width=10)
-    command_table.add_column("说明", style="label", min_width=22)
-    for command_spec in command_specs:
-        command_table.add_row(
-            command_spec.name,
-            command_spec.summary,
-        )
-    _CONSOLE.print(command_table)
-
-
 def show_playback_library(
     library: Sequence[LibraryEntry],
     vehicle: str,
