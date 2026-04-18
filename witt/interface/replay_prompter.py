@@ -270,7 +270,7 @@ def get_playback_range() -> tuple:
         "输入 5 表示改变起点，输入 5-10 表示限制范围，回车全播",
     )
     range_input = prompter.prompt_text(
-        "调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播)",
+        "调整播放时间",
         history_name="playback_range",
     )
     return parser.parse_range_logic(range_input)
@@ -281,14 +281,14 @@ def get_playback_rate() -> float:
     ui.show_replay_section(
         "播放倍速配置",
         "默认 1.0x，可设置 0.1 到 10x",
-        "常用值: 0.5 / 1.0 / 1.5 / 2.0",
+        "常用值: 0.5 / 1.0 / 2.0 / 5.0",
     )
     while True:
         rate_input = prompter.prompt_text(
-            "播放倍速 (0.1-10 | 回车 1.0)",
+            "播放倍速",
             "1.0",
             history_name="playback_rate",
-            completer_words=["0.5", "1.0", "1.5", "2.0"],
+            completer_words=["0.5", "1.0", "2.0", "5.0"],
         ).strip()
         if not rate_input:
             return 1.0
@@ -326,7 +326,7 @@ def _get_issue_start_sec() -> int:
     )
     while True:
         raw_value = prompter.prompt_text(
-            "问题时间点秒数(-s，例 37)",
+            "问题时间点秒数(-s，例 10)",
             history_name="issue_start_sec",
         )
         if raw_value.isdigit():
