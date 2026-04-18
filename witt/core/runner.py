@@ -34,8 +34,13 @@ class ScriptRunner:
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"{script_name} 脚本执行失败") from e
 
-    def _run_script_with_terminal_capture(self, script_name: str, *args: str) -> str:
-        """在保留终端输出效果的同时捕获脚本输出。"""
+    def _run_script_with_terminal_capture(
+        self,
+        script_name: str,
+        echo_output: bool = True,
+        *args: str
+    ) -> str:
+        """按需回显终端输出，并同时捕获脚本输出。"""
         script_path = self._resolve_script_path(script_name)
         env_vars = self.ctx.get_env_vars()
         cmd = ["bash", str(script_path), *args]
@@ -62,8 +67,9 @@ class ScriptRunner:
                     break
                 text = chunk.decode("utf-8", errors="replace")
                 output_chunks.append(text)
-                sys.stdout.write(text)
-                sys.stdout.flush()
+                if echo_output:
+                    sys.stdout.write(text)
+                    sys.stdout.flush()
             return_code = process.wait()
             if return_code != 0:
                 raise RuntimeError(f"{script_name} 脚本执行失败")
@@ -78,7 +84,8 @@ class ScriptRunner:
     def run_find_record(self) -> None:
         """执行 record 查询脚本。"""
         self.ctx.find_record_output = self._run_script_with_terminal_capture(
-            "find_record.sh"
+            "find_record.sh",
+            False,
         )
 
     def restore_runtime_environment(self) -> None:

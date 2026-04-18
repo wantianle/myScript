@@ -181,7 +181,6 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
 
 def select_source_task_entry(
     task_entries: List[TaskEntry],
-    find_record_output: str = "",
 ) -> Optional[TaskEntry]:
     """从查询结果列表中选择一个用于全量回放的 Tag。"""
     if not task_entries:
@@ -189,7 +188,6 @@ def select_source_task_entry(
     current_task_entries = task_entries
     search_keyword = ""
     while True:
-        ui.print_text_block(find_record_output)
         ui.show_source_task_entries(current_task_entries, search_keyword=search_keyword)
         raw_choice = prompter.prompt_text(
             "选择要回放的 Tag 序号 (/关键字筛选 | / 清空筛选 | 回车返回)",

@@ -16,6 +16,10 @@ def _task_entry_search_values(task_entry) -> List[str]:
         task_entry.id,
         task_entry.time,
         task_entry.name,
+        "soc1" if task_entry.soc_paths.get("soc1") else "",
+        "soc2" if task_entry.soc_paths.get("soc2") else "",
+        str(len(task_entry.soc_paths.get("soc1", []))),
+        str(len(task_entry.soc_paths.get("soc2", []))),
         str(len(task_entry.paths)),
     ]
 

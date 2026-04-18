@@ -159,12 +159,18 @@ def show_source_task_entries(
     table.add_column("ID", justify="right", style="accent", width=4)
     table.add_column("Tag时间", style="label", min_width=16)
     table.add_column("Tag", style="accent", min_width=18)
+    table.add_column("soc1", justify="right", style="muted", width=6)
+    table.add_column("soc2", justify="right", style="muted", width=6)
     table.add_column("记录数", justify="right", style="label", width=8)
     for index, task_entry in enumerate(task_entries, 1):
+        soc1_count = len(task_entry.soc_paths.get("soc1", []))
+        soc2_count = len(task_entry.soc_paths.get("soc2", []))
         table.add_row(
             str(index),
             task_entry.time,
             task_entry.name,
+            str(soc1_count) if soc1_count else "-",
+            str(soc2_count) if soc2_count else "-",
             str(len(task_entry.paths)),
         )
     _CONSOLE.print(table)
