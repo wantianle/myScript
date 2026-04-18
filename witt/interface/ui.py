@@ -49,10 +49,57 @@ def print_banner() -> None:
     )
 
 
+def _build_page_intro_panel(
+    title: str,
+    summary: str = "",
+    hint: str = "",
+) -> Panel:
+    """构建页面顶部说明面板。"""
+    lines = []
+    if summary:
+        lines.append(Text(summary, style="accent"))
+    if hint:
+        lines.append(Text(hint, style="muted"))
+    body = Group(*lines) if lines else Text("", style="muted")
+    return Panel(
+        body,
+        title=title,
+        border_style="border",
+        padding=(0, 2),
+    )
+
+
+def _build_info_panel(
+    title: str,
+    lines: Sequence[Text],
+    hint: str = "",
+) -> Panel:
+    """构建上下文信息面板。"""
+    panel_lines = list(lines)
+    if hint:
+        panel_lines.append(Text(hint, style="muted"))
+    return Panel(
+        Group(*panel_lines),
+        title=title,
+        border_style="border",
+        padding=(0, 2),
+    )
+
+
 def show_command_help(command_specs, target_command_name: str = "") -> None:
     """打印命令帮助面板。"""
+    summary = "命令驱动 REPL 入口与别名一览"
+    if target_command_name:
+        summary = "查看命令: {0}".format(target_command_name)
+    _CONSOLE.print(
+        _build_page_intro_panel(
+            "命令帮助",
+            summary,
+            "输入 help <command> 查看单个命令，输入 clear 清屏",
+        )
+    )
     help_table = Table(
-        title="命令帮助",
+        title="命令详情" if target_command_name else "可用命令",
         box=box.SIMPLE_HEAVY,
         header_style="header",
         expand=True,
@@ -86,8 +133,18 @@ def show_command_help(command_specs, target_command_name: str = "") -> None:
 
 def show_environment_summary(session) -> None:
     """打印当前会话环境摘要。"""
+    _CONSOLE.print(
+        _build_page_intro_panel(
+            "当前环境",
+            "车号 {0} | 日期 {1}".format(
+                session.ctx.vehicle or "未设置",
+                session.ctx.target_date or "未设置",
+            ),
+            "修改 settings.yaml 后执行 config，重建当前会话配置",
+        )
+    )
     env_table = Table(
-        title="当前环境",
+        title="会话上下文",
         box=box.SIMPLE_HEAVY,
         header_style="header",
         expand=True,
@@ -269,11 +326,10 @@ def print_text_block(text: str) -> None:
 def show_manual_play_header() -> None:
     """打印手动回播模式标题。"""
     _CONSOLE.print(
-        Panel.fit(
-            Text("将 record 文件/目录粘贴或拖入终端 | 'q' 返回", style="label"),
-            title="手动回播模式",
-            border_style="border",
-            padding=(0, 2),
+        _build_page_intro_panel(
+            "手动回播模式",
+            "将 record 文件/目录粘贴或拖入终端",
+            "输入 q 返回，支持直接粘贴路径或拖拽目录",
         )
     )
 
@@ -305,14 +361,7 @@ def show_playback_info(
                 (command, "accent"),
             )
         )
-    _CONSOLE.print(
-        Panel(
-            Group(*lines),
-            title="回播信息",
-            border_style="border",
-            padding=(0, 2),
-        )
-    )
+    _CONSOLE.print(_build_info_panel("回播信息", lines, "Ctrl+C 中断当前回播"))
 
 
 def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:

@@ -73,6 +73,19 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("当前筛选: /soc2", rendered)
         self.assertIn("输入新的 /关键字，或输入 / 清空筛选", rendered)
 
+    def test_page_intro_panel_includes_summary_and_hint(self) -> None:
+        rendered = self._render(
+            ui._build_page_intro_panel(
+                "命令帮助",
+                "查看命令: replay",
+                "输入 help <command> 查看单个命令，输入 clear 清屏",
+            )
+        )
+
+        self.assertIn("命令帮助", rendered)
+        self.assertIn("查看命令: replay", rendered)
+        self.assertIn("输入 help <command> 查看单个命令", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

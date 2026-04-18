@@ -4,12 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence, TypeVar
 
-import questionary
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import PathCompleter, WordCompleter
 from prompt_toolkit.history import FileHistory
-from questionary import Choice
 
 from interface import ui
 
@@ -31,26 +29,6 @@ class CommandInvocation:
     name: str
     args: List[str]
     raw: str
-
-
-MAIN_MENU_ITEMS = [
-    ("[切片模式] 查询 -> 切片 -> 回播", "1"),
-    ("[全量模式] 查询 -> 回播", "2"),
-    ("[自动回播] 自动扫描回播", "3"),
-    ("[手动回播] 手动选择回播", "4"),
-    ("[回灌红绿灯] 回灌红绿灯", "5"),
-    ("[历史回播] 浏览并回播历史记录", "6"),
-]
-
-MAIN_MENU_STYLE = questionary.Style(
-    [
-        ("qmark", "fg:yellow bold"),
-        ("question", "bold"),
-        ("pointer", "fg:cyan bold"),
-        ("highlighted", "fg:cyan bold"),
-        ("selected", "fg:green"),
-    ]
-)
 
 COMMAND_SPECS = [
     CommandSpec("help", ["h", "?"], "显示命令帮助", "help history"),
@@ -136,14 +114,6 @@ def parse_command(command_text: str) -> Optional[CommandInvocation]:
 def get_command_specs() -> List[CommandSpec]:
     """返回命令定义列表。"""
     return list(COMMAND_SPECS)
-
-
-def find_command_spec(command_name: str) -> Optional[CommandSpec]:
-    """按标准命令名查找命令定义。"""
-    for command_spec in COMMAND_SPECS:
-        if command_spec.name == command_name:
-            return command_spec
-    return None
 
 
 def _build_command_toolbar() -> str:
@@ -384,20 +354,6 @@ def get_confirm_input(prompt: str, default: bool = False) -> bool:
     if not res:
         return default
     return res == "y"
-
-
-def select_main_menu_action() -> Optional[str]:
-    """显示主菜单并返回用户选择的动作编号。"""
-    menu_choices = [
-        Choice(title=title, value=value)
-        for title, value in MAIN_MENU_ITEMS
-    ]
-    return questionary.select(
-        "请选择操作 :",
-        choices=menu_choices,
-        use_shortcuts=True,
-        style=MAIN_MENU_STYLE,
-    ).ask()
 
 
 def wait_for_continue() -> None:
