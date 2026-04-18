@@ -64,6 +64,11 @@ def _load_task_entries(
 
 def slice_progress(session: AppSession) -> None:
     """执行查询、切片和可选回放的一体化主流程。"""
+    ui.show_flow_section(
+        "切片模式",
+        "查询 Record -> 选择 Tag -> 切片 -> 可选回播",
+        "适合先做批量切片，再进入回播验证",
+    )
     task_list = _load_task_entries(session, need_export_path=True)
     if not task_list:
         return
@@ -111,6 +116,11 @@ def slice_progress(session: AppSession) -> None:
 
 def full_source_progress(session: AppSession, preset_mode=None) -> None:
     """执行查询后直接回放原始 record 数据。"""
+    ui.show_flow_section(
+        "全量回播模式",
+        "查询 Record -> 选择 Tag -> 直接回播原始数据",
+        "不生成导出目录，直接基于原始记录构造回播",
+    )
     task_list = _load_task_entries(
         session,
         need_export_path=False,
@@ -128,6 +138,11 @@ def full_source_progress(session: AppSession, preset_mode=None) -> None:
 
 def auto_replay_progress(session: AppSession) -> None:
     """采集参数后自动扫描本地目录并执行标准回放。"""
+    ui.show_flow_section(
+        "自动回播模式",
+        "扫描本地目录并从回播库中选择条目",
+        "适合已经准备好本地回播目录的场景",
+    )
     config_prompter.get_basic_params(session.ctx)
     session.init_logging()
     config_prompter.update_dest_root(
@@ -142,6 +157,11 @@ def auto_replay_progress(session: AppSession) -> None:
 
 def manual_replay_progress(session: AppSession) -> None:
     """手动选择回播文件并执行标准回放。"""
+    ui.show_flow_section(
+        "手动回播模式",
+        "直接粘贴或拖拽 record 文件/目录后回播",
+        "支持单文件、多文件或目录输入",
+    )
     config_prompter.get_basic_params(session.ctx)
     session.init_logging()
     replay_workflow.manual_replay_flow(
@@ -152,6 +172,11 @@ def manual_replay_progress(session: AppSession) -> None:
 
 def manual_replay_progress_with_paths(session: AppSession, path_texts: List[str]) -> None:
     """手动回播入口，直接使用命令提供的路径列表。"""
+    ui.show_flow_section(
+        "手动回播模式",
+        "直接使用命令提供的 record 路径进入回播",
+        "仍会复用基础参数采集和标准回播流程",
+    )
     config_prompter.get_basic_params(session.ctx)
     session.init_logging()
     replay_paths = [Path(path_text) for path_text in path_texts]
@@ -164,6 +189,11 @@ def manual_replay_progress_with_paths(session: AppSession, path_texts: List[str]
 
 def replay_history_progress(session: AppSession) -> None:
     """先浏览历史记录，再选择一次回播。"""
+    ui.show_flow_section(
+        "历史回播模式",
+        "浏览历史记录并按序号回播",
+        "支持从列表选择，也支持 history last / history <序号>",
+    )
     replay_workflow.replay_history_flow(session)
 
 

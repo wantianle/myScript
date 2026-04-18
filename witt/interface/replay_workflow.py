@@ -61,6 +61,11 @@ def restore_environment_flow(
 
 def traffic_light_replay_flow(session: AppSession) -> None:
     """执行红绿灯回灌模式的入口编排。"""
+    ui.show_flow_section(
+        "红绿灯回灌模式",
+        "选择自动扫描或手动文件进入回灌回播",
+        "适合回灌红绿灯相关问题排查，会按模式补充环境恢复和频道过滤",
+    )
     manual = prompter.get_confirm_input("手动选择文件回灌？")
     if manual:
         config_prompter.get_basic_params(session.ctx)
@@ -78,6 +83,11 @@ def traffic_light_replay_flow(session: AppSession) -> None:
 
 def replay_flow(session: AppSession) -> None:
     """执行标准回放模式的入口编排。"""
+    ui.show_flow_section(
+        "标准回播模式",
+        "选择自动扫描或手动文件进入标准回播",
+        "适合直接从本地目录或手动路径进入回播",
+    )
     manual = prompter.get_confirm_input("手动选择文件播放？")
     if manual:
         config_prompter.get_basic_params(session.ctx)

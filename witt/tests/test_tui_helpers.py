@@ -166,6 +166,31 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("默认 1.0x，可设置 0.1 到 10x", rendered)
         self.assertIn("常用值: 0.5 / 1.0 / 1.5 / 2.0", rendered)
 
+    def test_show_flow_section_renders_summary_and_hint(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_flow_section(
+                "切片模式",
+                "查询 Record -> 选择 Tag -> 切片 -> 可选回播",
+                "适合先做批量切片，再进入回播验证",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("切片模式", rendered)
+        self.assertIn("查询 Record -> 选择 Tag -> 切片 -> 可选回播", rendered)
+        self.assertIn("适合先做批量切片", rendered)
+
     def test_show_repl_home_renders_summary_and_commands(self) -> None:
         class DummyLogic(object):
             mode = 1
