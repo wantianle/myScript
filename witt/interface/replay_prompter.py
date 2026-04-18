@@ -128,6 +128,7 @@ def select_playback_entry(
             vehicle,
             target_date,
             search_keyword=search_keyword,
+            total_count=len(filtered_library),
         )
         raw_choice = prompter.prompt_text(
             "选择播放序号 (/关键字筛选 | / 清空筛选 | 回车取消)",
@@ -139,11 +140,11 @@ def select_playback_entry(
         filter_keyword = prompter.resolve_filter_keyword(raw_choice)
         if filter_keyword is not None:
             next_library = _filter_playback_entries(filtered_library, filter_keyword)
-            if filter_keyword and not next_library:
-                ui.print_status("没有匹配到回播条目，请调整关键字", "WARN")
-                continue
             search_keyword = filter_keyword
             current_library = next_library if filter_keyword else filtered_library
+            continue
+        if not current_library:
+            ui.print_status("当前筛选结果为空，请调整关键字或输入 / 清空筛选", "WARN")
             continue
         if raw_choice.isdigit():
             index = int(raw_choice)
@@ -188,7 +189,11 @@ def select_source_task_entry(
     current_task_entries = task_entries
     search_keyword = ""
     while True:
-        ui.show_source_task_entries(current_task_entries, search_keyword=search_keyword)
+        ui.show_source_task_entries(
+            current_task_entries,
+            search_keyword=search_keyword,
+            total_count=len(task_entries),
+        )
         raw_choice = prompter.prompt_text(
             "选择要回放的 Tag 序号 (/关键字筛选 | / 清空筛选 | 回车返回)",
             history_name="source_task_entry",
@@ -199,11 +204,11 @@ def select_source_task_entry(
         filter_keyword = prompter.resolve_filter_keyword(raw_choice)
         if filter_keyword is not None:
             next_task_entries = _filter_task_entries(task_entries, filter_keyword)
-            if filter_keyword and not next_task_entries:
-                ui.print_status("没有匹配到查询结果，请调整关键字", "WARN")
-                continue
             search_keyword = filter_keyword
             current_task_entries = next_task_entries if filter_keyword else task_entries
+            continue
+        if not current_task_entries:
+            ui.print_status("当前筛选结果为空，请调整关键字或输入 / 清空筛选", "WARN")
             continue
         if raw_choice.isdigit():
             selected_index = int(raw_choice)
@@ -223,7 +228,11 @@ def select_replay_history_index(
     search_keyword = ""
     while True:
         if search_keyword:
-            ui.show_replay_history(current_history_entries)
+            ui.show_filtered_replay_history(
+                current_history_entries,
+                search_keyword=search_keyword,
+                total_count=len(history_entries),
+            )
         raw_choice = prompter.prompt_text(
             "输入要回播的历史序号 (0 清空历史 | /关键字筛选 | 回车返回)",
             history_name="history_selection",
@@ -236,11 +245,11 @@ def select_replay_history_index(
         filter_keyword = prompter.resolve_filter_keyword(raw_choice)
         if filter_keyword is not None:
             next_history_entries = _filter_history_entries(history_entries, filter_keyword)
-            if filter_keyword and not next_history_entries:
-                ui.print_status("没有匹配到历史记录，请调整关键字", "WARN")
-                continue
             search_keyword = filter_keyword
             current_history_entries = next_history_entries if filter_keyword else history_entries
+            continue
+        if not current_history_entries:
+            ui.print_status("当前筛选结果为空，请调整关键字或输入 / 清空筛选", "WARN")
             continue
         if raw_choice.isdigit():
             selected_index = int(raw_choice)

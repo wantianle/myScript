@@ -114,8 +114,27 @@ def show_playback_library(
     vehicle: str,
     target_date: str,
     search_keyword: str = "",
+    total_count: Optional[int] = None,
 ) -> None:
     """打印回放库列表。"""
+    _CONSOLE.print(
+        _build_selector_state_panel(
+            "回放库",
+            "回播条目",
+            len(library),
+            total_count,
+            search_keyword,
+        )
+    )
+    if not library:
+        _CONSOLE.print(
+            _build_selector_empty_panel(
+                "回放库",
+                "回播条目",
+                search_keyword,
+            )
+        )
+        return
     title = "回放库  {0} | {1}".format(vehicle, target_date)
     if search_keyword:
         title = "{0}  |  过滤: {1}".format(title, search_keyword)
@@ -145,8 +164,27 @@ def show_playback_library(
 def show_source_task_entries(
     task_entries: Sequence[TaskEntry],
     search_keyword: str = "",
+    total_count: Optional[int] = None,
 ) -> None:
     """打印原始查询结果列表。"""
+    _CONSOLE.print(
+        _build_selector_state_panel(
+            "查询结果",
+            "Tag",
+            len(task_entries),
+            total_count,
+            search_keyword,
+        )
+    )
+    if not task_entries:
+        _CONSOLE.print(
+            _build_selector_empty_panel(
+                "查询结果",
+                "Tag",
+                search_keyword,
+            )
+        )
+        return
     title = "查询结果"
     if search_keyword:
         title = "查询结果  |  过滤: {0}".format(search_keyword)
@@ -179,8 +217,27 @@ def show_source_task_entries(
 def show_channel_candidates(
     channels: Sequence[ChannelInfo],
     search_keyword: str = "",
+    total_count: Optional[int] = None,
 ) -> None:
     """打印频道候选列表。"""
+    _CONSOLE.print(
+        _build_selector_state_panel(
+            "频道列表",
+            "频道",
+            len(channels),
+            total_count,
+            search_keyword,
+        )
+    )
+    if not channels:
+        _CONSOLE.print(
+            _build_selector_empty_panel(
+                "频道列表",
+                "频道",
+                search_keyword,
+            )
+        )
+        return
     title = "频道列表"
     if search_keyword:
         title = "频道列表  |  过滤: {0}".format(search_keyword)
@@ -260,6 +317,45 @@ def show_playback_info(
 
 def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
     """打印回播历史列表。"""
+    _CONSOLE.print(
+        _build_selector_state_panel(
+            "回播历史",
+            "历史记录",
+            len(history_entries),
+            len(history_entries),
+            "",
+        )
+    )
+    if not history_entries:
+        _CONSOLE.print(_build_selector_empty_panel("回播历史", "历史记录"))
+        return
+    _CONSOLE.print(_build_history_table(history_entries))
+
+
+def show_filtered_replay_history(
+    history_entries: List[ReplayHistoryEntry],
+    search_keyword: str = "",
+    total_count: Optional[int] = None,
+) -> None:
+    """打印带筛选状态的回播历史列表。"""
+    _CONSOLE.print(
+        _build_selector_state_panel(
+            "回播历史",
+            "历史记录",
+            len(history_entries),
+            total_count,
+            search_keyword,
+        )
+    )
+    if not history_entries:
+        _CONSOLE.print(
+            _build_selector_empty_panel(
+                "回播历史",
+                "历史记录",
+                search_keyword,
+            )
+        )
+        return
     _CONSOLE.print(_build_history_table(history_entries))
 
 
@@ -328,6 +424,60 @@ def _build_history_table(history_entries: List[ReplayHistoryEntry]) -> Table:
             _format_history_status(history_entry),
         )
     return table
+
+
+def _build_selector_state_panel(
+    page_title: str,
+    item_label: str,
+    visible_count: int,
+    total_count: Optional[int] = None,
+    search_keyword: str = "",
+) -> Panel:
+    """构建选择页顶部状态块。"""
+    actual_total_count = visible_count if total_count is None else total_count
+    filter_text = "/{0}".format(search_keyword) if search_keyword else "无"
+    filter_style = "accent" if search_keyword else "muted"
+    lines = [
+        Text.assemble(("当前筛选: ", "label"), (filter_text, filter_style)),
+        Text.assemble(
+            ("可见{0}: ".format(item_label), "label"),
+            ("{0}/{1}".format(visible_count, actual_total_count), "accent"),
+        ),
+        Text("输入 /关键字 筛选，输入 / 清空筛选，回车返回", style="muted"),
+    ]
+    if search_keyword and visible_count == 0:
+        lines.append(Text("当前筛选没有匹配结果，可继续输入新关键字或输入 / 清空筛选", style="warn"))
+    return Panel(
+        Group(*lines),
+        title="{0}状态".format(page_title),
+        border_style="border",
+        padding=(0, 2),
+    )
+
+
+def _build_selector_empty_panel(
+    page_title: str,
+    item_label: str,
+    search_keyword: str = "",
+) -> Panel:
+    """构建选择页空状态面板。"""
+    if search_keyword:
+        body = Group(
+            Text("没有匹配到{0}".format(item_label), style="warn"),
+            Text("当前筛选: /{0}".format(search_keyword), style="muted"),
+            Text("输入新的 /关键字，或输入 / 清空筛选", style="muted"),
+        )
+    else:
+        body = Group(
+            Text("当前没有可用的{0}".format(item_label), style="warn"),
+            Text("请调整查询条件后重试", style="muted"),
+        )
+    return Panel(
+        body,
+        title="{0}空状态".format(page_title),
+        border_style="border",
+        padding=(0, 2),
+    )
 
 
 def _format_history_range(start_sec: int, end_sec: int) -> str:

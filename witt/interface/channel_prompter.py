@@ -12,7 +12,11 @@ def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str
     current_channels = list(channels)
     search_keyword = ""
     while True:
-        ui.show_channel_candidates(current_channels, search_keyword=search_keyword)
+        ui.show_channel_candidates(
+            current_channels,
+            search_keyword=search_keyword,
+            total_count=len(channels),
+        )
         raw_choice = prompter.prompt_text(
             "{0}\n输入序号/范围选择要删除的频道"
             " | 支持 1,3,5 / 2-6 / 0 5 7-15 / 0"
@@ -27,11 +31,11 @@ def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str
         next_keyword = prompter.resolve_filter_keyword(raw_choice)
         if next_keyword is not None:
             next_channels = _filter_channels(channels, next_keyword)
-            if next_keyword and not next_channels:
-                ui.print_status("没有匹配到频道，请调整关键字", "WARN")
-                continue
             search_keyword = next_keyword
             current_channels = next_channels if next_keyword else list(channels)
+            continue
+        if not current_channels:
+            ui.print_status("当前筛选结果为空，请调整关键字或输入 / 清空筛选", "WARN")
             continue
         try:
             selected_indices = prompter.parse_index_expression(

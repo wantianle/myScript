@@ -313,7 +313,7 @@ def parse_index_expression(raw_input: str, total_count: int) -> List[int]:
 def get_selected_indices(
     all_tasks: Sequence[TaskLike],
     prompt: str = "请输入要处理的序号",
-    render_items: Optional[Callable[[Sequence[TaskLike], str], None]] = None,
+    render_items: Optional[Callable[[Sequence[TaskLike], str, int], None]] = None,
     search_values_getter: Optional[Callable[[TaskLike], Sequence[object]]] = None,
     history_name: str = "task_selection",
 ) -> List[TaskLike]:
@@ -327,7 +327,7 @@ def get_selected_indices(
     search_keyword = ""
     while True:
         if render_items is not None:
-            render_items(current_tasks, search_keyword)
+            render_items(current_tasks, search_keyword, total_count)
         raw_input = prompt_text(
             "{0}\n单选 1,3,5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0"
             " | /关键字筛选 | / 清空筛选 | 回车返回".format(prompt),
@@ -345,11 +345,11 @@ def get_selected_indices(
                 for task in all_tasks
                 if matches_search_keyword(filter_keyword, search_values_getter(task))
             ]
-            if filter_keyword and not next_tasks:
-                ui.print_status("没有匹配到结果，请调整关键字", "WARN")
-                continue
             search_keyword = filter_keyword
             current_tasks = next_tasks if filter_keyword else list(all_tasks)
+            continue
+        if not current_tasks:
+            ui.print_status("当前筛选结果为空，请调整关键字或输入 / 清空筛选", "WARN")
             continue
         try:
             final_ids = parse_index_expression(raw_input, len(current_tasks))
