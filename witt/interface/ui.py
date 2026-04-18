@@ -162,6 +162,7 @@ def show_playback_info(
     duration: int,
     rate: float = 1.0,
     channels: Optional[List[str]] = None,
+    command: str = "",
 ) -> None:
     """打印当前回放的概要信息。"""
     lines = [
@@ -174,6 +175,13 @@ def show_playback_info(
             Text.assemble(
                 ("频道过滤: ", "label"),
                 (", ".join(channels), "accent"),
+            )
+        )
+    if command:
+        lines.append(
+            Text.assemble(
+                ("执行指令: ", "label"),
+                (command, "accent"),
             )
         )
     _CONSOLE.print(

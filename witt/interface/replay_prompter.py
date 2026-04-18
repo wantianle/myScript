@@ -1,12 +1,45 @@
 import re
 import urllib.parse
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from core.issue_draft import ReplayIssueMarker
 from core.models import LibraryEntry, ReplayHistoryEntry, ReplayRecord, TaskEntry
 from interface import prompter, ui
 from utils import parser
+
+
+def _build_soc_selection_items(
+    soc_records: Dict[str, List[ReplayRecord]],
+) -> Tuple[List[Tuple[str, str, List[ReplayRecord]]], str]:
+    """构造 SOC 选择项和默认值。"""
+    soc_names = sorted(list(soc_records.keys()))
+    if not soc_names:
+        return [], ""
+    standard_soc_names = ["soc1", "soc2"]
+    if all(soc_name in standard_soc_names for soc_name in soc_names):
+        selection_items = []
+        if "soc1" in soc_records:
+            selection_items.append(("1", "soc1", soc_records["soc1"]))
+        if "soc2" in soc_records:
+            selection_items.append(("2", "soc2", soc_records["soc2"]))
+        if "soc1" in soc_records and "soc2" in soc_records:
+            all_records = list(soc_records["soc1"]) + list(soc_records["soc2"])
+            selection_items.append(("3", "All", all_records))
+            return selection_items, "3"
+        if "soc1" in soc_records:
+            return selection_items, "1"
+        return selection_items, "2"
+
+    selection_items = []
+    for index, soc_name in enumerate(soc_names, 1):
+        selection_items.append((str(index), soc_name, soc_records[soc_name]))
+    if len(soc_names) > 1:
+        all_records = []
+        for soc_name in soc_names:
+            all_records.extend(soc_records[soc_name])
+        selection_items.append((str(len(soc_names) + 1), "All", all_records))
+    return selection_items, "1"
 
 
 def select_playback_entry(
@@ -41,44 +74,28 @@ def select_playback_entry(
 
 def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
     """从单个回放条目中选择要播放的 SOC 记录。"""
-    socs = sorted(list(tag_entry.socs.keys()))
-    if not socs:
+    selection_items, default_choice = _build_soc_selection_items(tag_entry.socs)
+    if not selection_items:
         ui.print_status("当前回播条目没有可用的 SOC 数据", "WARN")
         return []
     while True:
-        for i, soc_name in enumerate(socs, 1):
-            print(f"  [{i}] {soc_name}")
-        if len(socs) > 1:
-            print(f"  [{len(socs) + 1}] All")
+        for option_value, option_label, _ in selection_items:
+            print(f"  [{option_value}] {option_label}")
 
-        completer_words = [str(index) for index in range(1, len(socs) + 1)] + socs
-        if len(socs) > 1:
-            completer_words.append(str(len(socs) + 1))
-            completer_words.append("All")
+        completer_words = []
+        for option_value, option_label, _ in selection_items:
+            completer_words.append(option_value)
+            completer_words.append(option_label)
         choice = prompter.prompt_text(
             "选择要播放的 SOC",
-            "1",
+            default_choice,
             history_name="soc_selection",
             completer_words=completer_words,
-        ) or "1"
+        ) or default_choice
         normalized_choice = choice.lower()
-        if choice.isdigit():
-            soc_index = int(choice)
-            if 1 <= soc_index <= len(socs):
-                return tag_entry.socs[socs[soc_index - 1]]
-            if len(socs) > 1 and soc_index == len(socs) + 1:
-                target_records = []
-                for soc_name in socs:
-                    target_records.extend(tag_entry.socs[soc_name])
-                return target_records
-        for soc_name in socs:
-            if normalized_choice == soc_name.lower():
-                return tag_entry.socs[soc_name]
-        if len(socs) > 1 and normalized_choice == "all":
-            target_records = []
-            for soc_name in socs:
-                target_records.extend(tag_entry.socs[soc_name])
-            return target_records
+        for option_value, option_label, option_records in selection_items:
+            if choice == option_value or normalized_choice == option_label.lower():
+                return option_records
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
@@ -193,29 +210,6 @@ def _get_issue_description() -> str:
         if issue_description:
             return issue_description
         ui.print_status("备注不能为空", "WARN")
-
-
-def get_issue_data_path_text(target_date: str, vehicle: str) -> str:
-    """在自动推断失败时手动补录准确 NAS 路径。"""
-    expected_prefix = "/media/nas/00.raw/{0}/{1}".format(target_date, vehicle)
-    ui.print_status("无法自动推断准确 NAS 路径，请手动补录 issue 草稿中的准确 NAS 路径", "WARN")
-    ui.print_status("路径需以 {0} 开头".format(expected_prefix))
-    issue_paths = []
-    while True:
-        raw_line = prompter.prompt_text(
-            "NAS路径(空行结束)",
-            history_name="issue_nas_path",
-            path_completion=True,
-        )
-        if not raw_line:
-            if issue_paths:
-                return "\n".join(issue_paths)
-            ui.print_status("至少输入一条准确 NAS 路径，或按 Ctrl+C 取消", "WARN")
-            continue
-        if not raw_line.startswith(expected_prefix):
-            ui.print_status("路径必须以 {0} 开头".format(expected_prefix), "WARN")
-            continue
-        issue_paths.append(raw_line)
 
 
 def get_manual_replay_paths() -> List[Path]:

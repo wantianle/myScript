@@ -41,6 +41,7 @@ class IssueDraftTests(unittest.TestCase):
         self.assertIn("range(-s): 5s", markdown_text)
         self.assertIn("rate(-r): x2", markdown_text)
         self.assertIn("channels(-k): /apollo/foo", markdown_text)
+        self.assertNotIn("数据路径", markdown_text)
 
     def test_save_issue_draft_writes_into_work_dir_issues(self) -> None:
         issue_draft = IssueDraft(

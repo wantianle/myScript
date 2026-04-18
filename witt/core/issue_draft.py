@@ -72,10 +72,6 @@ def render_issue_markdown(issue_draft: IssueDraft) -> str:
 ```json
 {version_block}
 ```
-- **数据路径：**
-```bash
-{issue_draft.data_path_text}
-```
 - **回播命令：**
 ```bash
 {issue_draft.playback_command}

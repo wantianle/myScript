@@ -179,25 +179,11 @@ def _post_replay_issue_draft(
             end_sec,
         )
         issue_description = issue_marker.issue_description
-    try:
-        issue_paths = _build_issue_paths(
-            [replay_record.path for replay_record in records],
-            session.ctx.target_date,
-            session.ctx.vehicle,
-        )
-    except ValueError as e:
-        ui.print_status(str(e), "WARN")
-        try:
-            data_path_text = replay_prompter.get_issue_data_path_text(
-                session.ctx.target_date,
-                session.ctx.vehicle,
-            )
-            issue_paths = data_path_text.splitlines()
-        except KeyboardInterrupt:
-            ui.print_status("未提供准确 NAS 路径，已取消生成 issue 草稿", "WARN")
-            return
-    else:
-        data_path_text = "\n".join(issue_paths)
+    issue_paths = _try_build_issue_paths(
+        [replay_record.path for replay_record in records],
+        session.ctx.target_date,
+        session.ctx.vehicle,
+    )
     playback_command = _build_issue_playback_command(
         session,
         playback_plan.command,
@@ -209,7 +195,7 @@ def _post_replay_issue_draft(
         vehicle=session.ctx.vehicle,
         target_date=session.ctx.target_date,
         playback_command=playback_command,
-        data_path_text=data_path_text,
+        data_path_text="",
         version_text=load_version_text(session.ctx.logic.version),
         playback_rate=playback_plan.rate,
         playback_range_text=playback_range_text,
@@ -226,6 +212,20 @@ def _post_replay_issue_draft(
         ui.print_status("生成 issue.md 失败: {0}".format(e), "ERROR")
         return
     ui.print_status("issue 草稿已生成: {0}".format(issue_path))
+
+
+def _try_build_issue_paths(
+    path_texts: List[str],
+    target_date: str,
+    vehicle: str,
+) -> List[str]:
+    """尽力构造 issue 用展示路径，失败时退化为空列表。"""
+    try:
+        return _build_issue_paths(path_texts, target_date, vehicle)
+    except ValueError as e:
+        ui.print_status(str(e), "WARN")
+        ui.print_status("已保留运行时回播命令，不再补录数据路径", "WARN")
+        return []
 
 
 def _build_issue_paths(
@@ -252,6 +252,8 @@ def _build_issue_playback_command(
     issue_paths: List[str],
 ) -> str:
     """将运行时回播命令中的实际路径替换为 issue 展示用 NAS 路径。"""
+    if not issue_paths or len(issue_paths) != len(records):
+        return playback_command
     issue_command = playback_command
     for replay_record, issue_path in zip(records, issue_paths):
         runtime_path = session.executor.map_path(replay_record.path)
@@ -453,8 +455,8 @@ def _replay_records(
             duration=playback_plan.duration,
             rate=playback_plan.rate,
             channels=getattr(session.ctx, "playback_blacklist", []) or None,
+            command=playback_plan.command,
         )
-        print(f"执行指令: \033[1;32m{playback_plan.command}\033[0m")
         _save_replay_history(
             session,
             records,

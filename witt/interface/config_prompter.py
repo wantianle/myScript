@@ -6,7 +6,7 @@ from typing import Optional
 from . import prompter
 from . import ui
 
-VEHICLE_PREFIX_HINTS = ["XZB65", "XZT5", "XZA0"]
+VEHICLE_PREFIX_HINTS = ["XZB6", "XZT5", "XZA0"]
 
 
 def get_vehicle_name(default_vehicle: str = "") -> str:
@@ -19,10 +19,9 @@ def get_vehicle_name(default_vehicle: str = "") -> str:
             completer_words=VEHICLE_PREFIX_HINTS,
         ).upper()
         if _is_valid_vehicle_name(vehicle_name):
-            print(f"\033[1;33m@{vehicle_name}\033[0m")
             return vehicle_name
         ui.print_status(
-            "车号格式必须是 XZB6/XZT5/XZA0 开头并跟 5 位数字，例如 XZB650001",
+            "车号格式必须是 XZB6/XZT5/XZA0 开头并跟 5 位数字，例如 XZB600001",
             "ERROR",
         )
 
