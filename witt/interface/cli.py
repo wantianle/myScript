@@ -15,9 +15,9 @@ from core.session import AppSession
 INTENT_ONLY_COMMANDS = {
     "config",
     "slice",
-    "full",
-    "scan",
-    "manual",
+    "replay",
+    "browse",
+    "files",
     "traffic",
     "env",
     "clear",
@@ -78,9 +78,9 @@ def _build_command_map(session: AppSession) -> Dict[str, Callable[[], None]]:
     """构建标准命令到 workflow 动作的映射。"""
     return {
         "slice": lambda: workflow.slice_progress(session),
-        "full": lambda: workflow.full_source_progress(session),
-        "scan": lambda: workflow.auto_replay_progress(session),
-        "manual": lambda: workflow.manual_replay_progress(session),
+        "replay": lambda: workflow.full_source_progress(session),
+        "browse": lambda: workflow.auto_replay_progress(session),
+        "files": lambda: workflow.manual_replay_progress(session),
         "history": lambda: workflow.replay_history_progress(session),
         "traffic": lambda: workflow.traffic_light_replay_flow(session),
         "env": lambda: ui.show_environment_summary(session),
@@ -130,11 +130,11 @@ def _handle_help_command(command_invocation: prompter.CommandInvocation) -> None
 def _handle_config_command(session: AppSession) -> AppSession:
     """打开配置文件并在退出编辑器后重建当前会话。"""
     config_path = session.ctx.config_path
-    ui.print_status("打开配置文件: {0}".format(config_path))
+    ui.print_status("打开用户配置文件: {0}".format(config_path))
     if not _open_in_editor(config_path):
         return session
     try:
-        reloaded_session = AppSession()
+        reloaded_session = AppSession(config_path=config_path)
     except Exception as e:
         ui.print_status("配置重载失败，继续沿用旧会话: {0}".format(e), "ERROR")
         return session

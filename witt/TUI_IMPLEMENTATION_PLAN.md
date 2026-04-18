@@ -76,9 +76,9 @@ Witt >
 - `help`
 - `config`
 - `slice`
-- `full`
-- `scan`
-- `manual`
+- `replay`
+- `browse`
+- `files`
 - `history`
 - `traffic`
 - `env`
@@ -89,6 +89,8 @@ Witt >
 
 - `help <command>`
 - `config`
+  - 编辑用户配置 `~/.witt/settings.yaml`
+  - 用户配置缺失时，从仓库默认模板 `config/settings.yaml` 自动生成
 - `history clear`
 - `history last`
 - `history <序号>`

@@ -17,9 +17,11 @@ def get_vehicle_name(default_vehicle: str = "") -> str:
         default_index=default_index,
     )
     while True:
-        vehicle_number = input(
-            "\033[32m输入车辆号 (默认 {0}): \033[0m".format(default_vehicle_number)
-        ).strip()
+        vehicle_number = prompter.prompt_text(
+            "输入车辆号",
+            default_vehicle_number,
+            history_name="vehicle_number",
+        )
         if not vehicle_number:
             vehicle_number = default_vehicle_number
         if vehicle_number.isdigit() and 0 <= int(vehicle_number) <= 99999:
@@ -37,6 +39,7 @@ def get_basic_params(ctx) -> None:
     ctx.logic.target_date = prompter.get_user_input(
         "数据日期",
         ctx.logic.target_date,
+        history_name="target_date",
     )
     ctx.logic.vehicle = get_vehicle_name(ctx.logic.vehicle)
 
@@ -44,8 +47,16 @@ def get_basic_params(ctx) -> None:
 def get_split_params(ctx) -> None:
     """采集切片时间窗参数并完成基础校验。"""
     while True:
-        before = prompter.get_int_input("切片 tag 前多少秒", ctx.logic.before)
-        after = prompter.get_int_input("切片 tag 后多少秒", ctx.logic.after)
+        before = prompter.get_int_input(
+            "切片 tag 前多少秒",
+            ctx.logic.before,
+            history_name="slice_before",
+        )
+        after = prompter.get_int_input(
+            "切片 tag 后多少秒",
+            ctx.logic.after,
+            history_name="slice_after",
+        )
         if before < 0:
             ui.print_status("before 不能小于 0", "WARN")
             continue
@@ -76,6 +87,8 @@ def get_source_path_params(
         ctx.host.data_root = prompter.get_user_input(
             "原始数据路径 (限/media下)",
             ctx.host.data_root,
+            history_name="source_root",
+            path_completion=True,
         )
 
 
@@ -84,6 +97,8 @@ def get_export_path_params(ctx) -> None:
     ctx.host.dest_root = prompter.get_user_input(
         "切片导出路径 (限/media下)",
         ctx.host.dest_root,
+        history_name="dest_root",
+        path_completion=True,
     )
 
 
@@ -98,7 +113,11 @@ def get_json_input() -> str:
     """获取 version.json 输入：支持路径拖拽和内容粘贴"""
     while True:
         try:
-            raw_data = input("拖拽或粘贴输入 version 文件路径:").strip()
+            raw_data = prompter.prompt_text(
+                "拖拽或粘贴输入 version 文件路径",
+                history_name="version_path",
+                path_completion=True,
+            )
             if not raw_data:
                 ui.print_status("输入为空，请重新输入！", "WARN")
                 continue
@@ -116,4 +135,6 @@ def update_dest_root(ctx, prompt: str) -> None:
     ctx.host.dest_root = prompter.get_user_input(
         prompt,
         ctx.host.dest_root,
+        history_name="dest_root",
+        path_completion=True,
     )

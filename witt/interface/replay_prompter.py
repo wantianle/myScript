@@ -1,6 +1,4 @@
 import re
-import select
-import sys
 import urllib.parse
 from pathlib import Path
 from typing import List, Optional
@@ -27,7 +25,11 @@ def select_playback_entry(
         return None
     while True:
         ui.show_playback_library(filtered_library, vehicle, target_date)
-        raw_choice = input("\n选择播放序号 (回车取消): ").strip()
+        raw_choice = prompter.prompt_text(
+            "选择播放序号 (回车取消)",
+            history_name="playback_entry",
+            completer_words=[str(index) for index in range(1, len(filtered_library) + 1)],
+        )
         if not raw_choice:
             return None
         if raw_choice.isdigit():
@@ -49,7 +51,17 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
         if len(socs) > 1:
             print(f"  [{len(socs) + 1}] All")
 
-        choice = input("选择要播放的 SOC (默认 1): ").strip() or "1"
+        completer_words = [str(index) for index in range(1, len(socs) + 1)] + socs
+        if len(socs) > 1:
+            completer_words.append(str(len(socs) + 1))
+            completer_words.append("All")
+        choice = prompter.prompt_text(
+            "选择要播放的 SOC",
+            "1",
+            history_name="soc_selection",
+            completer_words=completer_words,
+        ) or "1"
+        normalized_choice = choice.lower()
         if choice.isdigit():
             soc_index = int(choice)
             if 1 <= soc_index <= len(socs):
@@ -59,6 +71,14 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
                 for soc_name in socs:
                     target_records.extend(tag_entry.socs[soc_name])
                 return target_records
+        for soc_name in socs:
+            if normalized_choice == soc_name.lower():
+                return tag_entry.socs[soc_name]
+        if len(socs) > 1 and normalized_choice == "all":
+            target_records = []
+            for soc_name in socs:
+                target_records.extend(tag_entry.socs[soc_name])
+            return target_records
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
@@ -71,7 +91,11 @@ def select_source_task_entry(
         return None
     while True:
         ui.print_text_block(find_record_output)
-        raw_choice = input("选择要回放的 Tag 序号 (回车返回): ").strip()
+        raw_choice = prompter.prompt_text(
+            "选择要回放的 Tag 序号 (回车返回)",
+            history_name="source_task_entry",
+            completer_words=[str(index) for index in range(1, len(task_entries) + 1)],
+        )
         if not raw_choice:
             return None
         if raw_choice.isdigit():
@@ -89,7 +113,13 @@ def select_replay_history_index(
         ui.print_status("当前没有可用的回播历史", "WARN")
         return None
     while True:
-        raw_choice = input("输入要回播的历史序号 (0 清空历史 | 回车返回): ").strip()
+        raw_choice = prompter.prompt_text(
+            "输入要回播的历史序号 (0 清空历史 | 回车返回)",
+            history_name="history_selection",
+            completer_words=["0"] + [
+                str(index) for index in range(1, len(history_entries) + 1)
+            ],
+        )
         if not raw_choice:
             return None
         if raw_choice.isdigit():
@@ -103,16 +133,22 @@ def select_replay_history_index(
 
 def get_playback_range() -> tuple:
     """读取并解析回放时间范围输入。"""
-    range_input = input(
-        "调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播): "
-    ).strip()
+    range_input = prompter.prompt_text(
+        "调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播)",
+        history_name="playback_range",
+    )
     return parser.parse_range_logic(range_input)
 
 
 def get_playback_rate() -> float:
     """读取播放倍速，范围限制在 0.1 到 10 之间。"""
     while True:
-        rate_input = input("播放倍速 (0.1-10 | 回车 1.0): ").strip()
+        rate_input = prompter.prompt_text(
+            "播放倍速 (0.1-10 | 回车 1.0)",
+            "1.0",
+            history_name="playback_rate",
+            completer_words=["0.5", "1.0", "1.5", "2.0"],
+        ).strip()
         if not rate_input:
             return 1.0
         try:
@@ -138,7 +174,10 @@ def get_issue_marker() -> Optional[ReplayIssueMarker]:
 def _get_issue_start_sec() -> int:
     """读取问题时间点秒数，用于覆盖 issue 草稿中的 range(-s)。"""
     while True:
-        raw_value = input("问题时间点秒数(-s，例 37): ").strip()
+        raw_value = prompter.prompt_text(
+            "问题时间点秒数(-s，例 37)",
+            history_name="issue_start_sec",
+        )
         if raw_value.isdigit():
             return int(raw_value)
         ui.print_status("请输入非负整数秒数", "WARN")
@@ -147,7 +186,10 @@ def _get_issue_start_sec() -> int:
 def _get_issue_description() -> str:
     """读取问题现象备注。"""
     while True:
-        issue_description = input("简短备注: ").strip()
+        issue_description = prompter.prompt_text(
+            "简短备注",
+            history_name="issue_description",
+        )
         if issue_description:
             return issue_description
         ui.print_status("备注不能为空", "WARN")
@@ -160,7 +202,11 @@ def get_issue_data_path_text(target_date: str, vehicle: str) -> str:
     ui.print_status("路径需以 {0} 开头".format(expected_prefix))
     issue_paths = []
     while True:
-        raw_line = input("NAS路径(空行结束): ").strip()
+        raw_line = prompter.prompt_text(
+            "NAS路径(空行结束)",
+            history_name="issue_nas_path",
+            path_completion=True,
+        )
         if not raw_line:
             if issue_paths:
                 return "\n".join(issue_paths)
@@ -182,14 +228,11 @@ def get_dragged_input() -> List[Path]:
     """
     读取拖拽进终端的 record 文件或目录并返回排序后的文件列表。
     """
-    lines = [sys.stdin.readline()]
-    while select.select([sys.stdin], [], [], 0.1)[0]:
-        line = sys.stdin.readline()
-        if line:
-            lines.append(line)
-        else:
-            break
-    raw_input = "".join(lines).strip()
+    raw_input = prompter.prompt_text(
+        "拖拽或粘贴 record 文件/目录 (q 返回)",
+        history_name="manual_paths",
+        path_completion=True,
+    )
     if raw_input.lower() == "q":
         return []
     if not raw_input:

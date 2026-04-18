@@ -7,13 +7,15 @@ from typing import List, Optional, Sequence, TypeVar
 import questionary
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import PathCompleter, WordCompleter
 from prompt_toolkit.history import FileHistory
 from questionary import Choice
 
 from interface import ui
 
 TaskLike = TypeVar("TaskLike")
+_PROMPT_SESSION_CACHE = {}
+_PROMPT_TOOLBAR_TEXT = " Enter 确认  Tab 补全  Ctrl+R 历史 "
 
 
 @dataclass(frozen=True)
@@ -52,11 +54,11 @@ MAIN_MENU_STYLE = questionary.Style(
 
 COMMAND_SPECS = [
     CommandSpec("help", ["h", "?"], "显示命令帮助", "help history"),
-    CommandSpec("config", ["cfg"], "编辑 settings.yaml 并重建会话配置", "config"),
+    CommandSpec("config", ["cfg"], "编辑用户 settings.yaml 并重建会话配置", "config"),
     CommandSpec("slice", ["s"], "查询、切片并可选回播", "slice"),
-    CommandSpec("full", ["f"], "全量模式查询后直接回播", "full"),
-    CommandSpec("scan", ["auto", "a"], "交互式扫描回播目录并回播", "scan"),
-    CommandSpec("manual", ["m"], "交互式手动选择回播文件", "manual"),
+    CommandSpec("replay", ["r", "full", "f"], "查询后直接回放原始 record，不切片", "replay"),
+    CommandSpec("browse", ["scan", "auto", "a"], "扫描本地回放目录后浏览并回放", "browse"),
+    CommandSpec("files", ["manual", "m"], "直接拖拽或输入 record 文件/目录回放", "files"),
     CommandSpec("history", ["his"], "浏览历史并支持少量子命令", "history last"),
     CommandSpec("traffic", ["tl"], "红绿灯回灌模式", "traffic"),
     CommandSpec("env", ["e"], "查看当前环境摘要", "env"),
@@ -146,23 +148,82 @@ def find_command_spec(command_name: str) -> Optional[CommandSpec]:
 
 def _build_command_toolbar() -> str:
     """构建 REPL 底部快捷提示。"""
-    return " help  config  slice  full  scan  manual  history  traffic  env  clear  quit "
+    return " help  config  slice  replay  browse  files  history  traffic  env  clear  quit "
 
 
-def get_user_input(prompt: str, default_value: str) -> str:
-    """读取带默认值的单行文本输入。"""
+def _get_prompt_session(history_name: str) -> PromptSession:
+    """按历史分类复用 PromptSession。"""
+    prompt_session = _PROMPT_SESSION_CACHE.get(history_name)
+    if prompt_session is not None:
+        return prompt_session
+    history_path = Path.home() / ".witt" / "history" / "{0}.txt".format(history_name)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_session = PromptSession(
+        history=FileHistory(str(history_path)),
+        auto_suggest=AutoSuggestFromHistory(),
+    )
+    _PROMPT_SESSION_CACHE[history_name] = prompt_session
+    return prompt_session
+
+
+def prompt_text(
+    prompt: str,
+    default_value: str = "",
+    history_name: str = "general",
+    completer_words: Optional[Sequence[str]] = None,
+    path_completion: bool = False,
+) -> str:
+    """统一的单行输入适配，提供历史、补全和可编辑默认值。"""
+    prompt_session = _get_prompt_session(history_name)
+    prompt_suffix = ": "
+    if default_value:
+        prompt_suffix = " (默认 {0}): ".format(default_value)
+    completer = None
+    if completer_words:
+        completer = WordCompleter(
+            sorted(set(str(word) for word in completer_words)),
+            ignore_case=True,
+            sentence=True,
+        )
+    elif path_completion:
+        completer = PathCompleter(expanduser=True)
     try:
-        val = input(f"\033[32m{prompt}\033[0m (默认 {default_value}): ").strip()
-        return val if val else default_value
-    except KeyboardInterrupt:
+        return prompt_session.prompt(
+            prompt + prompt_suffix,
+            default=default_value,
+            completer=completer,
+            complete_while_typing=False,
+            bottom_toolbar=_PROMPT_TOOLBAR_TEXT,
+        ).strip()
+    except (EOFError, KeyboardInterrupt):
         print()
         raise
 
 
-def get_int_input(prompt: str, default_value) -> int:
+def get_user_input(
+    prompt: str,
+    default_value: str,
+    history_name: str = "text",
+    path_completion: bool = False,
+) -> str:
+    """读取带默认值的单行文本输入。"""
+    val = prompt_text(
+        prompt,
+        default_value,
+        history_name=history_name,
+        path_completion=path_completion,
+    )
+    return val if val else default_value
+
+
+def get_int_input(prompt: str, default_value, history_name: str = "int") -> int:
     """读取整数输入，直到用户提供合法整数。"""
     while True:
-        raw_val = get_user_input(prompt, str(default_value))
+        raw_val = get_user_input(
+            prompt,
+            str(default_value),
+            history_name=history_name,
+        )
         try:
             return int(raw_val)
         except ValueError:
@@ -179,15 +240,25 @@ def choose_option(
     for i, opt in enumerate(options, 1):
         print(f"[{i}] {opt}  ", end="")
     while True:
-        if default_index and 1 <= default_index <= len(options):
-            prompt_suffix = " (默认 {0})".format(default_index)
-        else:
-            prompt_suffix = ""
-        val = input(f"\033[32m{prompt}{prompt_suffix}: \033[0m").strip()
+        default_value = (
+            str(default_index)
+            if default_index and 1 <= default_index <= len(options)
+            else ""
+        )
+        completer_words = [str(i) for i in range(1, len(options) + 1)] + list(options)
+        val = prompt_text(
+            prompt,
+            default_value,
+            history_name="option",
+            completer_words=completer_words,
+        )
         if not val and default_index and 1 <= default_index <= len(options):
             return default_index if index else options[default_index - 1]
         if val.isdigit() and 1 <= int(val) <= len(options):
             return int(val) if index else options[int(val) - 1]
+        for option_index, option_text in enumerate(options, 1):
+            if val.lower() == option_text.lower():
+                return option_index if index else option_text
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
@@ -202,7 +273,10 @@ def get_selected_indices(
         return []
 
     while True:
-        raw_input = input(f"{prompt}\n单选 1,3,5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0: ").strip()
+        raw_input = prompt_text(
+            "{0}\n单选 1,3,5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0".format(prompt),
+            history_name="task_selection",
+        )
         clean_input = re.sub(r"[^\d\-,\s\n]", "", raw_input)
         tokens = [t for t in re.split(r"[,\s\n]+", clean_input) if t]
         if not tokens:
@@ -251,9 +325,15 @@ def get_selected_indices(
 
 
 def get_confirm_input(prompt: str, default: bool = False) -> bool:
-    """通用的二次确认函数"""
+    """通用的二次确认函数。"""
     suffix = "[Y/n]" if default else "[y/N]"
-    res = input(f"{prompt} {suffix} (回车 {'Y' if default else 'N'}): ").strip().lower()
+    default_value = "y" if default else "n"
+    res = prompt_text(
+        "{0} {1}".format(prompt, suffix),
+        default_value,
+        history_name="confirm",
+        completer_words=["y", "n"],
+    ).lower()
     if not res:
         return default
     return res == "y"
@@ -276,6 +356,6 @@ def select_main_menu_action() -> Optional[str]:
 def wait_for_continue() -> None:
     """等待用户确认后继续回到主菜单。"""
     try:
-        input("按回车键继续...")
+        prompt_text("按回车键继续", history_name="continue")
     except KeyboardInterrupt:
         print()
