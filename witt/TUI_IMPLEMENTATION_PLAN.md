@@ -74,7 +74,7 @@ Witt >
 推荐一级命令：
 
 - `help`
-- `set`
+- `config`
 - `slice`
 - `full`
 - `scan`
@@ -88,14 +88,7 @@ Witt >
 基础子命令：
 
 - `help <command>`
-- `set date <YYYYMMDD>`
-- `set vehicle <XZB600007>`
-- `set source-root <path>`
-- `set dest-root <path>`
-- `scan <path>`
-- `manual <path...>`
-- `full local [path]`
-- `full nas`
+- `config`
 - `history clear`
 - `history last`
 - `history <序号>`
@@ -166,6 +159,7 @@ Witt >
 - 命令别名
 - 命令帮助
 - 环境查看
+- `config` 打开配置并重建会话
 - 基础子命令
   - `history clear`
   - `history last`
@@ -298,7 +292,7 @@ Witt >
 - 历史回播选择
 - 自动扫描回播条目选择
 - 全量模式 Tag 选择
-- 命令参数支持
+- `history` 等少量子命令支持
 
 ### 方案
 
@@ -313,12 +307,11 @@ Witt >
 - 输入关键字过滤
 - 回车确认
 - Esc / 空输入返回
-- 命令 + 参数 组合
+- 命令 + 少量子命令组合
   - 例如 `history`
   - 例如 `history last`
   - 例如 `history 3`
-  - 例如 `scan`
-  - 后续可扩展 `history clear`
+  - 例如 `history clear`
 
 ## 阶段 4：准 TUI 页面统一
 

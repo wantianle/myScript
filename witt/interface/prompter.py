@@ -51,13 +51,13 @@ MAIN_MENU_STYLE = questionary.Style(
 )
 
 COMMAND_SPECS = [
-    CommandSpec("help", ["h", "?"], "显示命令帮助", "help"),
-    CommandSpec("set", ["cfg"], "设置会话默认参数", "set date 20260418"),
+    CommandSpec("help", ["h", "?"], "显示命令帮助", "help history"),
+    CommandSpec("config", ["cfg"], "编辑 settings.yaml 并重建会话配置", "config"),
     CommandSpec("slice", ["s"], "查询、切片并可选回播", "slice"),
     CommandSpec("full", ["f"], "全量模式查询后直接回播", "full"),
-    CommandSpec("scan", ["auto", "a"], "扫描回播目录并回播", "scan"),
-    CommandSpec("manual", ["m"], "手动拖包回播", "manual"),
-    CommandSpec("history", ["his"], "浏览历史并回播", "history"),
+    CommandSpec("scan", ["auto", "a"], "交互式扫描回播目录并回播", "scan"),
+    CommandSpec("manual", ["m"], "交互式手动选择回播文件", "manual"),
+    CommandSpec("history", ["his"], "浏览历史并支持少量子命令", "history last"),
     CommandSpec("traffic", ["tl"], "红绿灯回灌模式", "traffic"),
     CommandSpec("env", ["e"], "查看当前环境摘要", "env"),
     CommandSpec("clear", ["cls"], "清空当前终端显示", "clear"),
@@ -146,7 +146,7 @@ def find_command_spec(command_name: str) -> Optional[CommandSpec]:
 
 def _build_command_toolbar() -> str:
     """构建 REPL 底部快捷提示。"""
-    return " help  slice  full  scan  manual  history  traffic  env  clear  quit "
+    return " help  config  slice  full  scan  manual  history  traffic  env  clear  quit "
 
 
 def get_user_input(prompt: str, default_value: str) -> str:

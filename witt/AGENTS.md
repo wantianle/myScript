@@ -14,7 +14,7 @@
   - `engine/` for downloader, player, and recorder services
 - `utils/` contains parsing helpers.
 - `scripts/` contains shell entry scripts used by the Python layer.
-- `tests/` contains `unittest` regression tests.
+- `tests/` contains minimal `unittest` unit tests.
 - `config/` stores runtime YAML and tool config assets.
 
 ## Build, Test, and Development Commands
@@ -24,7 +24,7 @@
 - `python3 main.py`
   Runs the CLI directly when dependencies are already available.
 - `python3 -m unittest discover -s tests -p 'test_*.py'`
-  Runs the full test suite.
+  Runs the current minimal unit test suite.
 - `python3 -m py_compile $(find . -path '*/.venv' -prune -o -name '*.py' -print)`
   Performs a repository-wide syntax check.
 
@@ -39,7 +39,9 @@
 ## Testing Guidelines
 
 - Use the built-in `unittest` framework.
+- Only add minimal unit tests for basic functionality.
 - Add focused tests for pure logic first: models, parsers, repositories, and planning helpers.
+- Do not add UI or terminal interaction tests unless explicitly requested.
 - Name files `tests/test_*.py` and keep each file scoped to one slice, for example `test_repository.py`.
 
 ## Commit & Pull Request Guidelines
@@ -50,7 +52,7 @@
   - `[TEST][witt]...`
   - `[DOCS][witt]...`
 - Keep commits small and coherent. Commit after each meaningful step.
-- Before opening a PR, run unit tests and a syntax sweep.
+- Before opening a PR, run the relevant minimal unit tests and a syntax sweep.
 
 ## Architecture & Configuration Notes
 
@@ -115,7 +117,6 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
 
 
 

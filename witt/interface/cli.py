@@ -1,13 +1,28 @@
 import logging
 import os
-import re
+import shlex
+import subprocess
 import sys
-from typing import Callable, Dict
+from shutil import which
+from pathlib import Path
+from typing import Callable, Dict, List, Optional
 
 from . import prompter
 from . import ui
 from . import workflow
 from core.session import AppSession
+
+INTENT_ONLY_COMMANDS = {
+    "config",
+    "slice",
+    "full",
+    "scan",
+    "manual",
+    "traffic",
+    "env",
+    "clear",
+    "quit",
+}
 
 
 def menu() -> None:
@@ -17,8 +32,6 @@ def menu() -> None:
     ui.print_banner()
     ui.print_status("输入 help 查看命令帮助，输入 quit 退出")
 
-    command_map = _build_command_map(session)
-
     while True:
         raw_command = prompter.get_command_input(prompt_session)
         if raw_command is None:
@@ -26,13 +39,15 @@ def menu() -> None:
         command_invocation = prompter.parse_command(raw_command)
         if command_invocation is None:
             continue
+        if not _validate_command_args(command_invocation):
+            continue
         if command_invocation.name == "quit":
             sys.exit(0)
         if command_invocation.name == "help":
             _handle_help_command(command_invocation)
             continue
-        if command_invocation.name == "set":
-            _handle_set_command(session, command_invocation)
+        if command_invocation.name == "config":
+            session = _handle_config_command(session)
             continue
         if command_invocation.name == "clear":
             _clear_screen()
@@ -43,22 +58,8 @@ def menu() -> None:
             command_invocation,
         ):
             continue
-        if command_invocation.name == "scan" and _handle_scan_command(
-            session,
-            command_invocation,
-        ):
-            continue
-        if command_invocation.name == "manual" and _handle_manual_command(
-            session,
-            command_invocation,
-        ):
-            continue
-        if command_invocation.name == "full" and _handle_full_command(
-            session,
-            command_invocation,
-        ):
-            continue
 
+        command_map = _build_command_map(session)
         action = command_map.get(command_invocation.name)
         if action is None:
             ui.print_status("未知命令: {0}".format(raw_command), "WARN")
@@ -86,6 +87,29 @@ def _build_command_map(session: AppSession) -> Dict[str, Callable[[], None]]:
     }
 
 
+def _validate_command_args(command_invocation: prompter.CommandInvocation) -> bool:
+    """校验命令参数是否符合当前意图型入口约束。"""
+    if (
+        command_invocation.name in INTENT_ONLY_COMMANDS
+        and command_invocation.args
+    ):
+        ui.print_status(
+            "{0} 不接受参数，请直接输入 {0}".format(command_invocation.name),
+            "WARN",
+        )
+        return False
+    if command_invocation.name == "help" and len(command_invocation.args) > 1:
+        ui.print_status("help 仅支持: help 或 help <command>", "WARN")
+        return False
+    if command_invocation.name == "history" and len(command_invocation.args) > 1:
+        ui.print_status(
+            "history 仅支持: history | history clear | history last | history <序号>",
+            "WARN",
+        )
+        return False
+    return True
+
+
 def _clear_screen() -> None:
     """清空终端显示。"""
     os.system("clear")
@@ -103,43 +127,60 @@ def _handle_help_command(command_invocation: prompter.CommandInvocation) -> None
     )
 
 
-def _handle_set_command(
-    session: AppSession,
-    command_invocation: prompter.CommandInvocation,
-) -> None:
-    """处理 set 命令，更新当前会话默认参数。"""
-    if len(command_invocation.args) < 2:
-        ui.print_status(
-            "用法: set date <YYYYMMDD> | set vehicle <车号> | set source-root <path> | set dest-root <path>",
-            "WARN",
-        )
-        return
-    key = command_invocation.args[0].lower()
-    value = " ".join(command_invocation.args[1:]).strip()
-    if key == "date":
-        if not re.fullmatch(r"\d{8}", value):
-            ui.print_status("日期格式必须是 YYYYMMDD", "WARN")
-            return
-        session.ctx.logic.target_date = value
-        ui.print_status("已设置日期: {0}".format(value))
-        return
-    if key == "vehicle":
-        if not re.fullmatch(r"(XZB6|XZT5)\d{5}", value):
-            ui.print_status("车号格式必须是 XZB6xxxxx 或 XZT5xxxxx", "WARN")
-            return
-        session.ctx.logic.vehicle = value
-        ui.print_status("已设置车号: {0}".format(value))
-        return
-    if key == "source-root":
-        session.ctx.host.data_root = value
-        ui.print_status("已设置源路径: {0}".format(value))
-        return
-    if key == "dest-root":
-        session.ctx.host.dest_root = value
-        ui.print_status("已设置扫描/导出路径: {0}".format(value))
-        return
-    ui.print_status("不支持的 set 项: {0}".format(key), "WARN")
-    ui.print_status("当前支持: date | vehicle | source-root | dest-root", "WARN")
+def _handle_config_command(session: AppSession) -> AppSession:
+    """打开配置文件并在退出编辑器后重建当前会话。"""
+    config_path = session.ctx.config_path
+    ui.print_status("打开配置文件: {0}".format(config_path))
+    if not _open_in_editor(config_path):
+        return session
+    try:
+        reloaded_session = AppSession()
+    except Exception as e:
+        ui.print_status("配置重载失败，继续沿用旧会话: {0}".format(e), "ERROR")
+        return session
+    ui.print_status("配置编辑已结束，已重建当前会话配置")
+    return reloaded_session
+
+
+def _open_in_editor(config_path: Path) -> bool:
+    """使用终端编辑器打开配置文件。"""
+    editor_command = _resolve_editor_command()
+    if editor_command is None:
+        ui.print_status("未找到可用编辑器，请设置 $EDITOR 或安装 nano/vim", "ERROR")
+        return False
+    try:
+        return_code = subprocess.call(editor_command + [str(config_path)])
+    except OSError as e:
+        ui.print_status("打开配置文件失败: {0}".format(e), "ERROR")
+        return False
+    if return_code != 0:
+        ui.print_status("编辑器异常退出，未重建会话配置", "WARN")
+        return False
+    return True
+
+
+def _resolve_editor_command() -> Optional[List[str]]:
+    """按 VISUAL/EDITOR/常见终端编辑器顺序解析编辑器命令。"""
+    for env_name in ("VISUAL", "EDITOR"):
+        editor_text = os.environ.get(env_name, "").strip()
+        if not editor_text:
+            continue
+        editor_command = _split_command_text(editor_text)
+        if editor_command and which(editor_command[0]) is not None:
+            return editor_command
+    for editor_name in ("nano", "vim", "vi"):
+        editor_path = which(editor_name)
+        if editor_path is not None:
+            return [editor_path]
+    return None
+
+
+def _split_command_text(command_text: str) -> List[str]:
+    """解析环境变量中的编辑器命令。"""
+    try:
+        return shlex.split(command_text)
+    except ValueError:
+        return command_text.split()
 
 
 def _handle_history_subcommand(
@@ -164,47 +205,4 @@ def _handle_history_subcommand(
         return True
     ui.print_status("不支持的 history 子命令: {0}".format(subcommand), "WARN")
     ui.print_status("当前支持: history clear | history last | history <序号>", "WARN")
-    return True
-
-
-def _handle_scan_command(
-    session: AppSession,
-    command_invocation: prompter.CommandInvocation,
-) -> bool:
-    """处理 scan 命令的轻量参数。"""
-    if not command_invocation.args:
-        return False
-    session.ctx.host.dest_root = command_invocation.args[0]
-    workflow.auto_replay_progress(session)
-    return True
-
-
-def _handle_manual_command(
-    session: AppSession,
-    command_invocation: prompter.CommandInvocation,
-) -> bool:
-    """处理 manual 命令的直接路径输入。"""
-    if not command_invocation.args:
-        return False
-    workflow.manual_replay_progress_with_paths(session, command_invocation.args)
-    return True
-
-
-def _handle_full_command(
-    session: AppSession,
-    command_invocation: prompter.CommandInvocation,
-) -> bool:
-    """处理 full 命令的轻量参数。"""
-    if not command_invocation.args:
-        return False
-    source_name = command_invocation.args[0].lower()
-    if source_name == "local":
-        if len(command_invocation.args) > 1:
-            session.ctx.host.data_root = command_invocation.args[1]
-        workflow.full_source_progress(session, preset_mode=1)
-        return True
-    if source_name == "nas":
-        workflow.full_source_progress(session, preset_mode=2)
-        return True
-    ui.print_status("full 仅支持: full local [路径] | full nas", "WARN")
     return True
