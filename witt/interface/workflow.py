@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import List
 
+from pathlib import Path
+from typing import List
+
 from . import channel_prompter
 from . import config_prompter
 from . import prompter
