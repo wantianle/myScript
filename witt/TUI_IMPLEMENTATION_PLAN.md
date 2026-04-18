@@ -77,8 +77,8 @@ Witt >
 - `config`
 - `slice`
 - `replay`
-- `browse`
-- `files`
+- `scan`
+- `manual`
 - `history`
 - `traffic`
 - `env`

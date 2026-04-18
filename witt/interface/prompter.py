@@ -56,9 +56,9 @@ COMMAND_SPECS = [
     CommandSpec("help", ["h", "?"], "显示命令帮助", "help history"),
     CommandSpec("config", ["cfg"], "编辑用户 settings.yaml 并重建会话配置", "config"),
     CommandSpec("slice", ["s"], "查询、切片并可选回播", "slice"),
-    CommandSpec("replay", ["r", "full", "f"], "查询后直接回放原始 record，不切片", "replay"),
-    CommandSpec("browse", ["scan", "auto", "a"], "扫描本地回放目录后浏览并回放", "browse"),
-    CommandSpec("files", ["manual", "m"], "直接拖拽或输入 record 文件/目录回放", "files"),
+    CommandSpec("replay", ["r"], "查询后直接回放原始 record，不切片", "replay"),
+    CommandSpec("scan", ["a"], "扫描本地回放目录后浏览并回放", "scan"),
+    CommandSpec("manual", ["m"], "直接拖拽或输入 record 文件/目录回放", "manual"),
     CommandSpec("history", ["his"], "浏览历史并支持少量子命令", "history last"),
     CommandSpec("traffic", ["tl"], "红绿灯回灌模式", "traffic"),
     CommandSpec("env", ["e"], "查看当前环境摘要", "env"),
@@ -148,7 +148,7 @@ def find_command_spec(command_name: str) -> Optional[CommandSpec]:
 
 def _build_command_toolbar() -> str:
     """构建 REPL 底部快捷提示。"""
-    return " help  config  slice  replay  browse  files  history  traffic  env  clear  quit "
+    return " help  config  slice  replay  scan  manual  history  traffic  env  clear  quit "
 
 
 def _get_prompt_session(history_name: str) -> PromptSession:
@@ -175,9 +175,6 @@ def prompt_text(
 ) -> str:
     """统一的单行输入适配，提供历史、补全和可编辑默认值。"""
     prompt_session = _get_prompt_session(history_name)
-    prompt_suffix = ": "
-    if default_value:
-        prompt_suffix = " (默认 {0}): ".format(default_value)
     completer = None
     if completer_words:
         completer = WordCompleter(
@@ -189,7 +186,7 @@ def prompt_text(
         completer = PathCompleter(expanduser=True)
     try:
         return prompt_session.prompt(
-            prompt + prompt_suffix,
+            prompt + ": ",
             default=default_value,
             completer=completer,
             complete_while_typing=False,

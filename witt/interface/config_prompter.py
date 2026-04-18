@@ -1,36 +1,35 @@
 import os
+import re
 import urllib.parse
 from typing import Optional
 
 from . import prompter
 from . import ui
 
+VEHICLE_PREFIX_HINTS = ["XZB65", "XZT5", "XZA0"]
+
 
 def get_vehicle_name(default_vehicle: str = "") -> str:
-    """交互式采集并格式化车辆编号。"""
-    default_prefix = default_vehicle[:4] if len(default_vehicle) >= 4 else ""
-    default_vehicle_number = default_vehicle[-5:] if len(default_vehicle) >= 5 else "00000"
-    default_index = 1 if default_prefix == "XZB6" else 2 if default_prefix == "XZT5" else 0
-    vehicle_prefix = prompter.choose_option(
-        "\n选择车辆类型",
-        ["XZB6", "XZT5"],
-        default_index=default_index,
-    )
+    """交互式采集车辆编号。"""
     while True:
-        vehicle_number = prompter.prompt_text(
-            "输入车辆号",
-            default_vehicle_number,
-            history_name="vehicle_number",
+        vehicle_name = prompter.prompt_text(
+            "车辆号",
+            default_vehicle,
+            history_name="vehicle_name",
+            completer_words=VEHICLE_PREFIX_HINTS,
+        ).upper()
+        if _is_valid_vehicle_name(vehicle_name):
+            print(f"\033[1;33m@{vehicle_name}\033[0m")
+            return vehicle_name
+        ui.print_status(
+            "车号格式必须是 XZB6/XZT5/XZA0 开头并跟 5 位数字，例如 XZB650001",
+            "ERROR",
         )
-        if not vehicle_number:
-            vehicle_number = default_vehicle_number
-        if vehicle_number.isdigit() and 0 <= int(vehicle_number) <= 99999:
-            vehicle_number = vehicle_number.zfill(5)
-            break
-        ui.print_status("编号必须是 0-99999", "ERROR")
-    vehicle_name = f"{vehicle_prefix}{vehicle_number}"
-    print(f"\033[1;33m@{vehicle_name}\033[0m")
-    return vehicle_name
+
+
+def _is_valid_vehicle_name(vehicle_name: str) -> bool:
+    """校验车辆编号格式。"""
+    return bool(re.fullmatch(r"(XZB6|XZT5|XZA0)\d{5}", vehicle_name))
 
 
 def get_basic_params(ctx) -> None:
