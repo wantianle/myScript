@@ -47,12 +47,12 @@ class ReplayPrompterTests(unittest.TestCase):
         ):
             with patch("interface.replay_prompter.ui.print_status") as print_status:
                 selected_value = replay_prompter._select_filtered_value(
-                    ["foo"],
+                    [1],
                     lambda items, keyword, total: render_calls.append(
                         (list(items), keyword, total)
                     ),
                     lambda items, keyword: [
-                        item for item in items if keyword in item
+                        item for item in items if keyword in str(item)
                     ],
                     "选择历史",
                     "test_history_selection",

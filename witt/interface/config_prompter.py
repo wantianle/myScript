@@ -33,7 +33,14 @@ def _is_valid_vehicle_name(vehicle_name: str) -> bool:
 
 def get_basic_params(ctx) -> None:
     """采集基础业务参数，包括日期和车辆。"""
-    ui.print_status("基本信息配置")
+    ui.show_config_section(
+        "基本信息配置",
+        "当前车号 {0} | 当前日期 {1}".format(
+            ctx.logic.vehicle or "未设置",
+            ctx.logic.target_date or "未设置",
+        ),
+        "先确认日期和车辆，后续查询、扫描和回播都基于这组信息",
+    )
     ctx.logic.target_date = prompter.get_user_input(
         "数据日期",
         ctx.logic.target_date,
@@ -44,6 +51,11 @@ def get_basic_params(ctx) -> None:
 
 def get_split_params(ctx) -> None:
     """采集切片时间窗参数并完成基础校验。"""
+    ui.show_config_section(
+        "切片时间窗配置",
+        "当前 before {0}s | after {1}s".format(ctx.logic.before, ctx.logic.after),
+        "设置 tag 前后时间窗，总时长必须大于 0 秒",
+    )
     while True:
         before = prompter.get_int_input(
             "切片 tag 前多少秒",
@@ -72,6 +84,14 @@ def get_source_path_params(
     preset_mode: Optional[int] = None,
 ) -> None:
     """采集数据源路径参数。"""
+    mode_hint = "本地 / NAS"
+    if allow_remote:
+        mode_hint = "本地 / NAS / 车端"
+    ui.show_config_section(
+        "数据源配置",
+        "选择输入模式并在需要时补充源路径",
+        "可选模式: {0}".format(mode_hint),
+    )
     if preset_mode is not None:
         ctx.logic.mode = int(preset_mode)
     else:
@@ -92,6 +112,11 @@ def get_source_path_params(
 
 def get_export_path_params(ctx) -> None:
     """采集切片导出路径。"""
+    ui.show_config_section(
+        "导出路径配置",
+        "当前导出路径: {0}".format(ctx.host.dest_root),
+        "切片结果将写入这个目录",
+    )
     ctx.host.dest_root = prompter.get_user_input(
         "切片导出路径 (限/media下)",
         ctx.host.dest_root,
@@ -109,6 +134,11 @@ def get_path_params(ctx) -> None:
 
 def get_json_input() -> str:
     """获取 version.json 输入：支持路径拖拽和内容粘贴"""
+    ui.show_config_section(
+        "版本文件配置",
+        "提供版本文件用于环境恢复",
+        "支持直接粘贴路径或拖拽 version 文件",
+    )
     while True:
         try:
             raw_data = prompter.prompt_text(
@@ -130,6 +160,11 @@ def get_json_input() -> str:
 
 def update_dest_root(ctx, prompt: str) -> None:
     """更新导出根目录。"""
+    ui.show_config_section(
+        "目标路径配置",
+        "当前路径: {0}".format(ctx.host.dest_root),
+        "更新扫描或导出根目录",
+    )
     ctx.host.dest_root = prompter.get_user_input(
         prompt,
         ctx.host.dest_root,

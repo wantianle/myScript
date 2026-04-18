@@ -334,6 +334,15 @@ def show_manual_play_header() -> None:
     )
 
 
+def show_config_section(
+    title: str,
+    summary: str = "",
+    hint: str = "",
+) -> None:
+    """打印配置采集阶段的页面头。"""
+    _CONSOLE.print(_build_page_intro_panel(title, summary, hint))
+
+
 def show_option_choices(
     title: str,
     prompt: str,

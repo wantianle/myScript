@@ -116,6 +116,31 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("All", rendered)
         self.assertIn("是", rendered)
 
+    def test_show_config_section_renders_summary_and_hint(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_config_section(
+                "基本信息配置",
+                "当前车号 XZB600001 | 当前日期 20260415",
+                "先确认日期和车辆，后续查询、扫描和回播都基于这组信息",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("基本信息配置", rendered)
+        self.assertIn("当前车号 XZB600001 | 当前日期 20260415", rendered)
+        self.assertIn("先确认日期和车辆", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
