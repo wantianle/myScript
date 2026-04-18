@@ -86,6 +86,36 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("查看命令: replay", rendered)
         self.assertIn("输入 help <command> 查看单个命令", rendered)
 
+    def test_show_option_choices_renders_default_marker(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_option_choices(
+                "SOC 选择",
+                "选择要播放的 SOC",
+                ["soc1", "soc2", "All"],
+                default_index=3,
+                summary="当前 Tag: demo_tag",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("SOC 选择", rendered)
+        self.assertIn("当前 Tag: demo_tag", rendered)
+        self.assertIn("候选项", rendered)
+        self.assertIn("soc1", rendered)
+        self.assertIn("All", rendered)
+        self.assertIn("是", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -204,9 +204,13 @@ def choose_option(
     default_index: int = 0,
 ):
     """显示简易选项列表并返回选中值或索引。"""
-    for i, opt in enumerate(options, 1):
-        print(f"[{i}] {opt}  ", end="")
     while True:
+        ui.show_option_choices(
+            "选项列表",
+            prompt,
+            options,
+            default_index=default_index,
+        )
         default_value = (
             str(default_index)
             if default_index and 1 <= default_index <= len(options)

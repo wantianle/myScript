@@ -190,10 +190,16 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
     if not selection_items:
         ui.print_status("当前回播条目没有可用的 SOC 数据", "WARN")
         return []
+    option_labels = [option_label for _, option_label, _ in selection_items]
+    default_index = int(default_choice) if default_choice.isdigit() else 0
     while True:
-        for option_value, option_label, _ in selection_items:
-            print(f"  [{option_value}] {option_label}")
-
+        ui.show_option_choices(
+            "SOC 选择",
+            "选择要播放的 SOC",
+            option_labels,
+            default_index=default_index,
+            summary="当前 Tag: {0}".format(tag_entry.tag),
+        )
         completer_words = []
         for option_value, option_label, _ in selection_items:
             completer_words.append(option_value)

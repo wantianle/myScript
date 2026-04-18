@@ -334,6 +334,43 @@ def show_manual_play_header() -> None:
     )
 
 
+def show_option_choices(
+    title: str,
+    prompt: str,
+    options: Sequence[str],
+    default_index: int = 0,
+    summary: str = "",
+) -> None:
+    """打印统一风格的选项列表。"""
+    hint = "输入序号或选项名"
+    if default_index and 1 <= default_index <= len(options):
+        hint = "{0}，回车使用默认项".format(hint)
+    _CONSOLE.print(
+        _build_page_intro_panel(
+            title,
+            summary or prompt,
+            hint,
+        )
+    )
+    table = Table(
+        title="候选项",
+        box=box.SIMPLE_HEAVY,
+        header_style="header",
+        expand=True,
+    )
+    table.add_column("ID", justify="right", style="accent", width=4)
+    table.add_column("选项", style="accent", min_width=16)
+    table.add_column("默认", style="muted", width=8)
+    for option_index, option_text in enumerate(options, 1):
+        default_marker = "是" if option_index == default_index else ""
+        table.add_row(
+            str(option_index),
+            option_text,
+            default_marker,
+        )
+    _CONSOLE.print(table)
+
+
 def show_playback_info(
     tag: str,
     duration: int,
