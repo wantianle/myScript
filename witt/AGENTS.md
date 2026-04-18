@@ -57,6 +57,7 @@
   - `[TEST][witt]...`
   - `[DOCS][witt]...`
 - Keep commits small and coherent. Commit after each meaningful step.
+- After each completed change, run `git add -A`, `git commit -m "..."`, and `git push` directly.
 - Before opening a PR, run the relevant minimal unit tests and a syntax sweep.
 
 ## Architecture & Configuration Notes
@@ -122,7 +123,6 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
 
 
 
