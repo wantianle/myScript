@@ -1,35 +1,65 @@
-import questionary
-from questionary import Choice
 from pathlib import Path
 from typing import Callable, Dict, List, Set
 
 from core.errors import RecordInfoError
 from core.models import ChannelInfo, TaskEntry
 from core.session import AppSession
-from interface import ui
+from interface import prompter, ui
 
 
 def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str]:
-    """显示可勾选的频道列表并返回选中的频道名。"""
-    choices = [
-        Choice(
-            title=f"{channel.name:<20} (Msg Count: {channel.count})",
-            value=channel.name,
+    """显示频道列表并返回选中的频道名。"""
+    current_channels = list(channels)
+    search_keyword = ""
+    while True:
+        ui.show_channel_candidates(current_channels, search_keyword=search_keyword)
+        raw_choice = prompter.prompt_text(
+            "{0}\n输入序号/范围选择要删除的频道"
+            " | 支持 1,3,5 / 2-6 / 0 5 7-15 / 0"
+            " | /关键字筛选 | / 清空筛选 | 回车跳过".format(prompt),
+            history_name="channel_selection",
+            completer_words=[
+                str(index) for index in range(1, len(current_channels) + 1)
+            ],
         )
+        if not raw_choice:
+            return []
+        next_keyword = prompter.resolve_filter_keyword(raw_choice)
+        if next_keyword is not None:
+            next_channels = _filter_channels(channels, next_keyword)
+            if next_keyword and not next_channels:
+                ui.print_status("没有匹配到频道，请调整关键字", "WARN")
+                continue
+            search_keyword = next_keyword
+            current_channels = next_channels if next_keyword else list(channels)
+            continue
+        try:
+            selected_indices = prompter.parse_index_expression(
+                raw_choice,
+                len(current_channels),
+            )
+        except ValueError:
+            ui.print_status("输入无效，请重新选择", "WARN")
+            continue
+        if not selected_indices:
+            ui.print_status("未选中任何频道，请检查输入", "WARN")
+            continue
+        return [current_channels[index - 1].name for index in selected_indices]
+
+
+def _filter_channels(
+    channels: List[ChannelInfo],
+    keyword: str,
+) -> List[ChannelInfo]:
+    """按关键字过滤频道。"""
+    return [
+        channel
         for channel in channels
+        if prompter.matches_search_keyword(
+            keyword,
+            [channel.name, channel.count],
+        )
     ]
-    selected = questionary.checkbox(
-        prompt,
-        choices=choices,
-        style=questionary.Style(
-            [
-                ("pointer", "fg:cyan bold"),
-                ("highlighted", "fg:cyan bold"),
-                ("selected", "fg:red"),
-            ]
-        ),
-    ).ask()
-    return selected if selected is not None else []
 
 
 def _get_paths_channels(

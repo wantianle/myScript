@@ -3,9 +3,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from types import ModuleType
 from typing import Any, cast
-import sys
 
 from core.models import (
     ChannelInfo,
@@ -18,59 +16,6 @@ from core.models import (
     TaskEntry,
 )
 from utils import parser
-
-
-fake_questionary = ModuleType("questionary")
-
-
-class _FakeChoice:
-    def __init__(self, title=None, value=None):
-        self.title = title
-        self.value = value
-
-
-def _fake_style(value):
-    return value
-
-
-def _fake_select(*args, **kwargs):
-    class _Prompt:
-        def ask(self):
-            return None
-
-    return _Prompt()
-
-
-def _fake_checkbox(*args, **kwargs):
-    class _Prompt:
-        def ask(self):
-            return []
-
-    return _Prompt()
-
-
-setattr(fake_questionary, "Choice", _FakeChoice)
-setattr(fake_questionary, "Style", _fake_style)
-setattr(fake_questionary, "select", _fake_select)
-setattr(fake_questionary, "checkbox", _fake_checkbox)
-sys.modules.setdefault("questionary", fake_questionary)
-
-fake_alive_progress = ModuleType("alive_progress")
-
-
-def _fake_alive_bar(*args, **kwargs):
-    class _Bar:
-        def __enter__(self):
-            return lambda *bar_args, **bar_kwargs: None
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    return _Bar()
-
-
-setattr(fake_alive_progress, "alive_bar", _fake_alive_bar)
-sys.modules.setdefault("alive_progress", fake_alive_progress)
 
 from interface import replay_workflow
 

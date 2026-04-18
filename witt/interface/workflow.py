@@ -1,9 +1,6 @@
 from pathlib import Path
 from typing import List
 
-from pathlib import Path
-from typing import List
-
 from . import channel_prompter
 from . import config_prompter
 from . import prompter
@@ -11,6 +8,16 @@ from . import ui
 from . import replay_workflow
 from core.session import AppSession
 from utils import parser
+
+
+def _task_entry_search_values(task_entry) -> List[str]:
+    """构造 Tag 查询结果的关键字匹配字段。"""
+    return [
+        task_entry.id,
+        task_entry.time,
+        task_entry.name,
+        str(len(task_entry.paths)),
+    ]
 
 
 def _show_skipped_batches(skipped_batches) -> None:
@@ -57,8 +64,14 @@ def slice_progress(session: AppSession) -> None:
     if not task_list:
         return
     selected_tasks = prompter.get_selected_indices(
-        task_list, prompt="请选择要处理的 Tag 序号"
+        task_list,
+        prompt="请选择要处理的 Tag 序号",
+        render_items=ui.show_source_task_entries,
+        search_values_getter=_task_entry_search_values,
+        history_name="slice_task_selection",
     )
+    if not selected_tasks:
+        return
     valid_tasks = [task_entry for task_entry in selected_tasks if task_entry.paths]
     if not valid_tasks:
         ui.print_status("所选序号无效或无路径数据", "ERROR")

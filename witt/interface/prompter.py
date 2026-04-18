@@ -2,7 +2,7 @@ import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, TypeVar
+from typing import Callable, List, Optional, Sequence, TypeVar
 
 import questionary
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -259,9 +259,63 @@ def choose_option(
         ui.print_status("输入无效，请重新选择", "WARN")
 
 
+def resolve_filter_keyword(raw_input: str) -> Optional[str]:
+    """解析 `/关键字` 形式的筛选输入。"""
+    if not raw_input.startswith("/"):
+        return None
+    return raw_input[1:].strip()
+
+
+def matches_search_keyword(keyword: str, values: Sequence[str]) -> bool:
+    """判断关键字是否命中给定字段集合。"""
+    normalized_keyword = keyword.strip().lower()
+    if not normalized_keyword:
+        return True
+    searchable_text = " ".join(str(value) for value in values).lower()
+    return all(token in searchable_text for token in normalized_keyword.split())
+
+
+def parse_index_expression(raw_input: str, total_count: int) -> List[int]:
+    """解析序号表达式并返回 1-based 序号列表。"""
+    clean_input = re.sub(r"[^\d\-,\s\n]", "", raw_input)
+    tokens = [token for token in re.split(r"[,\s\n]+", clean_input) if token]
+    if not tokens:
+        return []
+
+    full_set = set(range(1, total_count + 1))
+    result_set = set()
+    is_exclude_mode = tokens[0] == "0"
+    if is_exclude_mode:
+        result_set = full_set.copy()
+        tokens = tokens[1:]
+    for token in tokens:
+        if "-" in token and not token.startswith("-"):
+            parts = token.split("-")
+            if len(parts) != 2:
+                raise ValueError("invalid range token")
+            start = int(parts[0])
+            end = int(parts[1])
+            scope = set(range(min(start, end), max(start, end) + 1))
+            if is_exclude_mode:
+                result_set -= scope
+            else:
+                result_set |= scope
+            continue
+        value = abs(int(token))
+        if is_exclude_mode:
+            result_set.discard(value)
+        else:
+            result_set.add(value)
+
+    return sorted(index for index in result_set if 1 <= index <= total_count)
+
+
 def get_selected_indices(
     all_tasks: Sequence[TaskLike],
     prompt: str = "请输入要处理的序号",
+    render_items: Optional[Callable[[Sequence[TaskLike], str], None]] = None,
+    search_values_getter: Optional[Callable[[TaskLike], Sequence[str]]] = None,
+    history_name: str = "task_selection",
 ) -> List[TaskLike]:
     """根据用户输入的序号表达式返回选中的任务对象列表。"""
     total_count = len(all_tasks)
@@ -269,43 +323,39 @@ def get_selected_indices(
         ui.print_status("任务列表为空", "ERROR")
         return []
 
+    current_tasks = list(all_tasks)
+    search_keyword = ""
     while True:
+        if render_items is not None:
+            render_items(current_tasks, search_keyword)
         raw_input = prompt_text(
-            "{0}\n单选 1,3,5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0".format(prompt),
-            history_name="task_selection",
+            "{0}\n单选 1,3,5 | 多选 2-6 | 反选 0 5 7-15 | 全选 0"
+            " | /关键字筛选 | / 清空筛选 | 回车返回".format(prompt),
+            history_name=history_name,
         )
-        clean_input = re.sub(r"[^\d\-,\s\n]", "", raw_input)
-        tokens = [t for t in re.split(r"[,\s\n]+", clean_input) if t]
-        if not tokens:
-            ui.print_status("输入为空，请重新输入", "WARN")
-            continue
-
-        full_set = set(range(1, total_count + 1))
-        result_set = set()
-        is_exclude_mode = tokens[0] == "0"
-        if is_exclude_mode:
-            result_set = full_set.copy()
-            tokens = tokens[1:]
-        for token in tokens:
-            try:
-                if "-" in token and not token.startswith("-"):
-                    parts = token.split("-")
-                    start, end = int(parts[0]), int(parts[1])
-                    scope = set(range(min(start, end), max(start, end) + 1))
-                    if is_exclude_mode:
-                        result_set -= scope
-                    else:
-                        result_set |= scope
-                else:
-                    val = abs(int(token))
-                    if is_exclude_mode:
-                        result_set.discard(val)
-                    else:
-                        result_set.add(val)
-            except (ValueError, IndexError):
-                ui.print_status("输入无效，请重新输入", "WARN")
+        if not raw_input.strip():
+            return []
+        filter_keyword = resolve_filter_keyword(raw_input)
+        if filter_keyword is not None:
+            if search_values_getter is None:
+                ui.print_status("当前列表不支持关键字筛选", "WARN")
                 continue
-        final_ids = sorted([i for i in result_set if 1 <= i <= total_count])
+            next_tasks = [
+                task
+                for task in all_tasks
+                if matches_search_keyword(filter_keyword, search_values_getter(task))
+            ]
+            if filter_keyword and not next_tasks:
+                ui.print_status("没有匹配到结果，请调整关键字", "WARN")
+                continue
+            search_keyword = filter_keyword
+            current_tasks = next_tasks if filter_keyword else list(all_tasks)
+            continue
+        try:
+            final_ids = parse_index_expression(raw_input, len(current_tasks))
+        except ValueError:
+            ui.print_status("输入无效，请重新输入", "WARN")
+            continue
         if not final_ids:
             ui.print_status("未选中任何有效序号，请检查输入", "ERROR")
             continue
@@ -317,7 +367,7 @@ def get_selected_indices(
             preview_str += " ..."
         ui.print_status(f"选中待处理序号: [{preview_str}(共 {len(final_ids)} 项)]")
         if get_confirm_input("确认执行？", True):
-            return [all_tasks[i - 1] for i in final_ids]
+            return [current_tasks[i - 1] for i in final_ids]
         ui.print_status("已取消...", "WARN")
 
 

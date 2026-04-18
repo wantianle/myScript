@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
-from core.models import LibraryEntry, ReplayHistoryEntry
+from core.models import ChannelInfo, LibraryEntry, ReplayHistoryEntry, TaskEntry
 
 _THEME = Theme(
     {
@@ -113,10 +113,14 @@ def show_playback_library(
     library: List[LibraryEntry],
     vehicle: str,
     target_date: str,
+    search_keyword: str = "",
 ) -> None:
     """打印回放库列表。"""
+    title = "回放库  {0} | {1}".format(vehicle, target_date)
+    if search_keyword:
+        title = "{0}  |  过滤: {1}".format(title, search_keyword)
     table = Table(
-        title="回放库  {0} | {1}".format(vehicle, target_date),
+        title=title,
         box=box.SIMPLE_HEAVY,
         header_style="header",
         expand=True,
@@ -134,6 +138,60 @@ def show_playback_library(
             entry.tag,
             meta.get("soc1", "N/A"),
             meta.get("soc2", "N/A"),
+        )
+    _CONSOLE.print(table)
+
+
+def show_source_task_entries(
+    task_entries: List[TaskEntry],
+    search_keyword: str = "",
+) -> None:
+    """打印原始查询结果列表。"""
+    title = "查询结果"
+    if search_keyword:
+        title = "查询结果  |  过滤: {0}".format(search_keyword)
+    table = Table(
+        title=title,
+        box=box.SIMPLE_HEAVY,
+        header_style="header",
+        expand=True,
+    )
+    table.add_column("ID", justify="right", style="accent", width=4)
+    table.add_column("Tag时间", style="label", min_width=16)
+    table.add_column("Tag", style="accent", min_width=18)
+    table.add_column("记录数", justify="right", style="label", width=8)
+    for index, task_entry in enumerate(task_entries, 1):
+        table.add_row(
+            str(index),
+            task_entry.time,
+            task_entry.name,
+            str(len(task_entry.paths)),
+        )
+    _CONSOLE.print(table)
+
+
+def show_channel_candidates(
+    channels: List[ChannelInfo],
+    search_keyword: str = "",
+) -> None:
+    """打印频道候选列表。"""
+    title = "频道列表"
+    if search_keyword:
+        title = "频道列表  |  过滤: {0}".format(search_keyword)
+    table = Table(
+        title=title,
+        box=box.SIMPLE_HEAVY,
+        header_style="header",
+        expand=True,
+    )
+    table.add_column("ID", justify="right", style="accent", width=4)
+    table.add_column("Channel", style="accent", min_width=24)
+    table.add_column("Msg Count", justify="right", style="label", width=10)
+    for index, channel in enumerate(channels, 1):
+        table.add_row(
+            str(index),
+            channel.name,
+            str(channel.count),
         )
     _CONSOLE.print(table)
 

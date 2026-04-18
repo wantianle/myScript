@@ -16,6 +16,7 @@
 - `scripts/` contains shell entry scripts used by the Python layer.
 - `tests/` contains minimal `unittest` unit tests.
 - `config/` stores runtime YAML and tool config assets.
+- `.venv/` is the project virtual environment and should be used for local Python commands when present.
 
 ## Build, Test, and Development Commands
 
@@ -23,8 +24,12 @@
   Initializes the local environment and launches the tool.
 - `python3 main.py`
   Runs the CLI directly when dependencies are already available.
+- `.venv/bin/python main.py`
+  Preferred local entrypoint when the project virtual environment already exists.
 - `python3 -m unittest discover -s tests -p 'test_*.py'`
   Runs the current minimal unit test suite.
+- `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'`
+  Preferred test command when `.venv` is available.
 - `python3 -m py_compile $(find . -path '*/.venv' -prune -o -name '*.py' -print)`
   Performs a repository-wide syntax check.
 
@@ -117,7 +122,6 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
 
 
 
