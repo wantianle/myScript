@@ -141,6 +141,31 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("当前车号 XZB600001 | 当前日期 20260415", rendered)
         self.assertIn("先确认日期和车辆", rendered)
 
+    def test_show_replay_section_renders_summary_and_hint(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_replay_section(
+                "播放倍速配置",
+                "默认 1.0x，可设置 0.1 到 10x",
+                "常用值: 0.5 / 1.0 / 1.5 / 2.0",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("播放倍速配置", rendered)
+        self.assertIn("默认 1.0x，可设置 0.1 到 10x", rendered)
+        self.assertIn("常用值: 0.5 / 1.0 / 1.5 / 2.0", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

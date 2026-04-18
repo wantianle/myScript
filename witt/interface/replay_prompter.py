@@ -264,6 +264,11 @@ def select_replay_history_index(
 
 def get_playback_range() -> tuple:
     """读取并解析回放时间范围输入。"""
+    ui.show_replay_section(
+        "播放范围配置",
+        "调整起点或限制回播时间范围",
+        "输入 5 表示改变起点，输入 5-10 表示限制范围，回车全播",
+    )
     range_input = prompter.prompt_text(
         "调整播放时间 (改变起点 5 | 限制范围 5-10 | 回车全播)",
         history_name="playback_range",
@@ -273,6 +278,11 @@ def get_playback_range() -> tuple:
 
 def get_playback_rate() -> float:
     """读取播放倍速，范围限制在 0.1 到 10 之间。"""
+    ui.show_replay_section(
+        "播放倍速配置",
+        "默认 1.0x，可设置 0.1 到 10x",
+        "常用值: 0.5 / 1.0 / 1.5 / 2.0",
+    )
     while True:
         rate_input = prompter.prompt_text(
             "播放倍速 (0.1-10 | 回车 1.0)",
@@ -294,6 +304,11 @@ def get_playback_rate() -> float:
 
 def get_issue_marker() -> Optional[ReplayIssueMarker]:
     """回播结束后读取问题时间点和备注。"""
+    ui.show_replay_section(
+        "问题标记配置",
+        "回播结束后可记录问题时间点和现象备注",
+        "输入 y 进入记录流程，输入 n 跳过",
+    )
     if not prompter.get_confirm_input("是否记录问题时间点标记？"):
         return None
     return ReplayIssueMarker(
@@ -304,6 +319,11 @@ def get_issue_marker() -> Optional[ReplayIssueMarker]:
 
 def _get_issue_start_sec() -> int:
     """读取问题时间点秒数，用于覆盖 issue 草稿中的 range(-s)。"""
+    ui.show_replay_section(
+        "问题时间点配置",
+        "用于覆盖 issue 草稿中的 -s 时间点",
+        "请输入非负整数秒数，例如 37",
+    )
     while True:
         raw_value = prompter.prompt_text(
             "问题时间点秒数(-s，例 37)",
@@ -316,6 +336,11 @@ def _get_issue_start_sec() -> int:
 
 def _get_issue_description() -> str:
     """读取问题现象备注。"""
+    ui.show_replay_section(
+        "问题备注配置",
+        "记录简短问题现象",
+        "备注不能为空",
+    )
     while True:
         issue_description = prompter.prompt_text(
             "简短备注",

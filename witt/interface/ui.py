@@ -343,6 +343,15 @@ def show_config_section(
     _CONSOLE.print(_build_page_intro_panel(title, summary, hint))
 
 
+def show_replay_section(
+    title: str,
+    summary: str = "",
+    hint: str = "",
+) -> None:
+    """打印回播参数采集阶段的页面头。"""
+    _CONSOLE.print(_build_page_intro_panel(title, summary, hint))
+
+
 def show_option_choices(
     title: str,
     prompt: str,
