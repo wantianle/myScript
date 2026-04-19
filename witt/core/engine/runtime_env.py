@@ -95,36 +95,6 @@ class RuntimeEnvironmentManager:
         return self.sync_runtime_environment(vmc_path, version_info, vehicle_name)
 
 
-_DEFAULT_RUNTIME_ENV_MANAGER = RuntimeEnvironmentManager()
-
-
-def load_version_info(version_path: Path) -> RuntimeVersionInfo:
-    return _DEFAULT_RUNTIME_ENV_MANAGER.load_version_info(version_path)
-
-
-def sync_runtime_environment(
-    vmc_path: Path,
-    version_info: RuntimeVersionInfo,
-    vehicle_name: str,
-) -> bool:
-    return _DEFAULT_RUNTIME_ENV_MANAGER.sync_runtime_environment(
-        vmc_path,
-        version_info,
-        vehicle_name,
-    )
-
-
-def restore_runtime_environment(
-    version_path: Path,
-    vmc_path: Path,
-    vehicle_name: str,
-) -> bool:
-    return _DEFAULT_RUNTIME_ENV_MANAGER.restore_runtime_environment(
-        version_path,
-        vmc_path,
-        vehicle_name,
-    )
-
 
 def _load_version_json(version_path: Path) -> dict:
     try:

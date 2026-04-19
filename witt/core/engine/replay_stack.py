@@ -178,14 +178,3 @@ class ReplayStackManager:
                 if not details
                 else "{0}: {1}".format(error_summary, details[0])
             ) from e
-
-
-_DEFAULT_REPLAY_STACK_MANAGER = ReplayStackManager()
-
-
-def start_standard_replay_stack(ctx) -> None:
-    _DEFAULT_REPLAY_STACK_MANAGER.start_standard_replay_stack(ctx)
-
-
-def start_traffic_light_stack(ctx) -> None:
-    _DEFAULT_REPLAY_STACK_MANAGER.start_traffic_light_stack(ctx)
