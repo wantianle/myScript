@@ -50,3 +50,11 @@ class FindRecordError(WittCoreError):
 
 class TagFileMissingError(FindRecordError):
     """Raised when a query root has candidate records but no tag files."""
+
+
+class RuntimeEnvironmentError(WittCoreError):
+    """Raised when runtime environment sync cannot be completed."""
+
+
+class ReplayStackError(WittCoreError):
+    """Raised when replay stack startup cannot be completed."""

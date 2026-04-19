@@ -242,6 +242,66 @@ class ScriptRunnerTests(unittest.TestCase):
             "无法连接车机或找不到对应record 文件！",
         )
 
+    def test_restore_runtime_environment_uses_python_runtime_sync(self) -> None:
+        runner = ScriptRunner(
+            cast(
+                Any,
+                SimpleNamespace(
+                    paths=SimpleNamespace(scripts_dir="scripts"),
+                    docker=SimpleNamespace(docker_scripts="/tmp"),
+                    host=SimpleNamespace(mdrive_root="/tmp/mdrive"),
+                    logic=SimpleNamespace(version="/tmp/version.json"),
+                    vehicle="XZB600001",
+                ),
+            )
+        )
+
+        with patch(
+            "core.runner.runtime_env.restore_runtime_environment",
+            return_value=False,
+        ) as restore_runtime_environment:
+            runner.restore_runtime_environment()
+
+        restore_runtime_environment.assert_called_once_with(
+            version_path=Path("/tmp/version.json"),
+            vmc_path=Path("/tmp/mdrive/vmc.sh"),
+            vehicle_name="XZB600001",
+        )
+
+    def test_start_replay_stack_uses_python_replay_stack(self) -> None:
+        runner = ScriptRunner(
+            cast(
+                Any,
+                SimpleNamespace(
+                    paths=SimpleNamespace(scripts_dir="scripts"),
+                    docker=SimpleNamespace(docker_scripts="/tmp"),
+                    host=SimpleNamespace(mdrive_root="/tmp/mdrive"),
+                ),
+            )
+        )
+
+        with patch("core.runner.replay_stack.start_standard_replay_stack") as start_standard_replay_stack:
+            runner.start_replay_stack()
+
+        start_standard_replay_stack.assert_called_once_with(runner.ctx)
+
+    def test_start_traffic_light_stack_uses_python_replay_stack(self) -> None:
+        runner = ScriptRunner(
+            cast(
+                Any,
+                SimpleNamespace(
+                    paths=SimpleNamespace(scripts_dir="scripts"),
+                    docker=SimpleNamespace(docker_scripts="/tmp"),
+                    host=SimpleNamespace(mdrive_root="/tmp/mdrive"),
+                ),
+            )
+        )
+
+        with patch("core.runner.replay_stack.start_traffic_light_stack") as start_traffic_light_stack:
+            runner.start_traffic_light_stack()
+
+        start_traffic_light_stack.assert_called_once_with(runner.ctx)
+
 
 if __name__ == "__main__":
     unittest.main()

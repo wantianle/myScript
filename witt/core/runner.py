@@ -9,7 +9,15 @@ from pathlib import Path
 from typing import List
 
 from core.engine import record_finder
-from core.errors import CommandExecutionError, FindRecordError, ScriptExecutionError
+from core.engine import replay_stack
+from core.engine import runtime_env
+from core.errors import (
+    CommandExecutionError,
+    FindRecordError,
+    ReplayStackError,
+    RuntimeEnvironmentError,
+    ScriptExecutionError,
+)
 from core.models import TaskEntry
 
 
@@ -274,15 +282,28 @@ class ScriptRunner:
 
     def restore_runtime_environment(self) -> None:
         """恢复运行环境版本配置。"""
-        self._run_script("restore_runtime_env.sh")
+        try:
+            runtime_env.restore_runtime_environment(
+                version_path=Path(str(self.ctx.logic.version)),
+                vmc_path=Path(self.ctx.host.mdrive_root) / "vmc.sh",
+                vehicle_name=self.ctx.vehicle,
+            )
+        except RuntimeEnvironmentError as e:
+            raise ScriptExecutionError("restore_runtime_env.sh", str(e)) from e
 
     def start_replay_stack(self) -> None:
         """启动标准回放相关模块。"""
-        self._run_script("start_replay_stack.sh")
+        try:
+            replay_stack.start_standard_replay_stack(self.ctx)
+        except ReplayStackError as e:
+            raise ScriptExecutionError("start_replay_stack.sh", str(e)) from e
 
     def start_traffic_light_stack(self) -> None:
         """启动红绿灯回灌相关模块。"""
-        self._run_script("start_traffic_light_stack.sh")
+        try:
+            replay_stack.start_traffic_light_stack(self.ctx)
+        except ReplayStackError as e:
+            raise ScriptExecutionError("start_traffic_light_stack.sh", str(e)) from e
 
     def start_standard_replay_stack(self) -> None:
         """启动标准回放完整栈。"""
