@@ -154,7 +154,11 @@ def get_json_input() -> str:
             if os.path.exists(processed_path):
                 return processed_path
         except KeyboardInterrupt:
-            ui.print_status("已取消...")
+            ui.show_notice_section(
+                "版本文件配置",
+                "已取消",
+                "WARN",
+            )
             return ""
 
 

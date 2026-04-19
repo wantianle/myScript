@@ -253,5 +253,30 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("当前阶段", rendered)
         self.assertIn("正在构建回播条目列表", rendered)
 
+    def test_show_notice_section_renders_summary_and_details(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_notice_section(
+                "历史命令",
+                "已清空全部回播历史",
+                details=["本次操作不可恢复"],
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("历史命令", rendered)
+        self.assertIn("已清空全部回播历史", rendered)
+        self.assertIn("本次操作不可恢复", rendered)
+
 if __name__ == "__main__":
     unittest.main()

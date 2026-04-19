@@ -386,6 +386,32 @@ def show_result_section(
     )
 
 
+def show_notice_section(
+    title: str,
+    summary: str,
+    level: str = "INFO",
+    details: Optional[Sequence[str]] = None,
+) -> None:
+    """打印统一风格的轻量反馈块。"""
+    level_style_map = {
+        "INFO": "info",
+        "WARN": "warn",
+        "ERROR": "error",
+    }
+    style_name = level_style_map.get(level, "info")
+    lines = [Text(summary, style=style_name)]
+    for detail_text in details or []:
+        lines.append(Text(detail_text, style="muted"))
+    _CONSOLE.print(
+        Panel(
+            Group(*lines),
+            title=title,
+            border_style=style_name,
+            padding=(0, 2),
+        )
+    )
+
+
 def show_progress_section(
     title: str,
     summary: str,

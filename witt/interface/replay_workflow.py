@@ -39,7 +39,11 @@ def restore_environment_flow(
     if not auto:
         session.ctx.logic.version = config_prompter.get_json_input()
         if not session.ctx.logic.version:
-            ui.print_status("未提供版本文件，已取消环境恢复", "WARN")
+            ui.show_notice_section(
+                "环境恢复",
+                "未提供版本文件，已取消环境恢复",
+                "WARN",
+            )
             return False
     session.runner.restore_runtime_environment()
     if replay_mode == REPLAY_MODE_TRAFFIC_LIGHT:
@@ -244,8 +248,12 @@ def _try_build_issue_paths(
     try:
         return _build_issue_paths(path_texts, target_date, vehicle)
     except ValueError as e:
-        ui.print_status(str(e), "WARN")
-        ui.print_status("已保留运行时回播命令，不再补录数据路径", "WARN")
+        ui.show_notice_section(
+            "Issue 草稿",
+            "已保留运行时回播命令，不再补录数据路径",
+            "WARN",
+            details=[str(e)],
+        )
         return []
 
 
@@ -521,12 +529,20 @@ def _replay_records(
         try:
             session.executor.execute_interactive(playback_plan.command)
         except KeyboardInterrupt:
-            ui.print_status("回播已中断", "WARN")
+            ui.show_notice_section(
+                "回播执行",
+                "回播已中断",
+                "WARN",
+            )
             break
         try:
             continue_replay = prompter.get_confirm_input("继续调整播放时间?")
         except KeyboardInterrupt:
-            ui.print_status("回播已中断", "WARN")
+            ui.show_notice_section(
+                "回播执行",
+                "回播已中断",
+                "WARN",
+            )
             break
         if not continue_replay:
             break
@@ -564,7 +580,10 @@ def replay_history_flow(session: AppSession) -> None:
             if not prompter.get_confirm_input("确认清空全部历史记录？"):
                 continue
             session.replay_history_repository.clear()
-            ui.print_status("已清空全部回播历史")
+            ui.show_notice_section(
+                "历史回播",
+                "已清空全部回播历史",
+            )
             return
         history_entry = history_entries[history_index - 1]
         if not replay_history_entry(session, history_entry, validate_only=True):
