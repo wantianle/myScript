@@ -133,7 +133,13 @@ def _handle_config_command(session: AppSession) -> AppSession:
     try:
         reloaded_session = AppSession(config_path=config_path)
     except Exception as e:
-        ui.print_status("配置重载失败，继续沿用旧会话: {0}".format(e), "ERROR")
+        ui.show_result_section(
+            "配置编辑",
+            "配置重载失败，继续沿用旧会话",
+            "ERROR",
+            details=[str(e)],
+            next_step="检查 settings.yaml 格式后重新执行 config",
+        )
         return session
     ui.print_status("配置编辑已结束，已重建当前会话配置")
     return reloaded_session
@@ -143,15 +149,32 @@ def _open_in_editor(config_path: Path) -> bool:
     """使用终端编辑器打开配置文件。"""
     editor_command = _resolve_editor_command()
     if editor_command is None:
-        ui.print_status("未找到可用编辑器，请设置 $EDITOR 或安装 nano/vim", "ERROR")
+        ui.show_result_section(
+            "配置编辑",
+            "未找到可用编辑器",
+            "ERROR",
+            details=["请设置 $EDITOR 或安装 nano/vim"],
+            next_step="配置终端编辑器后重新执行 config",
+        )
         return False
     try:
         return_code = subprocess.call(editor_command + [str(config_path)])
     except OSError as e:
-        ui.print_status("打开配置文件失败: {0}".format(e), "ERROR")
+        ui.show_result_section(
+            "配置编辑",
+            "打开配置文件失败",
+            "ERROR",
+            details=[str(e)],
+            next_step="检查编辑器命令和文件权限后重试",
+        )
         return False
     if return_code != 0:
-        ui.print_status("编辑器异常退出，未重建会话配置", "WARN")
+        ui.show_result_section(
+            "配置编辑",
+            "编辑器异常退出，未重建会话配置",
+            "WARN",
+            next_step="修正编辑器问题后重新执行 config",
+        )
         return False
     return True
 
@@ -200,6 +223,11 @@ def _handle_history_subcommand(
     if subcommand.isdigit():
         workflow.replay_workflow.replay_history_by_index(session, int(subcommand))
         return True
-    ui.print_status("不支持的 history 子命令: {0}".format(subcommand), "WARN")
-    ui.print_status("当前支持: history clear | history last | history <序号>", "WARN")
+    ui.show_result_section(
+        "历史命令",
+        "不支持的 history 子命令: {0}".format(subcommand),
+        "WARN",
+        details=["当前支持: history clear | history last | history <序号>"],
+        next_step="使用 help history 查看命令说明",
+    )
     return True

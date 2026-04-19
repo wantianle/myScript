@@ -376,7 +376,13 @@ def _save_replay_history(
     try:
         history_repository.append(history_entry)
     except OSError as e:
-        ui.print_status("保存回播历史失败: {0}".format(e), "WARN")
+        ui.show_result_section(
+            "回播历史",
+            "保存回播历史失败",
+            "WARN",
+            details=[str(e)],
+            next_step="检查历史文件目录权限后重试",
+        )
 
 
 def _restore_replay_history_context(
@@ -405,9 +411,12 @@ def _validate_history_records(records: List[ReplayRecord]) -> bool:
         if not Path(replay_record.path).exists()
     ]
     if missing_paths:
-        ui.print_status(
-            "历史回播文件不存在: {0}".format(missing_paths[0]),
+        ui.show_result_section(
+            "历史回播",
+            "历史回播文件不存在",
             "WARN",
+            details=[str(missing_paths[0])],
+            next_step="重新选择历史记录，或清空无效历史",
         )
         return False
     return True
@@ -418,7 +427,12 @@ def _collect_issue_marker() -> Optional[ReplayIssueMarker]:
     try:
         return replay_prompter.get_issue_marker()
     except KeyboardInterrupt:
-        ui.print_status("已跳过问题时间点标记", "WARN")
+        ui.show_result_section(
+            "问题标记",
+            "已跳过问题时间点标记",
+            "WARN",
+            next_step="如需补录，可重新回播后再次记录",
+        )
         return None
 
 
@@ -563,7 +577,12 @@ def get_sorted_replay_history_entries(session: AppSession) -> List[ReplayHistory
     """读取并按创建时间倒序返回历史记录。"""
     history_repository = getattr(session, "replay_history_repository", None)
     if history_repository is None:
-        ui.print_status("当前会话未启用回播历史", "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "当前会话未启用回播历史",
+            "WARN",
+            next_step="检查会话配置或重新初始化应用会话",
+        )
         return []
     return _sort_replay_history_entries(history_repository.load())
 
@@ -594,7 +613,12 @@ def replay_history_by_index(session: AppSession, history_index: int) -> bool:
         )
         return False
     if history_index < 1 or history_index > len(history_entries):
-        ui.print_status("历史序号超出范围: {0}".format(history_index), "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "历史序号超出范围: {0}".format(history_index),
+            "WARN",
+            next_step="使用 history 浏览可用序号后重试",
+        )
         return False
     return replay_history_entry(session, history_entries[history_index - 1])
 
@@ -606,7 +630,12 @@ def replay_history_entry(
 ) -> bool:
     """校验并回播一条历史记录。"""
     if not _history_entry_is_replayable(history_entry):
-        ui.print_status("所选历史记录路径失效，无法回播，请重新选择或输入 0 清空历史", "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "所选历史记录路径失效，无法回播",
+            "WARN",
+            next_step="重新选择历史记录，或输入 0 清空历史",
+        )
         return False
     if validate_only:
         return True
