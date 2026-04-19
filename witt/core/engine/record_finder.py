@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Callable, Dict, List, Sequence, Tuple
 
 from core.errors import FindRecordError, TagFileMissingError
 from core.models import TaskEntry
@@ -114,31 +114,57 @@ def find_local_tasks(
     soc_filter: str = "",
 ) -> List[TaskEntry]:
     """扫描本地或 NAS 目录并按现有 shell 规则构造查询任务。"""
+    path_texts = [
+        str(path_obj)
+        for path_obj in data_root.rglob("*")
+        if path_obj.is_file()
+    ]
+    return find_tasks_from_path_texts(
+        path_texts,
+        _read_local_text,
+        target_date=target_date,
+        before=before,
+        after=after,
+        soc_filter=soc_filter,
+        source_root=str(data_root),
+    )
+
+
+def find_tasks_from_path_texts(
+    path_texts: Sequence[str],
+    read_text: Callable[[str], str],
+    target_date: str,
+    before: int,
+    after: int,
+    soc_filter: str = "",
+    source_root: str = "",
+) -> List[TaskEntry]:
+    """基于给定路径列表和内容读取器构造查询任务，支持本地和远程来源。"""
+    source_label = source_root or "查询根目录"
     related_paths = []
     record_paths = []
     tag_paths = []
-    for path_obj in data_root.rglob("*"):
-        if not path_obj.is_file():
-            continue
+    for path_text in path_texts:
+        path_obj = Path(path_text)
         if _is_record_candidate(path_obj, target_date, soc_filter):
             record_paths.append(path_obj)
-            related_paths.append(path_obj)
+            related_paths.append(path_text)
             continue
         if _is_tag_candidate(path_obj, target_date):
-            tag_paths.append(path_obj)
-            related_paths.append(path_obj)
+            tag_paths.append(path_text)
+            related_paths.append(path_text)
     if not related_paths:
         raise FindRecordError(
-            "{0} 目录下找不到相关的文件！".format(data_root)
+            "{0} 目录下找不到相关的文件！".format(source_label)
         )
     if not tag_paths:
         raise TagFileMissingError(
-            "{0} 找不到对应的 tag 文件！".format(data_root)
+            "{0} 找不到对应的 tag 文件！".format(source_label)
         )
     records_by_minute = build_record_index(record_paths)
     task_entries = []
     for tag_path in sorted(tag_paths):
-        tag_messages = _load_tag_messages(tag_path)
+        tag_messages = _load_tag_messages_from_text(read_text(tag_path))
         for tag_message in tag_messages:
             tag_name, tag_time = parse_tag_message(tag_message)
             matched_paths = select_matching_record_paths(
@@ -194,7 +220,11 @@ def _is_tag_candidate(path_obj: Path, target_date: str) -> bool:
 
 
 def _load_tag_messages(tag_path: Path) -> List[str]:
-    tag_content = tag_path.read_text(encoding="utf-8")
+    tag_content = _read_local_text(str(tag_path))
+    return _load_tag_messages_from_text(tag_content)
+
+
+def _load_tag_messages_from_text(tag_content: str) -> List[str]:
     tag_messages = []
     for line in tag_content.splitlines():
         matched_line = _TAG_LINE_RE.search(line)
@@ -202,6 +232,10 @@ def _load_tag_messages(tag_path: Path) -> List[str]:
             continue
         tag_messages.append(matched_line.group(1).replace("\\n", ""))
     return tag_messages
+
+
+def _read_local_text(path_text: str) -> str:
+    return Path(path_text).read_text(encoding="utf-8")
 
 
 def _detect_soc_name(record_path: Path) -> str:

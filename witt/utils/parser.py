@@ -62,7 +62,7 @@ def time_to_str(dt: Union[datetime, str]) -> str:
 
 
 def parse_manifest(manifest_path: Path) -> List[TaskEntry]:
-    """解析 find_record.sh 生成的 manifest.list: time|tag|paths"""
+    """解析查询流程生成的 manifest.list: time|tag|paths"""
     if not manifest_path.exists():
         return []
     lines = [

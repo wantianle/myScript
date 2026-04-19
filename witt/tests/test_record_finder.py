@@ -108,6 +108,37 @@ class RecordFinderTests(unittest.TestCase):
         self.assertEqual([task_entry.name for task_entry in task_entries], ["tag_a", "tag_b"])
         self.assertEqual([task_entry.id for task_entry in task_entries], ["01", "02"])
 
+    def test_find_tasks_from_path_texts_supports_callback_based_loading(self) -> None:
+        path_texts = [
+            "/remote/root/soc1/20260419.record.00000.115950",
+            "/remote/root/soc1/20260419.record.00001.120002",
+            "/remote/root/soc2/20260419.record.00000.115952",
+            "/remote/root/soc2/20260419.record.00001.120001",
+            "/remote/root/demo_tag_20260419.pb.txt",
+        ]
+        tag_contents = {
+            "/remote/root/demo_tag_20260419.pb.txt": 'msg: "demo_tag : 2026/4/19 12:00:00"\n'
+        }
+
+        task_entries = record_finder.find_tasks_from_path_texts(
+            path_texts,
+            lambda path_text: tag_contents[path_text],
+            target_date="20260419",
+            before=15,
+            after=5,
+        )
+
+        self.assertEqual(len(task_entries), 1)
+        self.assertEqual(
+            task_entries[0].paths,
+            [
+                "/remote/root/soc1/20260419.record.00000.115950",
+                "/remote/root/soc2/20260419.record.00000.115952",
+                "/remote/root/soc2/20260419.record.00001.120001",
+                "/remote/root/soc1/20260419.record.00001.120002",
+            ],
+        )
+
     def test_find_local_tasks_raises_when_tag_files_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             data_root = Path(tmpdir)

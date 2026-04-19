@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
+from core.errors import CommandExecutionError
 from core.errors import ScriptExecutionError
 from core.models import TaskEntry
 from core.runner import ScriptRunner
@@ -145,13 +146,18 @@ class ScriptRunnerTests(unittest.TestCase):
             )
             self.assertEqual(returned_tasks, [])
 
-    def test_run_find_record_keeps_shell_path_for_remote_mode(self) -> None:
+    def test_run_find_record_uses_python_finder_for_remote_mode(self) -> None:
         runner = ScriptRunner(
             cast(
                 Any,
                 SimpleNamespace(
                     paths=SimpleNamespace(scripts_dir="scripts"),
                     docker=SimpleNamespace(docker_scripts="/tmp"),
+                    remote=SimpleNamespace(
+                        user="mini",
+                        ip="10.0.0.1",
+                        data_root="/remote/root",
+                    ),
                     host=SimpleNamespace(
                         data_root="/tmp/local_root",
                         nas_root="/tmp/nas_root",
@@ -170,35 +176,71 @@ class ScriptRunnerTests(unittest.TestCase):
             )
         )
 
-        with patch(
-            "core.runner.record_finder.find_local_tasks",
-        ) as find_local_tasks:
-            parsed_tasks = [
-                TaskEntry.from_manifest_parts(
-                    time="2026-04-19 12:00:00",
-                    name="demo_tag",
-                    paths=["/tmp/remote/soc1/a.record"],
-                )
-            ]
-            with patch.object(
-                runner,
-                "_run_script_with_terminal_capture",
-                return_value="shell-output",
-            ) as run_script_with_terminal_capture:
-                with patch(
-                    "core.runner.parser.parse_manifest",
-                    return_value=parsed_tasks,
-                ) as parse_manifest:
-                    returned_tasks = runner.run_find_record()
+        task_entries = [
+            TaskEntry.from_manifest_parts(
+                time="2026-04-19 12:00:00",
+                name="demo_tag",
+                paths=["/tmp/remote/soc1/a.record"],
+            )
+        ]
 
-        find_local_tasks.assert_not_called()
-        run_script_with_terminal_capture.assert_called_once_with(
-            "find_record.sh",
-            False,
+        with patch.object(
+            runner,
+            "_run_remote_find_paths",
+            return_value=["/remote/root/demo_tag_20260419.pb.txt"],
+        ) as run_remote_find_paths:
+            with patch(
+                "core.runner.record_finder.find_tasks_from_path_texts",
+                return_value=task_entries,
+            ) as find_tasks_from_path_texts:
+                returned_tasks = runner.run_find_record()
+
+        run_remote_find_paths.assert_called_once_with()
+        find_tasks_from_path_texts.assert_called_once()
+        self.assertEqual(returned_tasks, task_entries)
+
+    def test_run_find_record_wraps_remote_connection_error(self) -> None:
+        runner = ScriptRunner(
+            cast(
+                Any,
+                SimpleNamespace(
+                    paths=SimpleNamespace(scripts_dir="scripts"),
+                    docker=SimpleNamespace(docker_scripts="/tmp"),
+                    remote=SimpleNamespace(
+                        user="mini",
+                        ip="10.0.0.1",
+                        data_root="/remote/root",
+                    ),
+                    host=SimpleNamespace(
+                        data_root="/tmp/local_root",
+                        nas_root="/tmp/nas_root",
+                    ),
+                    logic=SimpleNamespace(
+                        mode=3,
+                        before=15,
+                        after=5,
+                        soc="",
+                    ),
+                    target_date="20260419",
+                    vehicle="XZB600001",
+                    manifest_path=Path("/tmp/tasks.list"),
+                    find_record_output="",
+                ),
+            )
         )
-        parse_manifest.assert_called_once_with(Path("/tmp/tasks.list"))
-        self.assertEqual(returned_tasks, parsed_tasks)
-        self.assertEqual(runner.ctx.find_record_output, "shell-output")
+
+        with patch.object(
+            runner,
+            "_run_remote_find_paths",
+            side_effect=CommandExecutionError("SSH 执行失败: timeout"),
+        ):
+            with self.assertRaises(ScriptExecutionError) as raised:
+                runner.run_find_record()
+
+        self.assertEqual(
+            raised.exception.summary,
+            "无法连接车机或找不到对应record 文件！",
+        )
 
 
 if __name__ == "__main__":
