@@ -5,8 +5,60 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock, patch
 
+from core.engine.record_finder import RecordFinderManager
 from core.engine.record_query import RecordQueryService
 from core.models import TaskEntry
+
+
+class _FinderManagerStub(RecordFinderManager):
+    def __init__(
+        self,
+        local_tasks=None,
+        remote_tasks=None,
+        manifest_text="",
+    ) -> None:
+        self.find_local_tasks_mock = Mock(return_value=local_tasks or [])
+        self.find_tasks_from_path_texts_mock = Mock(return_value=remote_tasks or [])
+        self.dump_manifest_mock = Mock(return_value=manifest_text)
+
+    def find_local_tasks(
+        self,
+        data_root: Path,
+        target_date: str,
+        before: int,
+        after: int,
+        soc_filter: str = "",
+    ):
+        return self.find_local_tasks_mock(
+            data_root,
+            target_date=target_date,
+            before=before,
+            after=after,
+            soc_filter=soc_filter,
+        )
+
+    def find_tasks_from_path_texts(
+        self,
+        path_texts,
+        read_text,
+        target_date: str,
+        before: int,
+        after: int,
+        soc_filter: str = "",
+        source_root: str = "",
+    ):
+        return self.find_tasks_from_path_texts_mock(
+            path_texts,
+            read_text,
+            target_date=target_date,
+            before=before,
+            after=after,
+            soc_filter=soc_filter,
+            source_root=source_root,
+        )
+
+    def dump_manifest(self, task_entries, manifest_path: Path):
+        return self.dump_manifest_mock(task_entries, manifest_path)
 
 
 class RecordQueryServiceTests(unittest.TestCase):
@@ -20,9 +72,9 @@ class RecordQueryServiceTests(unittest.TestCase):
                     paths=["/tmp/local_root/soc1/a.record"],
                 )
             ]
-            finder_manager = SimpleNamespace(
-                find_local_tasks=Mock(return_value=task_entries),
-                dump_manifest=Mock(return_value="manifest"),
+            finder_manager = _FinderManagerStub(
+                local_tasks=task_entries,
+                manifest_text="manifest",
             )
             ctx = cast(
                 Any,
@@ -42,21 +94,21 @@ class RecordQueryServiceTests(unittest.TestCase):
 
             returned_tasks = record_query_service.run_query()
 
-        finder_manager.find_local_tasks.assert_called_once_with(
+        finder_manager.find_local_tasks_mock.assert_called_once_with(
             Path("/tmp/local_root"),
             target_date="20260419",
             before=15,
             after=5,
             soc_filter="soc1",
         )
-        finder_manager.dump_manifest.assert_called_once_with(task_entries, manifest_path)
+        finder_manager.dump_manifest_mock.assert_called_once_with(task_entries, manifest_path)
         self.assertEqual(ctx.find_record_output, "manifest")
         self.assertEqual(returned_tasks, task_entries)
 
     def test_run_query_uses_nas_root_for_mode_2(self) -> None:
-        finder_manager = SimpleNamespace(
-            find_local_tasks=Mock(return_value=[]),
-            dump_manifest=Mock(return_value=""),
+        finder_manager = _FinderManagerStub(
+            local_tasks=[],
+            manifest_text="",
         )
         ctx = cast(
             Any,
@@ -76,7 +128,7 @@ class RecordQueryServiceTests(unittest.TestCase):
 
         returned_tasks = record_query_service.run_query()
 
-        finder_manager.find_local_tasks.assert_called_once_with(
+        finder_manager.find_local_tasks_mock.assert_called_once_with(
             Path("/tmp/nas_root/20260419/XZB600001"),
             target_date="20260419",
             before=15,
@@ -93,9 +145,9 @@ class RecordQueryServiceTests(unittest.TestCase):
                 paths=["/remote/root/soc1/a.record"],
             )
         ]
-        finder_manager = SimpleNamespace(
-            find_tasks_from_path_texts=Mock(return_value=task_entries),
-            dump_manifest=Mock(return_value="manifest"),
+        finder_manager = _FinderManagerStub(
+            remote_tasks=task_entries,
+            manifest_text="manifest",
         )
         ctx = cast(
             Any,
@@ -126,7 +178,7 @@ class RecordQueryServiceTests(unittest.TestCase):
             returned_tasks = record_query_service.run_query()
 
         run_remote_find_paths.assert_called_once_with()
-        finder_manager.find_tasks_from_path_texts.assert_called_once()
+        finder_manager.find_tasks_from_path_texts_mock.assert_called_once()
         self.assertEqual(returned_tasks, task_entries)
 
 
