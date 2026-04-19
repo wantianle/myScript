@@ -260,7 +260,7 @@ def select_replay_history_index(
     if not history_entries:
         ui.show_result_section(
             "历史回播",
-            "当前没有可用的回播历史",
+            "当前没有可重放的回播历史",
             "WARN",
             next_step="先完成一次回播后再使用历史功能",
         )

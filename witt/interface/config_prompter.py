@@ -170,8 +170,12 @@ def get_json_input() -> str:
                 continue
             processed_path = raw_data.strip("'\"").replace("file://", "")
             processed_path = urllib.parse.unquote(processed_path)
-            if os.path.exists(processed_path):
+            if os.path.isfile(processed_path):
                 return processed_path
+            ui.show_input_feedback(
+                "version 文件路径不存在或不是文件，请重新输入",
+                hint="支持直接粘贴本地文件路径或拖拽 version 文件",
+            )
         except KeyboardInterrupt:
             ui.show_notice_section(
                 "版本文件配置",

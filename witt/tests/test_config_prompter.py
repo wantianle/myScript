@@ -68,6 +68,21 @@ class ConfigPrompterTests(unittest.TestCase):
         self.assertEqual(result, temp_file.name)
         show_input_feedback.assert_called_once_with("输入为空，请重新输入")
 
+    def test_get_json_input_retries_after_invalid_path(self) -> None:
+        with tempfile.NamedTemporaryFile() as temp_file:
+            with patch(
+                "interface.config_prompter.prompter.prompt_text",
+                side_effect=["/tmp/not-found-version.json", temp_file.name],
+            ):
+                with patch("interface.config_prompter.ui.show_input_feedback") as show_input_feedback:
+                    result = config_prompter.get_json_input()
+
+        self.assertEqual(result, temp_file.name)
+        show_input_feedback.assert_called_once_with(
+            "version 文件路径不存在或不是文件，请重新输入",
+            hint="支持直接粘贴本地文件路径或拖拽 version 文件",
+        )
+
     def test_get_json_input_returns_empty_on_keyboard_interrupt(self) -> None:
         with patch(
             "interface.config_prompter.prompter.prompt_text",

@@ -82,6 +82,45 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         self.assertFalse(replayed)
         show_result_section.assert_called_once()
 
+    def test_replay_latest_history_entry_returns_false_when_history_is_empty(self) -> None:
+        session = cast(AppSession, SimpleNamespace())
+
+        with patch(
+            "interface.replay_workflow.get_sorted_replay_history_entries",
+            return_value=[],
+        ):
+            with patch("interface.replay_workflow.ui.show_result_section") as show_result_section:
+                replayed = replay_workflow.replay_latest_history_entry(session)
+
+        self.assertFalse(replayed)
+        show_result_section.assert_called_once()
+
+    def test_replay_history_entry_rejects_invalid_history_paths(self) -> None:
+        history_entry = ReplayHistoryEntry(
+            created_at="2026-04-19 12:00:00",
+            source_type="auto",
+            replay_mode="standard",
+            selection_label="demo",
+            display_tag="demo_tag",
+            issue_timestamp="2026-04-19 11:59:00",
+            vehicle="XZB600001",
+            target_date="20260419",
+            records=[
+                ReplayRecord(
+                    path="/tmp/not-found.record",
+                    begin="2026-04-19 12:00:00",
+                    duration=10,
+                )
+            ],
+        )
+        session = cast(AppSession, SimpleNamespace())
+
+        with patch("interface.replay_workflow.ui.show_result_section") as show_result_section:
+            replayed = replay_workflow.replay_history_entry(session, history_entry)
+
+        self.assertFalse(replayed)
+        show_result_section.assert_called_once()
+
     def test_auto_replay_flow_shows_result_when_library_is_empty(self) -> None:
         session = cast(
             AppSession,
