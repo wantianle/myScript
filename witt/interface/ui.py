@@ -44,7 +44,7 @@ def print_banner() -> None:
             border_style="border",
             padding=(0, 3),
             title="MINIEYE Replay Toolkit",
-            title_align="left",
+            title_align="center",
         )
     )
 
