@@ -21,8 +21,8 @@ from interface import replay_workflow
 
 
 class TaskEntryTests(unittest.TestCase):
-    def test_from_manifest_parts_groups_soc_paths(self) -> None:
-        task_entry = TaskEntry.from_manifest_parts(
+    def test_from_record_paths_groups_soc_paths(self) -> None:
+        task_entry = TaskEntry.from_record_paths(
             time="2026-04-15 12:00:00",
             name="demo_tag",
             paths=[
@@ -37,7 +37,7 @@ class TaskEntryTests(unittest.TestCase):
         self.assertEqual(len(task_entry.paths), 3)
 
     def test_assign_id_formats_two_digits(self) -> None:
-        task_entry = TaskEntry.from_manifest_parts(
+        task_entry = TaskEntry.from_record_paths(
             time="2026-04-15 12:00:00",
             name="demo_tag",
             paths=[],
@@ -72,7 +72,7 @@ class LogicConfigTests(unittest.TestCase):
 
 class MetadataModelTests(unittest.TestCase):
     def test_tag_info_from_task_entry_builds_expected_window(self) -> None:
-        task_entry = TaskEntry.from_manifest_parts(
+        task_entry = TaskEntry.from_record_paths(
             time="2026-04-15 12:00:00",
             name="demo_tag",
             paths=[],
@@ -85,7 +85,7 @@ class MetadataModelTests(unittest.TestCase):
         self.assertEqual(tag_info.abs_end, "2026-04-15T12:00:05")
 
     def test_record_meta_roundtrip(self) -> None:
-        task_entry = TaskEntry.from_manifest_parts(
+        task_entry = TaskEntry.from_record_paths(
             time="2026-04-15 12:00:00",
             name="demo_tag",
             paths=[],
@@ -110,7 +110,7 @@ class MetadataModelTests(unittest.TestCase):
         self.assertEqual(restored_meta.last_update["soc1"], "2026-04-15 12:01:00")
 
     def test_library_entry_from_record_meta(self) -> None:
-        task_entry = TaskEntry.from_manifest_parts(
+        task_entry = TaskEntry.from_record_paths(
             time="2026-04-15 12:00:00",
             name="demo_tag",
             paths=[],
@@ -194,29 +194,9 @@ class ParserTests(unittest.TestCase):
 
         self.assertEqual(parsed_time, datetime(2026, 4, 15, 10, 16, 8))
 
-    def test_parse_manifest(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            manifest_path = Path(tmpdir) / "tasks.list"
-            manifest_path.write_text(
-                "\n".join(
-                    [
-                        "2026-04-15 12:00:01|tag_b|/data/soc2/b.record",
-                        "2026-04-15 12:00:00|tag_a|/data/soc1/a.record",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            task_entries = parser.parse_manifest(manifest_path)
-
-        self.assertEqual([task.name for task in task_entries], ["tag_a", "tag_b"])
-        self.assertEqual(task_entries[0].id, "01")
-        self.assertEqual(task_entries[0].soc_paths["soc1"], ["/data/soc1/a.record"])
-
-
 class ReplayWorkflowTests(unittest.TestCase):
     def test_build_source_replay_records_uses_tag_window(self) -> None:
-        task_entry = TaskEntry.from_manifest_parts(
+        task_entry = TaskEntry.from_record_paths(
             time="2026-04-15 12:00:00",
             name="demo_tag",
             paths=[

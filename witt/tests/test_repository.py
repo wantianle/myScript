@@ -54,7 +54,7 @@ class MetadataRepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             meta_path = Path(tmpdir) / "meta.json"
             repository = MetadataRepository()
-            task_entry = TaskEntry.from_manifest_parts(
+            task_entry = TaskEntry.from_record_paths(
                 time="2026-04-15 12:00:00",
                 name="demo_tag",
                 paths=[],
@@ -83,7 +83,7 @@ class MetadataRepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root_dir = Path(tmpdir)
             repository = MetadataRepository()
-            task_entry = TaskEntry.from_manifest_parts(
+            task_entry = TaskEntry.from_record_paths(
                 time="2026-04-15 12:00:00",
                 name="demo_tag",
                 paths=[],

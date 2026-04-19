@@ -136,7 +136,7 @@
     - tag 解析
     - record 索引构建
     - 时间窗匹配
-    - 查询结果 manifest 输出
+    - 查询结果 `TaskEntry` 构造
   - [record_query.py](/home/mini/dev/myScript/witt/core/engine/record_query.py)
     - 本地 / NAS / 远程查询编排
     - 远程路径发现与 tag 文本读取
@@ -196,7 +196,6 @@
 - [parser.py](/home/mini/dev/myScript/witt/utils/parser.py)
   - 负责：
     - 文本解析
-    - manifest 解析
     - 时间范围解析
     - record 文件排序
   - 不负责终端流程控制
@@ -208,7 +207,7 @@
 ### 任务和主流程对象
 
 - `TaskEntry`
-  - 来自 `manifest`
+  - 来自查询结果
   - 用于 workflow、downloader、channel 选择
 
 ### 配置对象

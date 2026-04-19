@@ -259,7 +259,7 @@ def search_flow(
     preset_mode: Optional[int] = None,
     split_window_name: str = "切片窗口",
 ) -> Optional[List[TaskEntry]]:
-    """采集查询条件并执行 Record 检索脚本。"""
+    """采集查询条件并执行 Record 检索。"""
     config_prompter.get_basic_params(session.ctx)
     session.init_logging()
     config_prompter.get_source_path_params(
@@ -281,11 +281,3 @@ def search_flow(
             next_step="检查数据源路径、车辆、日期和执行环境后重试",
         )
         return None
-
-full_progress = slice_progress
-restore_environment_flow = replay_workflow.restore_environment_flow
-traffic_light_replay_flow = replay_workflow.traffic_light_replay_flow
-replay_flow = replay_workflow.replay_flow
-auto_replay_flow = replay_workflow.auto_replay_flow
-manual_replay_flow = replay_workflow.manual_replay_flow
-replay_history_flow = replay_workflow.replay_history_flow

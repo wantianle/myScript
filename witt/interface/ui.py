@@ -360,6 +360,7 @@ def show_result_section(
     summary: str,
     level: str = "INFO",
     details: Optional[Sequence[str]] = None,
+    alert: str = "",
     next_step: str = "",
 ) -> None:
     """打印统一风格的流程结束态页面。"""
@@ -372,6 +373,8 @@ def show_result_section(
     lines = [Text(summary, style=style_name)]
     for detail_text in details or []:
         lines.append(Text(detail_text, style="muted"))
+    if alert:
+        lines.append(Text(alert, style="bold yellow"))
     if next_step:
         lines.append(
             Text.assemble(

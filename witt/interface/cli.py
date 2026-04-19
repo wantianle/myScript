@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from . import prompter
+from . import replay_workflow
 from . import ui
 from . import workflow
 from core.session import AppSession
@@ -88,7 +89,7 @@ def _build_command_map(session: AppSession) -> Dict[str, Callable[[], None]]:
         "scan": lambda: workflow.auto_replay_progress(session),
         "manual": lambda: workflow.manual_replay_progress(session),
         "history": lambda: workflow.replay_history_progress(session),
-        "traffic": lambda: workflow.traffic_light_replay_flow(session),
+        "traffic": lambda: replay_workflow.traffic_light_replay_flow(session),
         "env": lambda: ui.show_environment_summary(session),
     }
 

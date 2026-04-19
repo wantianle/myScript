@@ -24,6 +24,7 @@ class FlowIntegrationTests(unittest.TestCase):
                 duration=20,
             )
         ]
+        init_logging = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
@@ -32,7 +33,7 @@ class FlowIntegrationTests(unittest.TestCase):
                     vehicle="XZB600001",
                     target_date="20260419",
                 ),
-                init_logging=Mock(),
+                init_logging=init_logging,
                 player=SimpleNamespace(
                     load_library=Mock(
                         return_value=SimpleNamespace(
@@ -68,11 +69,12 @@ class FlowIntegrationTests(unittest.TestCase):
         replay_records.assert_called_once()
 
     def test_manual_then_replay(self) -> None:
+        init_logging = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
                 ctx=SimpleNamespace(),
-                init_logging=Mock(),
+                init_logging=init_logging,
                 recorder=SimpleNamespace(
                     get_info=Mock(
                         side_effect=[
@@ -102,7 +104,7 @@ class FlowIntegrationTests(unittest.TestCase):
                             workflow.manual_replay_progress(session)
 
         get_basic_params.assert_called_once_with(session.ctx)
-        session.init_logging.assert_called_once_with()
+        init_logging.assert_called_once_with()
         update_blacklist.assert_called_once()
         replay_records.assert_called_once()
 
@@ -124,10 +126,11 @@ class FlowIntegrationTests(unittest.TestCase):
                 )
             ],
         )
+        init_logging = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
-                init_logging=Mock(),
+                init_logging=init_logging,
                 ctx=SimpleNamespace(logic=SimpleNamespace()),
             ),
         )
@@ -145,19 +148,24 @@ class FlowIntegrationTests(unittest.TestCase):
                         workflow.replay_history_progress(session)
 
         browse_replay_history.assert_called_once_with([history_entry])
-        session.init_logging.assert_called_once_with()
+        init_logging.assert_called_once_with()
         replay_records.assert_called_once()
 
     def test_traffic_then_restore_environment_then_replay(self) -> None:
+        init_logging = Mock()
+        restore_runtime_environment = Mock()
+        start_standard_replay_stack = Mock()
+        start_traffic_light_stack = Mock()
+        execute_interactive = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
                 ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
-                init_logging=Mock(),
+                init_logging=init_logging,
                 runtime=SimpleNamespace(
-                    restore_runtime_environment=Mock(),
-                    start_standard_replay_stack=Mock(),
-                    start_traffic_light_stack=Mock(),
+                    restore_runtime_environment=restore_runtime_environment,
+                    start_standard_replay_stack=start_standard_replay_stack,
+                    start_traffic_light_stack=start_traffic_light_stack,
                 ),
                 recorder=SimpleNamespace(
                     get_info=Mock(
@@ -183,7 +191,7 @@ class FlowIntegrationTests(unittest.TestCase):
                         )
                     )
                 ),
-                executor=SimpleNamespace(execute_interactive=Mock()),
+                executor=SimpleNamespace(execute_interactive=execute_interactive),
             ),
         )
         manual_paths = [Path("/tmp/demo.record")]
@@ -201,14 +209,14 @@ class FlowIntegrationTests(unittest.TestCase):
                                     with patch("interface.replay_workflow.channel_prompter.get_paths_channels", return_value=[]):
                                         with patch("interface.replay_workflow._collect_issue_marker", return_value=None):
                                             with patch("interface.replay_workflow._post_replay_issue_draft"):
-                                                workflow.traffic_light_replay_flow(session)
+                                                replay_workflow.traffic_light_replay_flow(session)
 
         get_basic_params.assert_called_once_with(session.ctx)
-        session.init_logging.assert_called_once_with()
-        session.runtime.restore_runtime_environment.assert_called_once_with()
-        session.runtime.start_standard_replay_stack.assert_called_once_with()
-        session.runtime.start_traffic_light_stack.assert_called_once_with()
-        session.executor.execute_interactive.assert_called_once_with("cyber_recorder play -r 1")
+        init_logging.assert_called_once_with()
+        restore_runtime_environment.assert_called_once_with()
+        start_standard_replay_stack.assert_called_once_with()
+        start_traffic_light_stack.assert_called_once_with()
+        execute_interactive.assert_called_once_with("cyber_recorder play -r 1")
 
 
 if __name__ == "__main__":

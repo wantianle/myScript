@@ -1,8 +1,5 @@
-import atexit
 import logging
 import os
-import tempfile
-import shutil
 import yaml
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -34,8 +31,6 @@ class TaskContext:
     config_path: Path
 
     app_config: AppConfig = field(init=False)
-    temp_dir: Path = field(init=False)
-    find_record_output: str = field(init=False, default="")
     playback_blacklist: List[str] = field(init=False, default_factory=list)
     active_log_key: str = field(init=False, default="")
 
@@ -44,8 +39,6 @@ class TaskContext:
         raw_config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
         self.app_config = AppConfig.from_dict(raw_config)
         self.logic.target_date = datetime.now().strftime("%Y%m%d")
-        self.temp_dir = Path(tempfile.mkdtemp(prefix="witt_session_"))
-        atexit.register(self._cleanup_temp)
 
     @property
     def host(self) -> HostConfig:
@@ -83,15 +76,6 @@ class TaskContext:
     @property
     def log_dir(self) -> Path:
         return self.work_dir / ".witt" / "log"
-
-    @property
-    def manifest_path(self) -> Path:
-        return self.temp_dir / "tasks.list"
-
-    def _cleanup_temp(self) -> None:
-        """在会话结束时清理临时目录。"""
-        if self.temp_dir.exists():
-            shutil.rmtree(self.temp_dir)
 
     def get_task_dir(self, task_id: str, task_time: str, soc: str = "") -> Path:
         """统一管理任务存储路径规则，目录名使用 ASCII 时间戳"""
@@ -155,7 +139,6 @@ class TaskContext:
     def get_env_vars(self) -> Dict[str, str]:
         """构建注入 Shell 脚本的环境变量字典"""
         vars = {
-            "MANIFEST_PATH": self.manifest_path,
             "VEHICLE": self.vehicle,
             "TARGET_DATE": self.target_date,
             "NAS_ROOT": self.host.nas_root,

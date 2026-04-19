@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Sequence, Tuple, Union
 
-from core.models import ChannelInfo, RecordInfo, TaskEntry
+from core.models import ChannelInfo, RecordInfo
 from interface import ui
 
 _RE_TIME = re.compile(
@@ -59,35 +59,6 @@ def time_to_str(dt: Union[datetime, str]) -> str:
     if isinstance(dt, datetime):
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return str(dt)
-
-
-def parse_manifest(manifest_path: Path) -> List[TaskEntry]:
-    """解析查询流程生成的 manifest.list: time|tag|paths"""
-    if not manifest_path.exists():
-        return []
-    lines = [
-        i.strip()
-        for i in manifest_path.read_text(encoding="utf-8").splitlines()
-        if i.strip()
-    ]
-    tasks = []
-    for line in lines:
-        parts = line.split("|")
-        tag_time = parts[0]
-        tag_name = sanitize_name(parts[1])
-        raw_paths = parts[2].split()
-        tasks.append(
-            TaskEntry.from_manifest_parts(
-                time=tag_time,
-                name=tag_name,
-                paths=raw_paths,
-            )
-        )
-    tasks.sort(key=lambda task_entry: task_entry.time)
-    for index, task_entry in enumerate(tasks, 1):
-        task_entry.assign_id(index)
-    return tasks
-
 
 def parse_range_logic(range_in: str) -> Tuple[int, int]:
     """解析播放时间范围字符串并返回起止秒数。"""

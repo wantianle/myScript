@@ -182,24 +182,5 @@ class RecordFinderTests(unittest.TestCase):
                     after=5,
                 )
 
-    def test_dump_manifest_writes_existing_manifest_format(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            manifest_path = Path(tmpdir) / "tasks.list"
-            task_entries = [
-                record_finder.TaskEntry.from_manifest_parts(
-                    time="2026-04-19 12:00:00",
-                    name="demo_tag",
-                    paths=["/tmp/a.record", "/tmp/b.record"],
-                )
-            ]
-
-            manifest_text = record_finder.dump_manifest(task_entries, manifest_path)
-
-        self.assertEqual(
-            manifest_text,
-            "2026-04-19 12:00:00|demo_tag|/tmp/a.record /tmp/b.record",
-        )
-
-
 if __name__ == "__main__":
     unittest.main()

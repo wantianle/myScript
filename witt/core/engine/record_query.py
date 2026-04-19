@@ -24,7 +24,7 @@ class RecordQueryService:
         self.finder_manager = finder_manager or RecordFinderManager()
 
     def run_query(self) -> List[TaskEntry]:
-        """执行本地、NAS 或远程查询，并同步 manifest 输出。"""
+        """执行本地、NAS 或远程查询并返回任务列表。"""
         if self.ctx.logic.mode == 3:
             task_entries = self.finder_manager.find_tasks_from_path_texts(
                 self._run_remote_find_paths(),
@@ -43,10 +43,6 @@ class RecordQueryService:
                 after=int(self.ctx.logic.after),
                 soc_filter=str(getattr(self.ctx.logic, "soc", "")),
             )
-        self.ctx.find_record_output = self.finder_manager.dump_manifest(
-            task_entries,
-            self.ctx.manifest_path,
-        )
         return task_entries
 
     def _resolve_find_record_root(self) -> Path:

@@ -4,8 +4,8 @@ from pathlib import Path
 
 from core.issue_draft import (
     IssueDraft,
-    build_issue_data_path_text,
     build_issue_filename,
+    format_issue_data_path,
     load_version_text,
     render_issue_markdown,
     save_issue_draft,
@@ -25,7 +25,6 @@ class IssueDraftTests(unittest.TestCase):
             vehicle="XZB600013",
             target_date="20260416",
             playback_command="cyber_recorder play -r 2",
-            data_path_text="/tmp/data",
             version_text='{"version":"demo"}',
             playback_rate=2.0,
             playback_range_text="5s",
@@ -49,7 +48,6 @@ class IssueDraftTests(unittest.TestCase):
             vehicle="XZB600013",
             target_date="20260416",
             playback_command="cyber_recorder play -r 1",
-            data_path_text="/tmp/data",
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -71,7 +69,6 @@ class IssueDraftTests(unittest.TestCase):
             vehicle="XZB600013",
             target_date="20260416",
             playback_command="cyber_recorder play -r 1",
-            data_path_text="/tmp/data",
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -96,16 +93,17 @@ class IssueDraftTests(unittest.TestCase):
 
         self.assertEqual(version_text, "demo-version")
 
-    def test_build_issue_data_path_text_truncates_prefix_before_date_and_vehicle(self) -> None:
+    def test_format_issue_data_path_truncates_prefix_before_date_and_vehicle(self) -> None:
         path_text = (
             "/media/road_test/20260415/XZB600007/01.20260415_101203/"
             "soc2/20260415101058.record.00001.101159.split"
         )
 
-        issue_path_text = build_issue_data_path_text(
-            [path_text],
+        issue_path_text = format_issue_data_path(
+            path_text,
             "20260415",
             "XZB600007",
+            "/media/nas/00.raw",
         )
 
         self.assertEqual(

@@ -119,7 +119,7 @@ class TaskEntry:
     id: str = field(default="")
 
     @classmethod
-    def from_manifest_parts(
+    def from_record_paths(
         cls,
         time: str,
         name: str,

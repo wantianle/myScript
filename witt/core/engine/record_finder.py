@@ -176,7 +176,7 @@ def find_tasks_from_path_texts(
                 after,
             )
             task_entries.append(
-                TaskEntry.from_manifest_parts(
+                TaskEntry.from_record_paths(
                     time=tag_time.strftime("%Y-%m-%d %H:%M:%S"),
                     name=parser.sanitize_name(tag_name),
                     paths=[str(path_obj) for path_obj in matched_paths],
@@ -188,22 +188,6 @@ def find_tasks_from_path_texts(
     for index, task_entry in enumerate(task_entries, 1):
         task_entry.assign_id(index)
     return task_entries
-
-
-def dump_manifest(task_entries: Sequence[TaskEntry], manifest_path: Path) -> str:
-    """按既有 manifest 格式写出查询结果。"""
-    manifest_lines = [
-        "{0}|{1}|{2}".format(
-            task_entry.time,
-            task_entry.name,
-            " ".join(task_entry.paths),
-        )
-        for task_entry in task_entries
-    ]
-    manifest_text = "\n".join(manifest_lines)
-    manifest_path.write_text(manifest_text, encoding="utf-8")
-    return manifest_text
-
 
 def _is_record_candidate(
     path_obj: Path,
@@ -305,11 +289,3 @@ class RecordFinderManager:
             soc_filter=soc_filter,
             source_root=source_root,
         )
-
-    def dump_manifest(
-        self,
-        task_entries: Sequence[TaskEntry],
-        manifest_path: Path,
-    ) -> str:
-        """按既有格式写出 manifest 文件。"""
-        return dump_manifest(task_entries, manifest_path)

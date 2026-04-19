@@ -367,7 +367,6 @@ def _post_replay_issue_draft(
         vehicle=session.ctx.vehicle,
         target_date=session.ctx.target_date,
         playback_command=playback_command,
-        data_path_text="",
         version_text=load_version_text(session.ctx.logic.version),
         playback_rate=playback_plan.rate,
         playback_range_text=playback_range_text,
@@ -393,6 +392,7 @@ def _post_replay_issue_draft(
         "Issue 草稿",
         "issue 草稿已生成",
         details=[str(issue_path)],
+        alert="草稿内容仅作参考，提单需要核对信息",
     )
 
 

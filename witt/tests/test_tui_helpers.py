@@ -175,6 +175,33 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("默认 1.0x，可设置 0.1 到 10x", rendered)
         self.assertIn("常用值: 0.5 / 1.0 / 1.5 / 2.0", rendered)
 
+    def test_show_result_section_renders_alert_line(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_result_section(
+                "Issue 草稿",
+                "issue 草稿已生成",
+                details=["/tmp/issues/issue_20260419_120000.md"],
+                alert="草稿内容仅作参考，提单需要核对信息",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("Issue 草稿", rendered)
+        self.assertIn("issue 草稿已生成", rendered)
+        self.assertIn("/tmp/issues/issue_20260419_120000.md", rendered)
+        self.assertIn("草稿内容仅作参考，提单需要核对信息", rendered)
+
     def test_show_playback_info_renders_version_details(self) -> None:
         buffer = StringIO()
         console = Console(

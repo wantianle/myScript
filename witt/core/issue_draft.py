@@ -20,7 +20,6 @@ class IssueDraft:
     vehicle: str
     target_date: str
     playback_command: str
-    data_path_text: str
     version_text: str = ""
     playback_rate: float = 1.0
     playback_range_text: str = "全播"
@@ -42,21 +41,6 @@ def build_issue_path(
 ) -> Path:
     """构造 issue 草稿文件路径。"""
     return work_dir / "issues" / build_issue_filename(issue_timestamp, issue_name)
-
-
-def build_issue_data_path_text(
-    path_texts: List[str],
-    target_date: str,
-    vehicle: str,
-    issue_root: Union[str, Path] = "/media/nas/00.raw",
-) -> str:
-    """按日期和车号截断原始路径，统一映射到 issue 展示路径。"""
-    return "\n".join(
-        [
-            format_issue_data_path(path_text, target_date, vehicle, issue_root)
-            for path_text in path_texts
-        ]
-    )
 
 
 def render_issue_markdown(issue_draft: IssueDraft) -> str:
