@@ -588,12 +588,8 @@ def show_playback_info(
         for detail_text in playback_version_details:
             lines.append(Text("  {0}".format(detail_text), style="accent"))
     if command:
-        lines.append(
-            Text.assemble(
-                ("执行指令: ", "label"),
-                (command, "accent"),
-            )
-    )
+        lines.append(Text("执行命令:", style="label"))
+        lines.append(Text("  {0}".format(command), style="accent"))
     _CONSOLE.print(_build_info_panel("回播信息", lines, "Ctrl+C 中断当前回播"))
 
 

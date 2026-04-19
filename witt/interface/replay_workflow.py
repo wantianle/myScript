@@ -42,10 +42,10 @@ _RUNTIME_ENVIRONMENT_MANAGER = RuntimeEnvironmentManager()
 def _format_replay_source_label(source_type: str) -> str:
     """将内部回放来源标识转换为稳定展示文案。"""
     source_label_map = {
-        REPLAY_SOURCE_AUTO: "自动回放",
+        REPLAY_SOURCE_AUTO: "自动扫描切片",
         REPLAY_SOURCE_FULL_SOURCE: "原始数据回放",
-        REPLAY_SOURCE_MANUAL: "手动回放",
-        REPLAY_SOURCE_HISTORY: "历史回放",
+        REPLAY_SOURCE_MANUAL: "手动选择数据",
+        REPLAY_SOURCE_HISTORY: "历史回放记录",
     }
     return source_label_map.get(source_type, source_type or "未知来源")
 
@@ -78,7 +78,7 @@ def _confirm_open_standard_replay_stack() -> bool:
     """展示标准回放工具栈说明并确认是否启动。"""
     ui.show_replay_section(
         "回放工具栈",
-        "启动 Dreamview 与 Multiviz 所需的标准回放工具",
+        "启动 Dreamview 与 Multiviz 标准回放工具",
         (
             "启动 Supervisor，并通过 Supervisor 启动 Debug_Driver-LiDAR（查看点云）"
             "和 Dreamview（可视化界面）节点，最后启动 Multiviz 工具查看点云和相机图像。"

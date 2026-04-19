@@ -218,7 +218,7 @@ class TuiHelperTests(unittest.TestCase):
                 tag="demo_tag",
                 duration=20,
                 rate=1.0,
-                source_label="自动回放",
+                source_label="自动扫描切片",
                 mode_label="标准回放",
                 selection_label="demo_tag | soc1 | 1 files",
                 command="cyber_recorder play -r 1",
@@ -231,7 +231,7 @@ class TuiHelperTests(unittest.TestCase):
         rendered = buffer.getvalue()
         self.assertIn("回播信息", rendered)
         self.assertIn("回放来源", rendered)
-        self.assertIn("自动回放", rendered)
+        self.assertIn("自动扫描切片", rendered)
         self.assertIn("回放模式", rendered)
         self.assertIn("标准回放", rendered)
         self.assertIn("回放条目", rendered)
@@ -240,6 +240,8 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("/tmp/version.json", rendered)
         self.assertIn("版本信息", rendered)
         self.assertIn("mdrive: 1.2.3", rendered)
+        self.assertIn("执行命令", rendered)
+        self.assertIn("cyber_recorder play -r 1", rendered)
 
     def test_show_playback_info_truncates_long_selection_label(self) -> None:
         buffer = StringIO()
