@@ -204,6 +204,52 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
 
         show_result_section.assert_called_once()
 
+    def test_auto_replay_flow_only_shows_library_progress_once(self) -> None:
+        selected_tag = SimpleNamespace(
+            tag="demo_tag",
+            time="2026-04-19 12:00:00",
+        )
+        target_records = [
+            ReplayRecord(
+                path="/tmp/demo.record",
+                begin=datetime(2026, 4, 19, 11, 59, 50),
+                duration=20,
+            )
+        ]
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                player=SimpleNamespace(
+                    load_library=Mock(
+                        side_effect=[
+                            SimpleNamespace(cache_hit=False, library=["demo"]),
+                            SimpleNamespace(cache_hit=True, library=["demo"]),
+                        ]
+                    )
+                ),
+                ctx=SimpleNamespace(
+                    work_dir="/tmp/work",
+                    vehicle="XZB600001",
+                    target_date="20260419",
+                ),
+            ),
+        )
+
+        with patch(
+            "interface.replay_workflow.replay_prompter.select_playback_entry",
+            side_effect=[selected_tag, None],
+        ):
+            with patch(
+                "interface.replay_workflow.replay_prompter.select_replay_records",
+                return_value=target_records,
+            ):
+                with patch("interface.replay_workflow.ui.show_progress_section") as show_progress_section:
+                    with patch("interface.replay_workflow._update_playback_blacklist"):
+                        with patch("interface.replay_workflow._replay_records"):
+                            replay_workflow.auto_replay_flow(session)
+
+        show_progress_section.assert_called_once()
+
     def test_full_source_replay_flow_shows_result_when_task_entries_are_empty(self) -> None:
         session = cast(AppSession, SimpleNamespace())
 

@@ -840,21 +840,24 @@ def auto_replay_flow(
     replay_mode: str = REPLAY_MODE_STANDARD,
 ) -> None:
     """自动扫描目录并选择回放条目。"""
+    library_state_announced = False
     while True:
         library_result = session.player.load_library()
-        if library_result.cache_hit:
-            ui.show_progress_section(
-                "自动回播",
-                "本地库状态未变，正在加载缓存",
-                details=[str(library_result.cache_path)],
-                hint="正在读取回播库条目",
-            )
-        else:
-            ui.show_progress_section(
-                "自动回播",
-                "已扫描本地库",
-                details=[str(session.ctx.work_dir)],
-            )
+        if not library_state_announced:
+            if library_result.cache_hit:
+                ui.show_progress_section(
+                    "自动回播",
+                    "本地库状态未变，正在加载缓存",
+                    details=[str(library_result.cache_path)],
+                    hint="正在读取回播库条目",
+                )
+            else:
+                ui.show_progress_section(
+                    "自动回播",
+                    "已扫描本地库",
+                    details=[str(session.ctx.work_dir)],
+                )
+            library_state_announced = True
         library = library_result.library
         if not library:
             ui.show_result_section(
