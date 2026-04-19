@@ -69,6 +69,33 @@ def _show_script_failure(
     )
 
 
+def _confirm_open_standard_replay_stack() -> bool:
+    """展示标准回放工具栈说明并确认是否启动。"""
+    ui.show_replay_section(
+        "回放工具栈",
+        "启动 Dreamview 与 Multiviz 所需的标准回放工具",
+        (
+            "启动 Supervisor，并通过 Supervisor 启动 Debug_Driver-LiDAR（查看点云）"
+            "和 Dreamview（可视化界面）节点，最后启动 Multiviz 工具查看点云和相机图像。"
+            "注意：已打开则无需重复打开。"
+        ),
+    )
+    return prompter.get_confirm_input("是否打开Dreamview和Multiviz工具？")
+
+
+def _confirm_open_traffic_light_stack() -> bool:
+    """展示红绿灯回灌工具栈说明并确认是否启动。"""
+    ui.show_replay_section(
+        "红绿灯回灌工具",
+        "启动红绿灯回灌所需的补充节点",
+        (
+            "启动 Debug_Driver-Camera 和 Perception-TrafficLight 节点，"
+            "用于红绿灯回灌验证。注意：已打开则无需重复打开。"
+        ),
+    )
+    return prompter.get_confirm_input("是否打开红绿灯回灌工具？")
+
+
 def restore_environment_flow(
     session: AppSession,
     auto: bool = False,
@@ -94,9 +121,7 @@ def restore_environment_flow(
         )
         return False
     if replay_mode == REPLAY_MODE_TRAFFIC_LIGHT:
-        if prompter.get_confirm_input(
-            "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
-        ):
+        if _confirm_open_standard_replay_stack():
             try:
                 session.runtime.start_standard_replay_stack()
             except ScriptExecutionError as e:
@@ -106,9 +131,7 @@ def restore_environment_flow(
                     "检查 docker 容器、显示环境和 supervisor 状态后重试",
                 )
                 return False
-        if prompter.get_confirm_input(
-            "是否需要打开 Debug_Driver-Camera & Perception-TrafficLight？"
-        ):
+        if _confirm_open_traffic_light_stack():
             try:
                 session.runtime.start_traffic_light_stack()
             except ScriptExecutionError as e:
@@ -119,9 +142,7 @@ def restore_environment_flow(
                 )
                 return False
     elif replay_mode == REPLAY_MODE_STANDARD:
-        if prompter.get_confirm_input(
-            "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
-        ):
+        if _confirm_open_standard_replay_stack():
             try:
                 session.runtime.start_standard_replay_stack()
             except ScriptExecutionError as e:
@@ -833,7 +854,6 @@ def auto_replay_flow(
                 "自动回播",
                 "已扫描本地库",
                 details=[str(session.ctx.work_dir)],
-                hint="正在构建回播条目列表",
             )
         library = library_result.library
         if not library:

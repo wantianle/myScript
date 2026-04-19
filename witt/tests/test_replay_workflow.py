@@ -74,6 +74,38 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         self.assertFalse(restored)
         show_result_section.assert_called_once()
 
+    def test_restore_environment_flow_uses_page_style_prompt_for_standard_stack(self) -> None:
+        start_standard_replay_stack = Mock()
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(logic=SimpleNamespace(version="/tmp/version.json")),
+                runtime=SimpleNamespace(
+                    restore_runtime_environment=Mock(),
+                    start_standard_replay_stack=start_standard_replay_stack,
+                    start_traffic_light_stack=Mock(),
+                ),
+            ),
+        )
+
+        with patch(
+            "interface.replay_workflow.ui.show_replay_section"
+        ) as show_replay_section:
+            with patch(
+                "interface.replay_workflow.prompter.get_confirm_input",
+                return_value=True,
+            ) as get_confirm_input:
+                restored = replay_workflow.restore_environment_flow(
+                    session,
+                    auto=True,
+                    replay_mode=replay_workflow.REPLAY_MODE_STANDARD,
+                )
+
+        self.assertTrue(restored)
+        show_replay_section.assert_called_once()
+        get_confirm_input.assert_called_once_with("是否打开Dreamview和Multiviz工具？")
+        start_standard_replay_stack.assert_called_once_with()
+
     def test_validate_history_records_reports_missing_path(self) -> None:
         replay_records = [
             ReplayRecord(path="/tmp/not-found.record", begin="2026-04-19 12:00:00", duration=10)
