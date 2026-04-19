@@ -2,20 +2,26 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock, patch
 
 from core.models import ReplayHistoryEntry, ReplayRecord, TaskEntry
+from core.session import AppSession
 from interface import replay_workflow
 
 
 class ReplayWorkflowInterfaceTests(unittest.TestCase):
     def test_restore_environment_flow_returns_false_when_version_is_missing(self) -> None:
-        session = SimpleNamespace(
-            ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
-            runner=SimpleNamespace(
-                restore_runtime_environment=Mock(),
-                start_standard_replay_stack=Mock(),
-                start_traffic_light_stack=Mock(),
+        restore_runtime_environment = Mock()
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
+                runner=SimpleNamespace(
+                    restore_runtime_environment=restore_runtime_environment,
+                    start_standard_replay_stack=Mock(),
+                    start_traffic_light_stack=Mock(),
+                ),
             ),
         )
 
@@ -24,7 +30,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 restored = replay_workflow.restore_environment_flow(session, auto=False)
 
         self.assertFalse(restored)
-        session.runner.restore_runtime_environment.assert_not_called()
+        restore_runtime_environment.assert_not_called()
         show_notice_section.assert_called_once()
 
     def test_try_build_issue_paths_returns_empty_when_value_error_raised(self) -> None:
@@ -64,7 +70,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             vehicle="XZB600001",
             target_date="20260419",
         )
-        session = SimpleNamespace()
+        session = cast(AppSession, SimpleNamespace())
 
         with patch(
             "interface.replay_workflow.get_sorted_replay_history_entries",
@@ -77,19 +83,22 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         show_result_section.assert_called_once()
 
     def test_auto_replay_flow_shows_result_when_library_is_empty(self) -> None:
-        session = SimpleNamespace(
-            player=SimpleNamespace(
-                load_library=Mock(
-                    return_value=SimpleNamespace(
-                        cache_hit=False,
-                        library=[],
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                player=SimpleNamespace(
+                    load_library=Mock(
+                        return_value=SimpleNamespace(
+                            cache_hit=False,
+                            library=[],
+                        )
                     )
-                )
-            ),
-            ctx=SimpleNamespace(
-                work_dir="/tmp/work",
-                vehicle="XZB600001",
-                target_date="20260419",
+                ),
+                ctx=SimpleNamespace(
+                    work_dir="/tmp/work",
+                    vehicle="XZB600001",
+                    target_date="20260419",
+                ),
             ),
         )
 
@@ -99,7 +108,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         show_result_section.assert_called_once()
 
     def test_full_source_replay_flow_shows_result_when_task_entries_are_empty(self) -> None:
-        session = SimpleNamespace()
+        session = cast(AppSession, SimpleNamespace())
 
         with patch("interface.replay_workflow.ui.show_result_section") as show_result_section:
             replay_workflow.full_source_replay_flow(session, [])
@@ -154,7 +163,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 duration=20,
             )
         ]
-        session = SimpleNamespace()
+        session = cast(AppSession, SimpleNamespace())
 
         with patch(
             "interface.replay_workflow.replay_prompter.select_source_task_entry",

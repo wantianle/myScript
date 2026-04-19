@@ -1,8 +1,11 @@
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock, patch
 
 from core.models import TaskEntry
+from core.session import AppSession
 from interface import workflow
 
 
@@ -23,7 +26,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("1", values)
 
     def test_load_task_entries_shows_result_when_manifest_is_empty(self) -> None:
-        session = SimpleNamespace(ctx=SimpleNamespace(manifest_path="/tmp/manifest"))
+        session = cast(
+            AppSession,
+            SimpleNamespace(ctx=SimpleNamespace(manifest_path=Path("/tmp/manifest"))),
+        )
 
         with patch("interface.workflow.search_flow") as search_flow:
             with patch("interface.workflow.parser.parse_manifest", return_value=[]):
@@ -35,8 +41,12 @@ class WorkflowTests(unittest.TestCase):
         show_result_section.assert_called_once()
 
     def test_slice_progress_returns_when_no_task_selected(self) -> None:
-        session = SimpleNamespace(
-            record_downloader=SimpleNamespace(plan_download=Mock()),
+        plan_download = Mock()
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                record_downloader=SimpleNamespace(plan_download=plan_download),
+            ),
         )
         task_entry = TaskEntry(
             time="2026-04-19 12:00:00",
@@ -50,7 +60,7 @@ class WorkflowTests(unittest.TestCase):
             with patch("interface.workflow.prompter.get_selected_indices", return_value=[]):
                 workflow.slice_progress(session)
 
-        session.record_downloader.plan_download.assert_not_called()
+        plan_download.assert_not_called()
 
     def test_slice_progress_shows_result_when_download_plan_is_empty(self) -> None:
         task_entry = TaskEntry(
@@ -60,11 +70,14 @@ class WorkflowTests(unittest.TestCase):
             paths=["/tmp/a"],
             id="01",
         )
-        session = SimpleNamespace(
-            ctx=SimpleNamespace(logic=SimpleNamespace(blacklist=[])),
-            record_downloader=SimpleNamespace(
-                plan_download=Mock(
-                    return_value=SimpleNamespace(total_files=0, skipped_batches=[])
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(logic=SimpleNamespace(blacklist=[])),
+                record_downloader=SimpleNamespace(
+                    plan_download=Mock(
+                        return_value=SimpleNamespace(total_files=0, skipped_batches=[])
+                    ),
                 ),
             ),
         )
@@ -85,7 +98,7 @@ class WorkflowTests(unittest.TestCase):
             paths=[],
             id="01",
         )
-        session = SimpleNamespace()
+        session = cast(AppSession, SimpleNamespace())
 
         with patch("interface.workflow._load_task_entries", return_value=[invalid_task]):
             with patch("interface.workflow.ui.show_result_section") as show_result_section:
@@ -94,10 +107,15 @@ class WorkflowTests(unittest.TestCase):
         show_result_section.assert_called_once()
 
     def test_search_flow_calls_prompt_collectors_and_runner(self) -> None:
-        session = SimpleNamespace(
-            ctx=SimpleNamespace(),
-            init_logging=Mock(),
-            runner=SimpleNamespace(run_find_record=Mock()),
+        init_logging = Mock()
+        run_find_record = Mock()
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(),
+                init_logging=init_logging,
+                runner=SimpleNamespace(run_find_record=run_find_record),
+            ),
         )
 
         with patch("interface.workflow.config_prompter.get_basic_params") as get_basic_params:
@@ -110,14 +128,27 @@ class WorkflowTests(unittest.TestCase):
         get_source_path_params.assert_called_once()
         get_export_path_params.assert_called_once_with(session.ctx)
         get_split_params.assert_called_once_with(session.ctx, "切片窗口")
-        session.init_logging.assert_called_once_with()
-        session.runner.run_find_record.assert_called_once_with()
+        init_logging.assert_called_once_with()
+        run_find_record.assert_called_once_with()
 
     def test_load_task_entries_passes_replay_window_name(self) -> None:
-        session = SimpleNamespace(ctx=SimpleNamespace(manifest_path="/tmp/manifest"))
+        task_entry = TaskEntry(
+            time="2026-04-19 12:00:00",
+            name="demo_tag",
+            soc_paths={"soc1": ["/tmp/a"], "soc2": []},
+            paths=["/tmp/a"],
+            id="01",
+        )
+        session = cast(
+            AppSession,
+            SimpleNamespace(ctx=SimpleNamespace(manifest_path=Path("/tmp/manifest"))),
+        )
 
         with patch("interface.workflow.search_flow") as search_flow:
-            with patch("interface.workflow.parser.parse_manifest", return_value=["demo"]):
+            with patch(
+                "interface.workflow.parser.parse_manifest",
+                return_value=[task_entry],
+            ):
                 task_entries = workflow._load_task_entries(
                     session,
                     need_export_path=False,
@@ -125,7 +156,7 @@ class WorkflowTests(unittest.TestCase):
                     split_window_name="回播窗口",
                 )
 
-        self.assertEqual(task_entries, ["demo"])
+        self.assertEqual(task_entries, [task_entry])
         search_flow.assert_called_once_with(
             session,
             need_export_path=False,

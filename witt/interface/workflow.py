@@ -1,16 +1,18 @@
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Sequence
 
 from . import channel_prompter
 from . import config_prompter
 from . import prompter
 from . import ui
 from . import replay_workflow
+from core.engine.downloader import FailedBatch, SkippedBatch
+from core.models import TaskEntry
 from core.session import AppSession
 from utils import parser
 
 
-def _task_entry_search_values(task_entry) -> List[str]:
+def _task_entry_search_values(task_entry: TaskEntry) -> List[str]:
     """构造 Tag 查询结果的关键字匹配字段。"""
     return [
         task_entry.id,
@@ -24,7 +26,7 @@ def _task_entry_search_values(task_entry) -> List[str]:
     ]
 
 
-def _show_skipped_batches(skipped_batches) -> None:
+def _show_skipped_batches(skipped_batches: Sequence[SkippedBatch]) -> None:
     """输出被跳过批次的摘要信息。"""
     for skipped_batch in skipped_batches:
         ui.show_notice_section(
@@ -35,7 +37,7 @@ def _show_skipped_batches(skipped_batches) -> None:
         )
 
 
-def _show_failed_batches(failed_batches) -> None:
+def _show_failed_batches(failed_batches: Sequence[FailedBatch]) -> None:
     """输出失败批次的摘要信息。"""
     for failed_batch in failed_batches:
         ui.show_notice_section(
@@ -50,9 +52,9 @@ def _load_task_entries(
     session: AppSession,
     need_export_path: bool = True,
     allow_remote: bool = True,
-    preset_mode=None,
+    preset_mode: Optional[int] = None,
     split_window_name: str = "切片窗口",
-):
+) -> List[TaskEntry]:
     """执行查询并加载 manifest 中的任务列表。"""
     search_flow(
         session,
@@ -157,7 +159,10 @@ def slice_progress(session: AppSession) -> None:
         )
 
 
-def full_source_progress(session: AppSession, preset_mode=None) -> None:
+def full_source_progress(
+    session: AppSession,
+    preset_mode: Optional[int] = None,
+) -> None:
     """执行查询后直接回放原始 record 数据。"""
     ui.show_flow_section(
         "原始数据回放（不切片）",
@@ -250,7 +255,7 @@ def search_flow(
     session: AppSession,
     need_export_path: bool = True,
     allow_remote: bool = True,
-    preset_mode=None,
+    preset_mode: Optional[int] = None,
     split_window_name: str = "切片窗口",
 ) -> None:
     """采集查询条件并执行 Record 检索脚本。"""

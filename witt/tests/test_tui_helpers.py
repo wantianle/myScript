@@ -1,6 +1,7 @@
 from io import StringIO
 import tempfile
 import unittest
+from typing import Any
 
 from core.models import ReplayHistoryEntry, ReplayRecord
 from interface import prompter
@@ -9,7 +10,7 @@ from rich.console import Console
 
 
 class TuiHelperTests(unittest.TestCase):
-    def _render(self, renderable) -> str:
+    def _render(self, renderable: Any) -> str:
         buffer = StringIO()
         console = Console(
             file=buffer,
@@ -349,7 +350,7 @@ class TuiHelperTests(unittest.TestCase):
                 records=[
                     ReplayRecord(
                         path=temp_file.name,
-                        begin=None,
+                        begin="2026-04-19 12:00:00",
                         duration=10,
                     )
                 ],

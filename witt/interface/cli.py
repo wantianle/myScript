@@ -29,6 +29,7 @@ def menu() -> None:
     """运行第一阶段命令驱动 REPL 入口。"""
     session = AppSession()
     prompt_session = prompter.create_command_prompt_session()
+    _render_repl_home()
 
     while True:
         raw_command = prompter.get_command_input(prompt_session)
@@ -49,6 +50,7 @@ def menu() -> None:
             continue
         if command_invocation.name == "clear":
             _clear_screen()
+            _render_repl_home()
             continue
         if command_invocation.name == "history" and _handle_history_subcommand(
             session,
@@ -71,6 +73,11 @@ def menu() -> None:
             ui.show_notice_section("命令执行", "用户终止程序", "WARN")
         except Exception as e:
             logging.error(f"执行命令 {command_invocation.name} 时发生异常: {e}")
+
+
+def _render_repl_home() -> None:
+    """渲染 REPL 启动页。"""
+    ui.print_banner()
 
 
 def _build_command_map(session: AppSession) -> Dict[str, Callable[[], None]]:

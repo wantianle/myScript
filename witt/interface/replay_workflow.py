@@ -3,14 +3,15 @@ import sys
 import termios
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from . import channel_prompter
 from . import config_prompter
 from . import prompter
 from . import replay_prompter
 from . import ui
-from core.models import ReplayHistoryEntry, ReplayRecord
+from core.engine.player import PlaybackPlan
+from core.models import ReplayHistoryEntry, ReplayRecord, TaskEntry
 from core.issue_draft import (
     IssueDraft,
     ReplayIssueMarker,
@@ -159,11 +160,15 @@ def _update_playback_blacklist(
 
 def _build_source_replay_records(
     session: AppSession,
-    task_entry,
+    task_entry: TaskEntry,
 ) -> List[ReplayRecord]:
     """根据查询结果为全量模式构造原始数据回放记录。"""
-    ordered_paths = parser.sort_records([Path(path_text) for path_text in task_entry.paths])
-    replay_begin = parser.str_to_time(task_entry.time) - timedelta(seconds=session.ctx.logic.before)
+    ordered_paths = parser.sort_records(
+        [Path(path_text) for path_text in task_entry.paths]
+    )
+    replay_begin = parser.str_to_time(task_entry.time) - timedelta(
+        seconds=session.ctx.logic.before
+    )
     replay_duration = session.ctx.logic.before + session.ctx.logic.after
     return [
         ReplayRecord(
@@ -175,18 +180,28 @@ def _build_source_replay_records(
     ]
 
 
-def _format_preview_time(time_value) -> str:
+def _get_replay_begin(record: ReplayRecord) -> datetime:
+    """将回放记录的起始时间收窄为 datetime，便于后续计算。"""
+    if isinstance(record.begin, datetime):
+        return record.begin
+    return parser.str_to_time(record.begin)
+
+
+def _format_preview_time(time_value: Union[str, datetime]) -> str:
     """格式化预览面板中的时间字段。"""
     if isinstance(time_value, datetime):
         return time_value.strftime("%Y-%m-%d %H:%M:%S")
     return str(time_value)
 
 
-def _show_full_source_preview(task_entry, source_records: List[ReplayRecord]) -> None:
+def _show_full_source_preview(
+    task_entry: TaskEntry,
+    source_records: List[ReplayRecord],
+) -> None:
     """展示原始数据回放（不切片）的回播前预览。"""
     if not source_records:
         return
-    replay_start = source_records[0].begin
+    replay_start = _get_replay_begin(source_records[0])
     replay_duration = source_records[0].duration
     replay_end = replay_start + timedelta(seconds=replay_duration)
     version_path = _find_version_path_from_records(source_records)
@@ -222,7 +237,7 @@ def _format_playback_range(start_sec: int, end_sec: int) -> str:
 def _post_replay_issue_draft(
     session: AppSession,
     records: List[ReplayRecord],
-    playback_plan,
+    playback_plan: PlaybackPlan,
     display_tag: str,
     issue_timestamp: str,
     start_sec: int,
@@ -367,7 +382,7 @@ def _build_history_selection_label(
 def _build_replay_history_entry(
     session: AppSession,
     records: List[ReplayRecord],
-    playback_plan,
+    playback_plan: PlaybackPlan,
     replay_mode: str,
     display_tag: str,
     issue_timestamp: str,
@@ -401,7 +416,7 @@ def _build_replay_history_entry(
 def _save_replay_history(
     session: AppSession,
     records: List[ReplayRecord],
-    playback_plan,
+    playback_plan: PlaybackPlan,
     replay_mode: str,
     display_tag: str,
     issue_timestamp: str,
@@ -511,7 +526,7 @@ def _replay_records(
         return
     if not _prepare_replay(session, records, replay_mode):
         return
-    last_playback_plan = None
+    last_playback_plan: Optional[PlaybackPlan] = None
     last_start = 0
     last_end = 0
     should_use_history_params = replay_history_entry is not None
@@ -807,7 +822,10 @@ def auto_replay_flow(
         )
 
 
-def full_source_replay_flow(session: AppSession, task_entries) -> None:
+def full_source_replay_flow(
+    session: AppSession,
+    task_entries: List[TaskEntry],
+) -> None:
     """直接基于查询结果回放原始 record 数据，不生成任何导出文件。"""
     if not task_entries:
         ui.show_result_section(

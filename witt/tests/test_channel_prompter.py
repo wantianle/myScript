@@ -1,8 +1,10 @@
 import unittest
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock, patch
 
-from core.models import ChannelInfo, TaskEntry
+from core.models import ChannelInfo
+from core.session import AppSession
 from interface import channel_prompter
 
 
@@ -35,7 +37,7 @@ class ChannelPrompterTests(unittest.TestCase):
         self.assertEqual(selected_channels, ["/camera/front"])
 
     def test_get_paths_channels_returns_empty_when_confirm_declined(self) -> None:
-        session = SimpleNamespace()
+        session = cast(AppSession, SimpleNamespace())
 
         result = channel_prompter.get_paths_channels(
             session,
@@ -63,7 +65,7 @@ class ChannelPrompterTests(unittest.TestCase):
                 ]
             )
         )
-        session = SimpleNamespace(recorder=recorder)
+        session = cast(AppSession, SimpleNamespace(recorder=recorder))
 
         with patch(
             "interface.channel_prompter.select_channels_wizard",
