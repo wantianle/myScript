@@ -109,8 +109,11 @@
     - 决定当前使用 docker 还是 ssh 执行通道
 
 - [runner.py](/home/mini/dev/myScript/witt/core/runner.py)
-  - 脚本执行服务
-  - 负责在 Python 侧调用 shell 脚本
+  - 运行时编排服务
+  - 负责：
+    - 协调查询、环境恢复、回放栈启动等执行入口
+    - 将底层异常转换为上层可消费的结构化错误
+    - 保留少量开发环境脚本调用能力
   - 不负责 prompt，不负责 UI
 
 - `adapter/`
@@ -128,9 +131,23 @@
     - 批次规划
     - 文件切片/同步
     - 元数据输出
+  - [record_finder.py](/home/mini/dev/myScript/witt/core/engine/record_finder.py)
+    - tag 解析
+    - record 索引构建
+    - 时间窗匹配
+    - 查询结果 manifest 输出
+  - [record_query.py](/home/mini/dev/myScript/witt/core/engine/record_query.py)
+    - 本地 / NAS / 远程查询编排
+    - 远程路径发现与 tag 文本读取
   - [player.py](/home/mini/dev/myScript/witt/core/engine/player.py)
     - 回放库加载
     - 回放计划构建
+  - [runtime_env.py](/home/mini/dev/myScript/witt/core/engine/runtime_env.py)
+    - version 文件解析
+    - vmc.sh 环境同步
+  - [replay_stack.py](/home/mini/dev/myScript/witt/core/engine/replay_stack.py)
+    - 标准回放栈启动
+    - 红绿灯回灌栈启动
   - [recorder.py](/home/mini/dev/myScript/witt/core/engine/recorder.py)
     - record 信息解析
     - record split

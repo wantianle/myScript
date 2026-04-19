@@ -245,3 +245,68 @@ def _detect_soc_name(record_path: Path) -> str:
     if "soc2" in path_text:
         return "soc2"
     return "unknown"
+
+
+class RecordFinderManager:
+    """负责按既有规则解析 tag 并匹配 record 查询结果。"""
+
+    def parse_tag_message(self, message: str) -> Tuple[str, datetime]:
+        return parse_tag_message(message)
+
+    def build_record_index(
+        self,
+        record_paths: Sequence[Path],
+    ) -> Dict[int, List[Tuple[int, Path]]]:
+        return build_record_index(record_paths)
+
+    def select_matching_record_paths(
+        self,
+        records_by_minute: Dict[int, List[Tuple[int, Path]]],
+        tag_time: datetime,
+        before: int,
+        after: int,
+    ) -> List[Path]:
+        return select_matching_record_paths(records_by_minute, tag_time, before, after)
+
+    def find_local_tasks(
+        self,
+        data_root: Path,
+        target_date: str,
+        before: int,
+        after: int,
+        soc_filter: str = "",
+    ) -> List[TaskEntry]:
+        return find_local_tasks(
+            data_root,
+            target_date=target_date,
+            before=before,
+            after=after,
+            soc_filter=soc_filter,
+        )
+
+    def find_tasks_from_path_texts(
+        self,
+        path_texts: Sequence[str],
+        read_text: Callable[[str], str],
+        target_date: str,
+        before: int,
+        after: int,
+        soc_filter: str = "",
+        source_root: str = "",
+    ) -> List[TaskEntry]:
+        return find_tasks_from_path_texts(
+            path_texts,
+            read_text,
+            target_date=target_date,
+            before=before,
+            after=after,
+            soc_filter=soc_filter,
+            source_root=source_root,
+        )
+
+    def dump_manifest(
+        self,
+        task_entries: Sequence[TaskEntry],
+        manifest_path: Path,
+    ) -> str:
+        return dump_manifest(task_entries, manifest_path)
