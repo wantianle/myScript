@@ -386,6 +386,33 @@ def show_result_section(
     )
 
 
+def show_progress_section(
+    title: str,
+    summary: str,
+    details: Optional[Sequence[str]] = None,
+    hint: str = "",
+) -> None:
+    """打印统一风格的流程进行中状态页面。"""
+    lines = [Text(summary, style="info")]
+    for detail_text in details or []:
+        lines.append(Text(detail_text, style="muted"))
+    if hint:
+        lines.append(
+            Text.assemble(
+                ("当前阶段: ", "label"),
+                (hint, "accent"),
+            )
+        )
+    _CONSOLE.print(
+        Panel(
+            Group(*lines),
+            title=title,
+            border_style="info",
+            padding=(0, 2),
+        )
+    )
+
+
 def show_replay_section(
     title: str,
     summary: str = "",

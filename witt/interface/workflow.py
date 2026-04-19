@@ -109,7 +109,14 @@ def slice_progress(session: AppSession) -> None:
         )
         _show_skipped_batches(planned_summary.skipped_batches)
         return
-    ui.print_status(f"准备同步 {planned_summary.total_files} 个 Record 片段...")
+    ui.show_progress_section(
+        "切片执行中",
+        "准备同步 {0} 个 Record 片段".format(planned_summary.total_files),
+        details=[
+            "已选中 {0} 个 Tag".format(len(valid_tasks)),
+        ],
+        hint="即将开始下载与切片流程",
+    )
     _show_skipped_batches(planned_summary.skipped_batches)
     download_summary = session.record_downloader.download_records(valid_tasks)
     _show_skipped_batches(download_summary.skipped_batches)

@@ -449,7 +449,11 @@ def _replay_records(
     last_end = 0
     should_use_history_params = replay_history_entry is not None
     while True:
-        ui.print_status(loaded_msg)
+        ui.show_progress_section(
+            "回播准备",
+            loaded_msg,
+            hint="可继续调整播放时间、范围和倍速",
+        )
         use_history_params_this_round = (
             should_use_history_params and replay_history_entry is not None
         )
@@ -657,9 +661,19 @@ def auto_replay_flow(
     while True:
         library_result = session.player.load_library()
         if library_result.cache_hit:
-            ui.print_status(f"本地库状态未变，加载缓存: {library_result.cache_path}...")
+            ui.show_progress_section(
+                "自动回播",
+                "本地库状态未变，正在加载缓存",
+                details=[str(library_result.cache_path)],
+                hint="正在读取回播库条目",
+            )
         else:
-            ui.print_status(f"已扫描本地库 {session.ctx.work_dir}...")
+            ui.show_progress_section(
+                "自动回播",
+                "已扫描本地库",
+                details=[str(session.ctx.work_dir)],
+                hint="正在构建回播条目列表",
+            )
         library = library_result.library
         if not library:
             ui.show_result_section(
@@ -721,9 +735,11 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
             session,
             source_records,
             REPLAY_MODE_STANDARD,
-            "全量模式已加载 "
-            f"\033[1;32m{task_entry.name}\033[0m"
-            f" | 共 {len(source_records)} 个文件 | 总长 {source_records[0].duration}s",
+            "全量模式已加载 {0} | 共 {1} 个文件 | 总长 {2}s".format(
+                task_entry.name,
+                len(source_records),
+                source_records[0].duration,
+            ),
             display_tag=task_entry.name,
             issue_timestamp=task_entry.time,
             source_type=REPLAY_SOURCE_FULL_SOURCE,

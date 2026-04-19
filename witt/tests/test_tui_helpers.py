@@ -225,5 +225,33 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("下一步", rendered)
         self.assertIn("可立即进入回播", rendered)
 
+    def test_show_progress_section_renders_details_and_hint(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_progress_section(
+                "自动回播",
+                "已扫描本地库",
+                details=["/media/demo"],
+                hint="正在构建回播条目列表",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("自动回播", rendered)
+        self.assertIn("已扫描本地库", rendered)
+        self.assertIn("/media/demo", rendered)
+        self.assertIn("当前阶段", rendered)
+        self.assertIn("正在构建回播条目列表", rendered)
+
 if __name__ == "__main__":
     unittest.main()
