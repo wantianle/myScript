@@ -57,9 +57,9 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 runner=SimpleNamespace(
                     restore_runtime_environment=Mock(
                         side_effect=ScriptExecutionError(
-                            "restore_runtime_env.sh",
+                            "runtime_environment",
                             "文件不存在: /tmp/version.json",
-                            details=["restore_runtime_env.sh退出状态码: 1"],
+                            details=["运行环境同步退出状态码: 1"],
                         )
                     ),
                     start_standard_replay_stack=Mock(),

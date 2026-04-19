@@ -148,9 +148,9 @@ class WorkflowTests(unittest.TestCase):
                 runner=SimpleNamespace(
                     run_find_record=Mock(
                         side_effect=ScriptExecutionError(
-                            "find_record.sh",
+                            "record_query",
                             "无法连接车机或找不到对应record 文件！",
-                            details=["find_record.sh退出状态码: 1"],
+                            details=["查询阶段退出状态码: 1"],
                         )
                     )
                 ),

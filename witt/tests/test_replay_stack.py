@@ -9,6 +9,9 @@ from core.engine import replay_stack
 
 
 class ReplayStackTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.replay_stack_manager = replay_stack.ReplayStackManager()
+
     def test_start_standard_replay_stack_dispatches_expected_steps(self) -> None:
         ctx = cast(
             Any,
@@ -17,15 +20,15 @@ class ReplayStackTests(unittest.TestCase):
             ),
         )
 
-        with patch("core.engine.replay_stack._allow_failure") as allow_failure:
-            with patch("core.engine.replay_stack._copy_file_to_container") as copy_file:
-                with patch("core.engine.replay_stack._run_detached_command") as run_detached_command:
+        with patch.object(self.replay_stack_manager, "_allow_failure") as allow_failure:
+            with patch.object(self.replay_stack_manager, "_copy_file_to_container") as copy_file:
+                with patch.object(self.replay_stack_manager, "_run_detached_command") as run_detached_command:
                     with patch(
-                        "core.engine.replay_stack._container_has_xauthority",
+                        "core.engine.replay_stack.ReplayStackManager._container_has_xauthority",
                         return_value=True,
                     ):
-                        with patch("core.engine.replay_stack._open_browser") as open_browser:
-                            replay_stack.start_standard_replay_stack(ctx)
+                        with patch.object(self.replay_stack_manager, "_open_browser") as open_browser:
+                            self.replay_stack_manager.start_standard_replay_stack(ctx)
 
         allow_failure.assert_called_once_with(["xhost", "+local:docker"])
         copy_file.assert_called_once()
@@ -55,9 +58,9 @@ class ReplayStackTests(unittest.TestCase):
                 ),
             )
 
-            with patch("core.engine.replay_stack._copy_file_to_container") as copy_file:
-                with patch("core.engine.replay_stack._run_detached_command") as run_detached_command:
-                    replay_stack.start_traffic_light_stack(ctx)
+            with patch.object(self.replay_stack_manager, "_copy_file_to_container") as copy_file:
+                with patch.object(self.replay_stack_manager, "_run_detached_command") as run_detached_command:
+                    self.replay_stack_manager.start_traffic_light_stack(ctx)
 
             updated_config = traffic_light_config_path.read_text(encoding="utf-8")
             data_test_path = mdrive_root / "data" / "test"

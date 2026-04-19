@@ -16,27 +16,90 @@ class RuntimeVersionInfo:
     vehicle_model: str
 
 
+class RuntimeEnvironmentManager:
+    """负责解析版本文件并同步 vmc.sh 中的运行环境配置。"""
+
+    def load_version_info(self, version_path: Path) -> RuntimeVersionInfo:
+        """从 version.json 或 version.txt 中解析运行环境版本信息。"""
+        if not version_path.is_file():
+            raise RuntimeEnvironmentError("文件不存在: {0}".format(version_path))
+        if version_path.suffix.lower() == ".txt":
+            raw_values = _load_version_text(version_path)
+        else:
+            raw_values = _load_version_json(version_path)
+        mdrive_ver = raw_values.get("mdrive", "")
+        conf_ver = raw_values.get("mdrive_conf", "")
+        if not mdrive_ver or not conf_ver:
+            raise RuntimeEnvironmentError("未能从文件中解析出 mdrive 或 mdrive_conf 版本")
+        vehicle_model = conf_ver.split(".", 1)[0]
+        return RuntimeVersionInfo(
+            mdrive_ver=mdrive_ver,
+            conf_ver=conf_ver,
+            model_ver=raw_values.get("mdrive_model", ""),
+            map_ver=raw_values.get("mdrive_map", ""),
+            localization_ver=raw_values.get("mdrive_map_localization", ""),
+            vehicle_model=vehicle_model,
+        )
+
+    def sync_runtime_environment(
+        self,
+        vmc_path: Path,
+        version_info: RuntimeVersionInfo,
+        vehicle_name: str,
+    ) -> bool:
+        """按解析结果更新 vmc.sh 中的运行环境版本定义。"""
+        if not vmc_path.is_file():
+            raise RuntimeEnvironmentError("文件不存在: {0}".format(vmc_path))
+        vmc_text = vmc_path.read_text(encoding="utf-8")
+        current_values = {
+            "MDRIVE_VEHICLE_MODEL": _extract_vmc_value(vmc_text, "MDRIVE_VEHICLE_MODEL"),
+            "MDRIVE_VEHICLE_NAME": _extract_vmc_value(vmc_text, "MDRIVE_VEHICLE_NAME"),
+            "MDRIVE_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_VERSION"),
+            "MDRIVE_CONF_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_CONF_VERSION"),
+            "MDRIVE_MODEL_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_MODEL_VERSION"),
+            "MDRIVE_MAP_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_MAP_VERSION"),
+        }
+        target_values = {
+            "MDRIVE_VEHICLE_MODEL": version_info.vehicle_model,
+            "MDRIVE_VEHICLE_NAME": vehicle_name,
+            "MDRIVE_VERSION": version_info.mdrive_ver,
+            "MDRIVE_CONF_VERSION": version_info.conf_ver,
+            "MDRIVE_MODEL_VERSION": version_info.model_ver,
+            "MDRIVE_MAP_VERSION": version_info.map_ver,
+        }
+        if current_values == target_values:
+            return False
+        updated_text = vmc_text
+        for key_name, value_text in target_values.items():
+            replacement = "{0}={1}".format(
+                key_name,
+                '"{0}"'.format(value_text) if "VEHICLE_" in key_name else value_text,
+            )
+            updated_text = re.sub(
+                r"^{0}=.*$".format(key_name),
+                replacement,
+                updated_text,
+                flags=re.MULTILINE,
+            )
+        vmc_path.write_text(updated_text, encoding="utf-8")
+        return True
+
+    def restore_runtime_environment(
+        self,
+        version_path: Path,
+        vmc_path: Path,
+        vehicle_name: str,
+    ) -> bool:
+        """解析版本文件并同步 vmc.sh。"""
+        version_info = self.load_version_info(version_path)
+        return self.sync_runtime_environment(vmc_path, version_info, vehicle_name)
+
+
+_DEFAULT_RUNTIME_ENV_MANAGER = RuntimeEnvironmentManager()
+
+
 def load_version_info(version_path: Path) -> RuntimeVersionInfo:
-    """从 version.json 或 version.txt 中解析运行环境版本信息。"""
-    if not version_path.is_file():
-        raise RuntimeEnvironmentError("文件不存在: {0}".format(version_path))
-    if version_path.suffix.lower() == ".txt":
-        raw_values = _load_version_text(version_path)
-    else:
-        raw_values = _load_version_json(version_path)
-    mdrive_ver = raw_values.get("mdrive", "")
-    conf_ver = raw_values.get("mdrive_conf", "")
-    if not mdrive_ver or not conf_ver:
-        raise RuntimeEnvironmentError("未能从文件中解析出 mdrive 或 mdrive_conf 版本")
-    vehicle_model = conf_ver.split(".", 1)[0]
-    return RuntimeVersionInfo(
-        mdrive_ver=mdrive_ver,
-        conf_ver=conf_ver,
-        model_ver=raw_values.get("mdrive_model", ""),
-        map_ver=raw_values.get("mdrive_map", ""),
-        localization_ver=raw_values.get("mdrive_map_localization", ""),
-        vehicle_model=vehicle_model,
-    )
+    return _DEFAULT_RUNTIME_ENV_MANAGER.load_version_info(version_path)
 
 
 def sync_runtime_environment(
@@ -44,42 +107,11 @@ def sync_runtime_environment(
     version_info: RuntimeVersionInfo,
     vehicle_name: str,
 ) -> bool:
-    """按解析结果更新 vmc.sh 中的运行环境版本定义。"""
-    if not vmc_path.is_file():
-        raise RuntimeEnvironmentError("文件不存在: {0}".format(vmc_path))
-    vmc_text = vmc_path.read_text(encoding="utf-8")
-    current_values = {
-        "MDRIVE_VEHICLE_MODEL": _extract_vmc_value(vmc_text, "MDRIVE_VEHICLE_MODEL"),
-        "MDRIVE_VEHICLE_NAME": _extract_vmc_value(vmc_text, "MDRIVE_VEHICLE_NAME"),
-        "MDRIVE_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_VERSION"),
-        "MDRIVE_CONF_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_CONF_VERSION"),
-        "MDRIVE_MODEL_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_MODEL_VERSION"),
-        "MDRIVE_MAP_VERSION": _extract_vmc_value(vmc_text, "MDRIVE_MAP_VERSION"),
-    }
-    target_values = {
-        "MDRIVE_VEHICLE_MODEL": version_info.vehicle_model,
-        "MDRIVE_VEHICLE_NAME": vehicle_name,
-        "MDRIVE_VERSION": version_info.mdrive_ver,
-        "MDRIVE_CONF_VERSION": version_info.conf_ver,
-        "MDRIVE_MODEL_VERSION": version_info.model_ver,
-        "MDRIVE_MAP_VERSION": version_info.map_ver,
-    }
-    if current_values == target_values:
-        return False
-    updated_text = vmc_text
-    for key_name, value_text in target_values.items():
-        replacement = "{0}={1}".format(
-            key_name,
-            '"{0}"'.format(value_text) if "VEHICLE_" in key_name else value_text,
-        )
-        updated_text = re.sub(
-            r"^{0}=.*$".format(key_name),
-            replacement,
-            updated_text,
-            flags=re.MULTILINE,
-        )
-    vmc_path.write_text(updated_text, encoding="utf-8")
-    return True
+    return _DEFAULT_RUNTIME_ENV_MANAGER.sync_runtime_environment(
+        vmc_path,
+        version_info,
+        vehicle_name,
+    )
 
 
 def restore_runtime_environment(
@@ -87,9 +119,11 @@ def restore_runtime_environment(
     vmc_path: Path,
     vehicle_name: str,
 ) -> bool:
-    """解析版本文件并同步 vmc.sh。"""
-    version_info = load_version_info(version_path)
-    return sync_runtime_environment(vmc_path, version_info, vehicle_name)
+    return _DEFAULT_RUNTIME_ENV_MANAGER.restore_runtime_environment(
+        version_path,
+        vmc_path,
+        vehicle_name,
+    )
 
 
 def _load_version_json(version_path: Path) -> dict:

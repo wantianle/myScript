@@ -256,8 +256,9 @@ class ScriptRunnerTests(unittest.TestCase):
             )
         )
 
-        with patch(
-            "core.runner.runtime_env.restore_runtime_environment",
+        with patch.object(
+            runner.runtime_environment_manager,
+            "restore_runtime_environment",
             return_value=False,
         ) as restore_runtime_environment:
             runner.restore_runtime_environment()
@@ -280,7 +281,10 @@ class ScriptRunnerTests(unittest.TestCase):
             )
         )
 
-        with patch("core.runner.replay_stack.start_standard_replay_stack") as start_standard_replay_stack:
+        with patch.object(
+            runner.replay_stack_manager,
+            "start_standard_replay_stack",
+        ) as start_standard_replay_stack:
             runner.start_replay_stack()
 
         start_standard_replay_stack.assert_called_once_with(runner.ctx)
@@ -297,7 +301,10 @@ class ScriptRunnerTests(unittest.TestCase):
             )
         )
 
-        with patch("core.runner.replay_stack.start_traffic_light_stack") as start_traffic_light_stack:
+        with patch.object(
+            runner.replay_stack_manager,
+            "start_traffic_light_stack",
+        ) as start_traffic_light_stack:
             runner.start_traffic_light_stack()
 
         start_traffic_light_stack.assert_called_once_with(runner.ctx)

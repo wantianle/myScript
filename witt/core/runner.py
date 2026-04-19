@@ -29,6 +29,8 @@ class ScriptRunner:
 
     def __init__(self, ctx):
         self.ctx = ctx
+        self.runtime_environment_manager = runtime_env.RuntimeEnvironmentManager()
+        self.replay_stack_manager = replay_stack.ReplayStackManager()
         PROJECT_ROOT = Path(__file__).resolve().parents[1]
         self.scripts_dir = (PROJECT_ROOT / self.ctx.paths.scripts_dir).resolve()
 
@@ -243,7 +245,7 @@ class ScriptRunner:
                 path_texts = self._run_remote_find_paths()
             except CommandExecutionError as e:
                 raise ScriptExecutionError(
-                    "find_record",
+                    "record_query",
                     "无法连接车机或找不到对应record 文件！",
                     details=[str(e)],
                 ) from e
@@ -258,7 +260,7 @@ class ScriptRunner:
                     source_root=str(self.ctx.remote.data_root),
                 )
             except FindRecordError as e:
-                raise ScriptExecutionError("find_record", str(e)) from e
+                raise ScriptExecutionError("record_query", str(e)) from e
             self.ctx.find_record_output = record_finder.dump_manifest(
                 task_entries,
                 self.ctx.manifest_path,
@@ -273,7 +275,7 @@ class ScriptRunner:
                 soc_filter=str(getattr(self.ctx.logic, "soc", "")),
             )
         except FindRecordError as e:
-            raise ScriptExecutionError("find_record", str(e)) from e
+            raise ScriptExecutionError("record_query", str(e)) from e
         self.ctx.find_record_output = record_finder.dump_manifest(
             task_entries,
             self.ctx.manifest_path,
@@ -283,27 +285,27 @@ class ScriptRunner:
     def restore_runtime_environment(self) -> None:
         """恢复运行环境版本配置。"""
         try:
-            runtime_env.restore_runtime_environment(
+            self.runtime_environment_manager.restore_runtime_environment(
                 version_path=Path(str(self.ctx.logic.version)),
                 vmc_path=Path(self.ctx.host.mdrive_root) / "vmc.sh",
                 vehicle_name=self.ctx.vehicle,
             )
         except RuntimeEnvironmentError as e:
-            raise ScriptExecutionError("restore_runtime_env.sh", str(e)) from e
+            raise ScriptExecutionError("runtime_environment", str(e)) from e
 
     def start_replay_stack(self) -> None:
         """启动标准回放相关模块。"""
         try:
-            replay_stack.start_standard_replay_stack(self.ctx)
+            self.replay_stack_manager.start_standard_replay_stack(self.ctx)
         except ReplayStackError as e:
-            raise ScriptExecutionError("start_replay_stack.sh", str(e)) from e
+            raise ScriptExecutionError("standard_replay_stack", str(e)) from e
 
     def start_traffic_light_stack(self) -> None:
         """启动红绿灯回灌相关模块。"""
         try:
-            replay_stack.start_traffic_light_stack(self.ctx)
+            self.replay_stack_manager.start_traffic_light_stack(self.ctx)
         except ReplayStackError as e:
-            raise ScriptExecutionError("start_traffic_light_stack.sh", str(e)) from e
+            raise ScriptExecutionError("traffic_light_replay_stack", str(e)) from e
 
     def start_standard_replay_stack(self) -> None:
         """启动标准回放完整栈。"""

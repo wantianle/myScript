@@ -14,16 +14,18 @@ class CommandExecutionError(WittCoreError):
 
 
 class ScriptExecutionError(WittCoreError):
-    """Raised when a managed shell script fails with structured output."""
+    """Raised when a managed runtime operation fails with structured output."""
 
     def __init__(
         self,
-        script_name: str,
+        operation_name: str,
         summary: str,
         details: Optional[List[str]] = None,
     ) -> None:
         super().__init__(summary)
-        self.script_name = script_name
+        self.operation_name = operation_name
+        # Backward-compatible alias for older call sites/tests.
+        self.script_name = operation_name
         self.summary = summary
         self.details = list(details or [])
 
