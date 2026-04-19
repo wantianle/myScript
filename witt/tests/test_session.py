@@ -51,7 +51,7 @@ class SessionConfigTests(unittest.TestCase):
                 "logic:\n  vehicle: XZT500001\n",
             )
 
-    def test_app_session_exposes_runtime_and_runner_as_same_instance(self) -> None:
+    def test_app_session_exposes_runtime_entry(self) -> None:
         runtime = object()
         with patch("core.session.ensure_user_config_path", return_value=Path("/tmp/settings.yaml")):
             with patch("core.session.TaskContext", return_value=SimpleNamespace(work_dir=Path("/tmp/work"))):
@@ -65,7 +65,6 @@ class SessionConfigTests(unittest.TestCase):
                                             session = AppSession()
 
         self.assertIs(session.runtime, runtime)
-        self.assertIs(session.runner, runtime)
 
 
 if __name__ == "__main__":

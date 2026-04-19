@@ -24,8 +24,6 @@ class ScriptExecutionError(WittCoreError):
     ) -> None:
         super().__init__(summary)
         self.operation_name = operation_name
-        # Backward-compatible alias for older call sites/tests.
-        self.script_name = operation_name
         self.summary = summary
         self.details = list(details or [])
 

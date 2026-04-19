@@ -47,7 +47,6 @@ class AppSession:
         )
         self.ctx = TaskContext(resolved_config_path)
         self.runtime = RuntimeCoordinator(self.ctx)
-        self.runner = self.runtime
         self.recorder = Recorder(self)
         self.metadata_repository = MetadataRepository()
         self.library_cache_repository = LibraryCacheRepository(
