@@ -44,9 +44,9 @@ def sanitize_name(name: str) -> str:
 
 def str_to_time(t_str: str) -> datetime:
     """统一解析 Cyber 时间字符串为 datetime 对象"""
-    clean_t = (
-        f"{t_str[:10]} {t_str[11:]}" if len(t_str) > 10 and t_str[10] == "-" else t_str
-    )
+    clean_t = str(t_str).strip()
+    if len(clean_t) > 10 and clean_t[10] in ("-", "T"):
+        clean_t = "{0} {1}".format(clean_t[:10], clean_t[11:])
     try:
         return datetime.strptime(clean_t, "%Y-%m-%d %H:%M:%S")
     except ValueError:

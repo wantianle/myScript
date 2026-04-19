@@ -189,6 +189,11 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(parser.parse_range_logic("7"), (7, 0))
         self.assertEqual(parser.parse_range_logic(""), (0, 0))
 
+    def test_str_to_time_supports_iso_t_separator(self) -> None:
+        parsed_time = parser.str_to_time("2026-04-15T10:16:08")
+
+        self.assertEqual(parsed_time, datetime(2026, 4, 15, 10, 16, 8))
+
     def test_parse_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest_path = Path(tmpdir) / "tasks.list"
