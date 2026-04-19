@@ -622,15 +622,15 @@ def _build_history_table(history_entries: List[ReplayHistoryEntry]) -> Table:
         expand=True,
     )
     table.add_column("序号", justify="right", style="accent", width=4)
-    table.add_column("创建时间", style="label", min_width=16)
-    table.add_column("Tag时间", style="label", min_width=16)
-    table.add_column("车号", style="accent", min_width=10)
-    table.add_column("模式", style="muted", min_width=16)
-    table.add_column("Tag", style="accent", min_width=18)
-    table.add_column("range", style="label", min_width=10)
-    table.add_column("rate", style="label", min_width=8)
-    table.add_column("-k", style="muted", min_width=10)
-    table.add_column("状态", style="label", min_width=8)
+    table.add_column("创建时间", style="label", min_width=12)
+    table.add_column("Tag时间", style="label", min_width=12)
+    table.add_column("车号", style="accent", min_width=9)
+    table.add_column("模式", style="muted", min_width=10)
+    table.add_column("Tag", style="accent", min_width=10)
+    table.add_column("range", style="label", min_width=8)
+    table.add_column("rate", style="label", min_width=4)
+    table.add_column("状态", style="label", width=8, no_wrap=True)
+    table.add_column("-k", style="muted", min_width=6)
     for index, history_entry in enumerate(history_entries, 1):
         source_mode_text = "{0}/{1}".format(
             history_entry.source_type,
@@ -645,8 +645,8 @@ def _build_history_table(history_entries: List[ReplayHistoryEntry]) -> Table:
             history_entry.display_tag or history_entry.selection_label or "未命名回播",
             _format_history_range(history_entry.start_sec, history_entry.end_sec),
             "x{0:g}".format(history_entry.playback_rate),
-            _format_history_channels(history_entry.channel_filters),
             _format_history_status(history_entry),
+            _format_history_channels(history_entry.channel_filters),
         )
     return table
 

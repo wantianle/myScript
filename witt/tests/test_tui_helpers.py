@@ -1,6 +1,8 @@
 from io import StringIO
+import tempfile
 import unittest
 
+from core.models import ReplayHistoryEntry, ReplayRecord
 from interface import prompter
 from interface import ui
 from rich.console import Console
@@ -301,6 +303,41 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("输入校验", rendered)
         self.assertIn("输入无效，请重新选择", rendered)
         self.assertIn("可输入序号或候选项名称", rendered)
+
+    def test_history_table_keeps_status_column_visible_in_narrow_width(self) -> None:
+        with tempfile.NamedTemporaryFile() as temp_file:
+            history_entry = ReplayHistoryEntry(
+                created_at="2026-04-19 12:00:00",
+                source_type="auto",
+                replay_mode="standard",
+                selection_label="demo",
+                display_tag="demo_tag",
+                issue_timestamp="2026-04-19 11:59:00",
+                vehicle="XZB600001",
+                target_date="20260419",
+                records=[
+                    ReplayRecord(
+                        path=temp_file.name,
+                        begin=None,
+                        duration=10,
+                    )
+                ],
+            )
+
+            buffer = StringIO()
+            console = Console(
+                file=buffer,
+                width=120,
+                force_terminal=False,
+                highlight=False,
+                theme=ui._THEME,
+            )
+            console.print(ui._build_history_table([history_entry]))
+
+            rendered = buffer.getvalue()
+
+        self.assertIn("状态", rendered)
+        self.assertIn("可回播", rendered)
 
 if __name__ == "__main__":
     unittest.main()
