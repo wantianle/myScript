@@ -309,7 +309,7 @@ def get_issue_marker() -> Optional[ReplayIssueMarker]:
         "回播结束后可记录问题时间点和现象备注",
         "输入 y 进入记录流程，输入 n 跳过",
     )
-    if not prompter.get_confirm_input("是否记录问题时间点标记？"):
+    if not prompter.get_confirm_input("是否记录？"):
         return None
     return ReplayIssueMarker(
         playback_start_sec=_get_issue_start_sec(),
@@ -322,11 +322,11 @@ def _get_issue_start_sec() -> int:
     ui.show_replay_section(
         "问题时间点配置",
         "用于覆盖 issue 草稿中的 -s 时间点",
-        "请输入非负整数秒数，例如 37",
+        "请输入非负整数秒数，例如 10",
     )
     while True:
         raw_value = prompter.prompt_text(
-            "问题时间点秒数(-s，例 10)",
+            "问题时间点",
             history_name="issue_start_sec",
         )
         if raw_value.isdigit():

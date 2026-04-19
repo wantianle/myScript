@@ -64,7 +64,7 @@ def create_command_prompt_session() -> PromptSession:
         completer_words.append(command_spec.name)
         completer_words.extend(command_spec.aliases)
     command_completer = WordCompleter(
-        sorted(set(completer_words)),
+        _sort_completion_words(completer_words),
         ignore_case=True,
         sentence=True,
     )
@@ -121,6 +121,29 @@ def _build_command_toolbar() -> str:
     return " help  config  slice  replay  scan  manual  history  traffic  env  clear  quit "
 
 
+def _sort_completion_words(words: Sequence[object]) -> List[str]:
+    """按自然数字顺序整理补全词。"""
+    normalized_words = sorted(
+        {str(word) for word in words},
+        key=_completion_sort_key,
+    )
+    return normalized_words
+
+
+def _completion_sort_key(word: str):
+    """生成自然排序 key，使数字按数值顺序排列。"""
+    parts = re.split(r"(\d+)", word)
+    key = []
+    for part in parts:
+        if not part:
+            continue
+        if part.isdigit():
+            key.append((0, int(part)))
+        else:
+            key.append((1, part.lower()))
+    return key
+
+
 def _get_prompt_session(history_name: str) -> PromptSession:
     """按历史分类复用 PromptSession。"""
     prompt_session = _PROMPT_SESSION_CACHE.get(history_name)
@@ -148,7 +171,7 @@ def prompt_text(
     completer = None
     if completer_words:
         completer = WordCompleter(
-            sorted(set(str(word) for word in completer_words)),
+            _sort_completion_words(completer_words),
             ignore_case=True,
             sentence=True,
         )

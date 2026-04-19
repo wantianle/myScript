@@ -43,6 +43,12 @@ class TuiHelperTests(unittest.TestCase):
             [1, 5],
         )
 
+    def test_sort_completion_words_uses_natural_numeric_order(self) -> None:
+        self.assertEqual(
+            prompter._sort_completion_words(["10", "2", "1", "11", "3"]),
+            ["1", "2", "3", "10", "11"],
+        )
+
     def test_selector_state_panel_shows_filter_summary_and_empty_state(self) -> None:
         rendered = self._render(
             ui._build_selector_state_panel(
