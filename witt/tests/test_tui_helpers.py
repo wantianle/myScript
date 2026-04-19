@@ -214,6 +214,32 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("版本信息", rendered)
         self.assertIn("mdrive: 1.2.3", rendered)
 
+    def test_show_playback_info_truncates_long_selection_label(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_playback_info(
+                tag="demo_tag",
+                duration=20,
+                rate=1.0,
+                selection_label="demo_tag_with_a_very_long_name | soc1,soc2 | 12 files | extra context",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("回放条目", rendered)
+        self.assertIn("demo_tag_with_a_very_long_name", rendered)
+        self.assertIn("...", rendered)
+
     def test_show_flow_section_renders_summary_and_hint(self) -> None:
         buffer = StringIO()
         console = Console(

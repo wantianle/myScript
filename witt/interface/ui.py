@@ -33,6 +33,7 @@ _THEME = Theme(
 _CONSOLE = Console(theme=_THEME, highlight=False)
 _HISTORY_REPLAY_TITLE = "历史回播"
 _HISTORY_REPLAY_EMPTY_SUMMARY = "当前没有可重放的回播历史"
+_PLAYBACK_SELECTION_MAX_LENGTH = 48
 
 
 def print_banner() -> None:
@@ -561,7 +562,10 @@ def show_playback_info(
         )
     if selection_label:
         lines.append(
-            Text.assemble(("回放条目: ", "label"), (selection_label, "accent"))
+            Text.assemble(
+                ("回放条目: ", "label"),
+                (_format_playback_selection_label(selection_label), "accent"),
+            )
         )
     lines.extend(
         [
@@ -596,6 +600,14 @@ def show_playback_info(
             )
     )
     _CONSOLE.print(_build_info_panel("回播信息", lines, "Ctrl+C 中断当前回播"))
+
+
+def _format_playback_selection_label(selection_label: str) -> str:
+    """压缩回放条目摘要，避免面板里出现过长单行。"""
+    compact_label = " ".join(str(selection_label).split())
+    if len(compact_label) <= _PLAYBACK_SELECTION_MAX_LENGTH:
+        return compact_label
+    return "{0}...".format(compact_label[: _PLAYBACK_SELECTION_MAX_LENGTH - 3])
 def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
     """打印回播历史列表。"""
     _CONSOLE.print(
