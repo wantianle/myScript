@@ -58,8 +58,6 @@ def _filter_playback_entries(
             [
                 entry.tag,
                 entry.time,
-                entry.vehicle,
-                entry.date,
                 " ".join(sorted(entry.socs.keys())),
             ],
         )
@@ -163,11 +161,7 @@ def select_playback_entry(
     target_date: str,
 ) -> Optional[LibraryEntry]:
     """从过滤后的回放库中选择一个回放条目。"""
-    filtered_library = [
-        entry
-        for entry in library
-        if entry.date == target_date and entry.vehicle == vehicle
-    ]
+    filtered_library = list(library)
     if not filtered_library:
         ui.show_result_section(
             "回播库",

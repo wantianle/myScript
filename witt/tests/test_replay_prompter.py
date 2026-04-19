@@ -1,10 +1,32 @@
 import unittest
 from unittest.mock import patch
 
+from core.models import LibraryEntry, ReplayRecord
 from interface import replay_prompter
 
 
 class ReplayPrompterTests(unittest.TestCase):
+    def test_filter_playback_entries_matches_tag_time_and_soc_keyword(self) -> None:
+        library = [
+            LibraryEntry(
+                tag="demo_tag",
+                time="2026-04-19 12:00:00",
+                socs={"soc1": [ReplayRecord(path="/tmp/a.record", begin="2026-04-19T12:00:00", duration=10)]},
+            ),
+            LibraryEntry(
+                tag="other_tag",
+                time="2026-04-19 12:01:00",
+                socs={"soc2": [ReplayRecord(path="/tmp/b.record", begin="2026-04-19T12:01:00", duration=10)]},
+            ),
+        ]
+
+        filtered_entries = replay_prompter._filter_playback_entries(
+            library,
+            "demo soc1",
+        )
+
+        self.assertEqual([entry.tag for entry in filtered_entries], ["demo_tag"])
+
     def test_select_filtered_value_returns_selected_item_after_filter(self) -> None:
         render_calls = []
         user_inputs = iter(["/bar", "1"])

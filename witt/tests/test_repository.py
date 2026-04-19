@@ -15,8 +15,6 @@ class LibraryCacheRepositoryTests(unittest.TestCase):
                 LibraryEntry(
                     tag="demo_tag",
                     time="2026-04-15 12:00:00",
-                    vehicle="XZB600013",
-                    date="20260415",
                     socs={
                         "soc1": [
                             ReplayRecord(

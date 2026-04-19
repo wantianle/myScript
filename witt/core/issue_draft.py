@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -28,19 +27,17 @@ class IssueDraft:
     issue_description: str = "填写补充描述"
 
 
-def build_issue_filename(issue_timestamp: str, issue_name: str = "") -> str:
-    """根据时间戳和预留名称生成 issue 文件名。"""
-    suffix = _normalize_issue_name(issue_name) or issue_timestamp
-    return "issue_{0}.md".format(suffix)
+def build_issue_filename(issue_timestamp: str) -> str:
+    """根据时间戳生成 issue 文件名。"""
+    return "issue_{0}.md".format(issue_timestamp)
 
 
 def build_issue_path(
     work_dir: Path,
     issue_timestamp: str,
-    issue_name: str = "",
 ) -> Path:
     """构造 issue 草稿文件路径。"""
-    return work_dir / "issues" / build_issue_filename(issue_timestamp, issue_name)
+    return work_dir / "issues" / build_issue_filename(issue_timestamp)
 
 
 def render_issue_markdown(issue_draft: IssueDraft) -> str:
@@ -72,14 +69,13 @@ channels(-k): {channels_text}
 def save_issue_draft(
     work_dir: Path,
     issue_draft: IssueDraft,
-    issue_name: str = "",
     issue_timestamp: Union[str, datetime] = "",
 ) -> Path:
     """保存 issue 草稿到 work_dir/issues。"""
     timestamp_text = _normalize_issue_timestamp(issue_timestamp)
     if not timestamp_text:
         timestamp_text = datetime.now().strftime("%Y%m%d_%H%M%S")
-    issue_path = build_issue_path(work_dir, timestamp_text, issue_name)
+    issue_path = build_issue_path(work_dir, timestamp_text)
     issue_path.parent.mkdir(parents=True, exist_ok=True)
     issue_path.write_text(render_issue_markdown(issue_draft), encoding="utf-8")
     return issue_path
@@ -94,12 +90,6 @@ def load_version_text(version_source: Union[str, Path]) -> str:
         return version_path.read_text(encoding="utf-8", errors="replace")
     except (OSError, TypeError, ValueError):
         return str(version_source)
-
-
-def _normalize_issue_name(issue_name: str) -> str:
-    """清理预留 issue 名称，便于后续改成中文 tag 或自定义标题。"""
-    cleaned_name = issue_name.strip().replace("/", "_").replace("\\", "_")
-    return re.sub(r"\s+", "_", cleaned_name)
 
 
 def _normalize_issue_timestamp(issue_timestamp: Union[str, datetime]) -> str:

@@ -81,8 +81,6 @@ class RawReplayHistoryEntry(TypedDict, total=False):
 class RawLibraryEntryRequired(TypedDict):
     tag: str
     time: str
-    vehicle: str
-    date: str
 
 
 class RawLibraryEntry(RawLibraryEntryRequired, total=False):
@@ -359,8 +357,6 @@ class ReplayHistoryEntry:
 class LibraryEntry:
     tag: str
     time: str
-    vehicle: str
-    date: str
     socs: Dict[str, List[ReplayRecord]] = field(default_factory=dict)
     last_update: Dict[str, str] = field(default_factory=dict)
 
@@ -369,8 +365,6 @@ class LibraryEntry:
         return cls(
             tag=str(raw_entry["tag"]),
             time=str(raw_entry["time"]),
-            vehicle=str(raw_entry["vehicle"]),
-            date=str(raw_entry["date"]),
             last_update=dict(raw_entry.get("last_update") or {}),
             socs={
                 soc_name: [
@@ -385,8 +379,6 @@ class LibraryEntry:
         return {
             "tag": self.tag,
             "time": self.time,
-            "vehicle": self.vehicle,
-            "date": self.date,
             "last_update": self.last_update,
             "socs": {
                 soc_name: [
@@ -402,8 +394,6 @@ class LibraryEntry:
         entry = cls(
             tag=record_meta.tag_info.name,
             time=record_meta.tag_info.time,
-            vehicle=record_meta.vehicle or tag_dir.parent.name,
-            date=record_meta.date or tag_dir.parents[1].name,
             last_update=dict(record_meta.last_update),
         )
         for soc_name, file_names in record_meta.files.items():
