@@ -109,9 +109,30 @@ class WorkflowTests(unittest.TestCase):
         get_basic_params.assert_called_once_with(session.ctx)
         get_source_path_params.assert_called_once()
         get_export_path_params.assert_called_once_with(session.ctx)
-        get_split_params.assert_called_once_with(session.ctx)
+        get_split_params.assert_called_once_with(session.ctx, "切片窗口")
         session.init_logging.assert_called_once_with()
         session.runner.run_find_record.assert_called_once_with()
+
+    def test_load_task_entries_passes_replay_window_name(self) -> None:
+        session = SimpleNamespace(ctx=SimpleNamespace(manifest_path="/tmp/manifest"))
+
+        with patch("interface.workflow.search_flow") as search_flow:
+            with patch("interface.workflow.parser.parse_manifest", return_value=["demo"]):
+                task_entries = workflow._load_task_entries(
+                    session,
+                    need_export_path=False,
+                    allow_remote=False,
+                    split_window_name="回播窗口",
+                )
+
+        self.assertEqual(task_entries, ["demo"])
+        search_flow.assert_called_once_with(
+            session,
+            need_export_path=False,
+            allow_remote=False,
+            preset_mode=None,
+            split_window_name="回播窗口",
+        )
 
 
 if __name__ == "__main__":

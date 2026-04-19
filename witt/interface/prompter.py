@@ -34,7 +34,7 @@ COMMAND_SPECS = [
     CommandSpec("help", ["h", "?"], "显示命令帮助", "help history"),
     CommandSpec("config", ["cfg"], "编辑用户 settings.yaml 并重建会话配置", "config"),
     CommandSpec("slice", ["s"], "查询、切片并可选回播", "slice"),
-    CommandSpec("replay", ["r"], "查询后直接回放原始 record，不切片", "replay"),
+    CommandSpec("replay", ["r"], "查询后执行原始数据回放（不切片）", "replay"),
     CommandSpec("scan", ["a"], "扫描本地回放目录后浏览并回放", "scan"),
     CommandSpec("manual", ["m"], "直接拖拽或输入 record 文件/目录回放", "manual"),
     CommandSpec("history", ["his"], "浏览历史并支持少量子命令", "history last"),

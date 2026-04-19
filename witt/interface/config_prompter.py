@@ -49,21 +49,40 @@ def get_basic_params(ctx) -> None:
     ctx.logic.vehicle = get_vehicle_name(ctx.logic.vehicle)
 
 
-def get_split_params(ctx) -> None:
-    """采集切片时间窗参数并完成基础校验。"""
+def get_split_params(ctx, window_name: str = "切片窗口") -> None:
+    """采集时间窗参数并完成基础校验。"""
+    if window_name == "回播窗口":
+        title = "回播窗口配置"
+        summary = "当前回播窗口 before {0}s | after {1}s".format(
+            ctx.logic.before,
+            ctx.logic.after,
+        )
+        hint = "设置 Tag 前后回播窗口，总时长必须大于 0 秒"
+        before_prompt = "回播开始前多少秒"
+        after_prompt = "回播结束后多少秒"
+    else:
+        title = "切片时间窗配置"
+        summary = "当前切片窗口 before {0}s | after {1}s".format(
+            ctx.logic.before,
+            ctx.logic.after,
+        )
+        hint = "设置 Tag 前后切片窗口，总时长必须大于 0 秒"
+        before_prompt = "切片 tag 前多少秒"
+        after_prompt = "切片 tag 后多少秒"
+
     ui.show_config_section(
-        "切片时间窗配置",
-        "当前 before {0}s | after {1}s".format(ctx.logic.before, ctx.logic.after),
-        "设置 tag 前后时间窗，总时长必须大于 0 秒",
+        title,
+        summary,
+        hint,
     )
     while True:
         before = prompter.get_int_input(
-            "切片 tag 前多少秒",
+            before_prompt,
             ctx.logic.before,
             history_name="slice_before",
         )
         after = prompter.get_int_input(
-            "切片 tag 后多少秒",
+            after_prompt,
             ctx.logic.after,
             history_name="slice_after",
         )

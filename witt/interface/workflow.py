@@ -51,6 +51,7 @@ def _load_task_entries(
     need_export_path: bool = True,
     allow_remote: bool = True,
     preset_mode=None,
+    split_window_name: str = "切片窗口",
 ):
     """执行查询并加载 manifest 中的任务列表。"""
     search_flow(
@@ -58,6 +59,7 @@ def _load_task_entries(
         need_export_path=need_export_path,
         allow_remote=allow_remote,
         preset_mode=preset_mode,
+        split_window_name=split_window_name,
     )
     task_list = parser.parse_manifest(session.ctx.manifest_path)
     if not task_list:
@@ -158,8 +160,8 @@ def slice_progress(session: AppSession) -> None:
 def full_source_progress(session: AppSession, preset_mode=None) -> None:
     """执行查询后直接回放原始 record 数据。"""
     ui.show_flow_section(
-        "全量回播模式",
-        "查询 Record -> 选择 Tag -> 直接回播原始数据",
+        "原始数据回放（不切片）",
+        "查询 Record -> 选择 Tag -> 直接回放原始数据",
         "不生成导出目录，直接基于原始记录构造回播",
     )
     task_list = _load_task_entries(
@@ -167,13 +169,14 @@ def full_source_progress(session: AppSession, preset_mode=None) -> None:
         need_export_path=False,
         allow_remote=False,
         preset_mode=preset_mode,
+        split_window_name="回播窗口",
     )
     if not task_list:
         return
     valid_tasks = [task_entry for task_entry in task_list if task_entry.paths]
     if not valid_tasks:
         ui.show_result_section(
-            "全量回播",
+            "原始数据回放",
             "未找到可处理的有效 Tag 数据",
             "ERROR",
             next_step="检查查询结果是否包含有效原始路径",
@@ -248,6 +251,7 @@ def search_flow(
     need_export_path: bool = True,
     allow_remote: bool = True,
     preset_mode=None,
+    split_window_name: str = "切片窗口",
 ) -> None:
     """采集查询条件并执行 Record 检索脚本。"""
     config_prompter.get_basic_params(session.ctx)
@@ -259,7 +263,7 @@ def search_flow(
     )
     if need_export_path:
         config_prompter.get_export_path_params(session.ctx)
-    config_prompter.get_split_params(session.ctx)
+    config_prompter.get_split_params(session.ctx, split_window_name)
     session.runner.run_find_record()
 
 full_progress = slice_progress

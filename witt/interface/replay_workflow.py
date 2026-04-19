@@ -112,9 +112,16 @@ def _resolve_version_from_records(
     records: List[ReplayRecord],
 ) -> bool:
     """从当前回放记录中推断版本文件路径。"""
-    version_path = next(Path(records[0].path).parent.glob("version*"), None)
+    version_path = _find_version_path_from_records(records)
     session.ctx.logic.version = version_path or ""
     return version_path is not None
+
+
+def _find_version_path_from_records(records: List[ReplayRecord]) -> Optional[Path]:
+    """从回放记录中尝试定位版本文件。"""
+    if not records:
+        return None
+    return next(Path(records[0].path).parent.glob("version*"), None)
 
 
 def _prepare_replay(
@@ -166,6 +173,44 @@ def _build_source_replay_records(
         )
         for path_obj in ordered_paths
     ]
+
+
+def _format_preview_time(time_value) -> str:
+    """格式化预览面板中的时间字段。"""
+    if isinstance(time_value, datetime):
+        return time_value.strftime("%Y-%m-%d %H:%M:%S")
+    return str(time_value)
+
+
+def _show_full_source_preview(task_entry, source_records: List[ReplayRecord]) -> None:
+    """展示原始数据回放（不切片）的回播前预览。"""
+    if not source_records:
+        return
+    replay_start = source_records[0].begin
+    replay_duration = source_records[0].duration
+    replay_end = replay_start + timedelta(seconds=replay_duration)
+    version_path = _find_version_path_from_records(source_records)
+    soc_count = len(
+        [
+            soc_name
+            for soc_name, paths in task_entry.soc_paths.items()
+            if paths
+        ]
+    )
+    version_source = (
+        "自动发现: {0}".format(version_path)
+        if version_path is not None
+        else "未发现 version 文件"
+    )
+    ui.show_replay_preview(
+        tag_time=task_entry.time,
+        replay_start=_format_preview_time(replay_start),
+        replay_end=_format_preview_time(replay_end),
+        duration=replay_duration,
+        file_count=len(source_records),
+        soc_count=soc_count,
+        version_source=version_source,
+    )
 
 
 def _format_playback_range(start_sec: int, end_sec: int) -> str:
@@ -766,7 +811,7 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
     """直接基于查询结果回放原始 record 数据，不生成任何导出文件。"""
     if not task_entries:
         ui.show_result_section(
-            "全量回播",
+            "原始数据回放",
             "没有可回放的 Tag",
             "WARN",
             next_step="先执行查询，或调整车辆和日期条件",
@@ -779,18 +824,19 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
         source_records = _build_source_replay_records(session, task_entry)
         if not source_records:
             ui.show_result_section(
-                "全量回播",
+                "原始数据回放",
                 "{0} 未匹配到可回放的原始数据".format(task_entry.name),
                 "WARN",
                 next_step="重新选择其他 Tag 或调整查询条件",
             )
             continue
+        _show_full_source_preview(task_entry, source_records)
         _update_playback_blacklist(session, source_records, REPLAY_MODE_STANDARD)
         _replay_records(
             session,
             source_records,
             REPLAY_MODE_STANDARD,
-            "全量模式已加载 {0} | 共 {1} 个文件 | 总长 {2}s".format(
+            "原始数据回放已加载 {0} | 共 {1} 个文件 | 总长 {2}s".format(
                 task_entry.name,
                 len(source_records),
                 source_records[0].duration,

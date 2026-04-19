@@ -536,8 +536,36 @@ def show_playback_info(
                 ("执行指令: ", "label"),
                 (command, "accent"),
             )
-        )
+    )
     _CONSOLE.print(_build_info_panel("回播信息", lines, "Ctrl+C 中断当前回播"))
+
+
+def show_replay_preview(
+    tag_time: str,
+    replay_start: str,
+    replay_end: str,
+    duration: int,
+    file_count: int,
+    soc_count: int,
+    version_source: str,
+) -> None:
+    """打印回播前预览摘要。"""
+    lines = [
+        Text.assemble(("Tag 时间: ", "label"), (tag_time, "accent")),
+        Text.assemble(("回播开始: ", "label"), (replay_start, "accent")),
+        Text.assemble(("回播结束: ", "label"), (replay_end, "accent")),
+        Text.assemble(("持续时长: ", "label"), ("{0}s".format(duration), "accent")),
+        Text.assemble(("文件数: ", "label"), (str(file_count), "accent")),
+        Text.assemble(("SOC 数: ", "label"), (str(soc_count), "accent")),
+        Text.assemble(("版本来源: ", "label"), (version_source, "accent")),
+    ]
+    _CONSOLE.print(
+        _build_info_panel(
+            "回播前预览",
+            lines,
+            "确认信息后将继续进入回播参数与播放流程",
+        )
+    )
 
 
 def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
