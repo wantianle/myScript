@@ -153,6 +153,42 @@
     - record 信息解析
     - record split
 
+## Shell 依赖边界
+
+当前项目已经把核心业务逻辑大部分迁回 Python，但仍保留少量 shell 作为环境与部署辅助。
+
+### 已 Python 化的核心链路
+
+- Record 查询
+  - 由 [record_query.py](/home/mini/dev/myScript/witt/core/engine/record_query.py) 和 [record_finder.py](/home/mini/dev/myScript/witt/core/engine/record_finder.py) 负责
+  - 已不再依赖 `find_record.sh`
+
+- 运行环境恢复
+  - 由 [runtime_env.py](/home/mini/dev/myScript/witt/core/engine/runtime_env.py) 负责
+  - 已不再依赖 `restore_runtime_env.sh`
+
+- 回放工具栈启动
+  - 由 [replay_stack.py](/home/mini/dev/myScript/witt/core/engine/replay_stack.py) 负责
+  - 已不再依赖 `start_replay_stack.sh` 和 `start_traffic_light_stack.sh`
+
+### 仍保留 shell 的部分
+
+- 开发环境初始化和安装
+  - [setup.sh](/home/mini/dev/myScript/witt/scripts/setup.sh)
+  - [vmc_deploy.sh](/home/mini/dev/myScript/witt/scripts/vmc_deploy.sh)
+  - [vmc.sh](/home/mini/dev/myScript/witt/scripts/vmc.sh)
+
+- 开发容器辅助入口
+  - `RuntimeCoordinator.run_docker()`
+  - `RuntimeCoordinator.into_docker()`
+  - 仍通过 `dev_start.sh` / `dev_into.sh` 一类环境脚本完成
+
+### 当前原则
+
+- 业务规则优先留在 Python
+- 安装、部署、开发环境拉起一类系统操作允许继续保留 shell
+- 若 shell 开始承载业务判断、状态机或复杂文本解析，应优先迁回 Python
+
 ### `utils/`
 
 纯工具函数层。

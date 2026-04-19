@@ -13,7 +13,7 @@
   - `adapter/` for Docker/SSH execution
   - `engine/` for downloader, player, and recorder services
 - `utils/` contains parsing helpers.
-- `scripts/` contains shell entry scripts used by the Python layer.
+- `scripts/` contains shell helpers for environment setup, deployment, and dev-container entry.
 - `tests/` contains minimal `unittest` unit tests.
 - `config/` stores runtime YAML and tool config assets.
 - `.venv/` is the project virtual environment and should be used for local Python commands when present.
@@ -65,6 +65,8 @@
 - Read [ARCHITECTURE.md](/home/mini/dev/myScript/witt/ARCHITECTURE.md) before large refactors.
 - Prefer `ctx.host`, `ctx.remote`, `ctx.docker`, `ctx.paths`, and `ctx.logic` over raw config dict access.
 - Use repository classes for `meta.json` and library cache I/O instead of hand-writing JSON in service layers.
+- Core query, runtime restore, and replay-stack startup flows have already been migrated to Python services.
+- Remaining `scripts/` usage should stay limited to setup/deployment/dev-environment helpers unless explicitly re-approved.
 
 
 
@@ -123,7 +125,6 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
 
 
 
