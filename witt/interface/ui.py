@@ -31,6 +31,8 @@ _THEME = Theme(
     }
 )
 _CONSOLE = Console(theme=_THEME, highlight=False)
+_HISTORY_REPLAY_TITLE = "历史回播"
+_HISTORY_REPLAY_EMPTY_SUMMARY = "当前没有可重放的回播历史"
 
 
 def print_banner() -> None:
@@ -383,6 +385,29 @@ def show_result_section(
             border_style=style_name,
             padding=(0, 2),
         )
+    )
+
+
+def show_history_replay_result(
+    summary: str,
+    next_step: str,
+    details: Optional[Sequence[str]] = None,
+) -> None:
+    """统一展示历史回放相关的空态、失效态和输入边界提示。"""
+    show_result_section(
+        _HISTORY_REPLAY_TITLE,
+        summary,
+        "WARN",
+        details=details,
+        next_step=next_step,
+    )
+
+
+def show_empty_history_replay_result(next_step: str) -> None:
+    """统一展示历史回放为空的提示。"""
+    show_history_replay_result(
+        _HISTORY_REPLAY_EMPTY_SUMMARY,
+        next_step,
     )
 
 

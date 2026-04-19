@@ -29,31 +29,6 @@ REPLAY_SOURCE_AUTO = "auto"
 REPLAY_SOURCE_FULL_SOURCE = "full_source"
 REPLAY_SOURCE_MANUAL = "manual"
 REPLAY_SOURCE_HISTORY = "history"
-HISTORY_REPLAY_TITLE = "历史回播"
-HISTORY_REPLAY_EMPTY_SUMMARY = "当前没有可重放的回播历史"
-
-
-def _show_history_result(
-    summary: str,
-    next_step: str,
-    details: Optional[List[str]] = None,
-) -> None:
-    """统一展示历史回播相关的空态、失效态和输入边界提示。"""
-    ui.show_result_section(
-        HISTORY_REPLAY_TITLE,
-        summary,
-        "WARN",
-        details=details,
-        next_step=next_step,
-    )
-
-
-def _show_empty_history_result(next_step: str) -> None:
-    """统一展示历史回播为空的提示。"""
-    _show_history_result(
-        HISTORY_REPLAY_EMPTY_SUMMARY,
-        next_step,
-    )
 
 
 def restore_environment_flow(
@@ -491,7 +466,7 @@ def _restore_replay_history_context(
 def _validate_history_records(records: List[ReplayRecord]) -> bool:
     """检查历史回播依赖的文件是否仍然存在。"""
     if not records:
-        _show_history_result(
+        ui.show_history_replay_result(
             "历史回播记录为空",
             next_step="重新选择历史记录或清空无效历史",
         )
@@ -502,7 +477,7 @@ def _validate_history_records(records: List[ReplayRecord]) -> bool:
         if not Path(replay_record.path).exists()
     ]
     if missing_paths:
-        _show_history_result(
+        ui.show_history_replay_result(
             "历史回播文件不存在",
             next_step="重新选择历史记录，或清空无效历史",
             details=[str(missing_paths[0])],
@@ -647,7 +622,9 @@ def replay_history_flow(session: AppSession) -> None:
     """先浏览历史记录，再选择一次回播。"""
     history_entries = get_sorted_replay_history_entries(session)
     if not history_entries:
-        _show_empty_history_result("先完成一次回播，或使用其他模式进入回播")
+        ui.show_empty_history_replay_result(
+            "先完成一次回播，或使用其他模式进入回播"
+        )
         return
     ui.browse_replay_history(history_entries)
     while True:
@@ -674,7 +651,7 @@ def get_sorted_replay_history_entries(session: AppSession) -> List[ReplayHistory
     """读取并按创建时间倒序返回历史记录。"""
     history_repository = getattr(session, "replay_history_repository", None)
     if history_repository is None:
-        _show_history_result(
+        ui.show_history_replay_result(
             "当前会话未启用回播历史",
             next_step="检查会话配置或重新初始化应用会话",
         )
@@ -686,7 +663,9 @@ def replay_latest_history_entry(session: AppSession) -> bool:
     """直接回播最新一条历史记录。"""
     history_entries = get_sorted_replay_history_entries(session)
     if not history_entries:
-        _show_empty_history_result("先完成一次回播，或使用 history 浏览历史")
+        ui.show_empty_history_replay_result(
+            "先完成一次回播，或使用 history 浏览历史"
+        )
         return False
     return replay_history_entry(session, history_entries[0])
 
@@ -695,10 +674,12 @@ def replay_history_by_index(session: AppSession, history_index: int) -> bool:
     """按展示序号回播一条历史记录。"""
     history_entries = get_sorted_replay_history_entries(session)
     if not history_entries:
-        _show_empty_history_result("先完成一次回播，或使用 history 浏览历史")
+        ui.show_empty_history_replay_result(
+            "先完成一次回播，或使用 history 浏览历史"
+        )
         return False
     if history_index < 1 or history_index > len(history_entries):
-        _show_history_result(
+        ui.show_history_replay_result(
             "历史序号超出范围: {0}".format(history_index),
             next_step="使用 history 浏览可用序号后重试",
         )
@@ -712,11 +693,7 @@ def replay_history_entry(
     validate_only: bool = False,
 ) -> bool:
     """校验并回播一条历史记录。"""
-    if not _history_entry_is_replayable(history_entry):
-        _show_history_result(
-            "所选历史记录路径失效，无法回播",
-            next_step="重新选择历史记录，或输入 0 清空历史",
-        )
+    if not _validate_history_records(history_entry.records):
         return False
     if validate_only:
         return True
@@ -753,14 +730,6 @@ def _parse_history_created_at(created_at: str) -> datetime:
         return datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):
         return datetime.min
-
-
-def _history_entry_is_replayable(history_entry: ReplayHistoryEntry) -> bool:
-    """判断历史记录中的回播文件当前是否仍然有效。"""
-    return bool(history_entry.records) and all(
-        Path(replay_record.path).exists()
-        for replay_record in history_entry.records
-    )
 
 
 def auto_replay_flow(

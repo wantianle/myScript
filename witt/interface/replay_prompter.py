@@ -258,11 +258,8 @@ def select_replay_history_index(
 ) -> Optional[int]:
     """在浏览历史后输入序号选择一条回播记录。"""
     if not history_entries:
-        ui.show_result_section(
-            "历史回播",
-            "当前没有可重放的回播历史",
-            "WARN",
-            next_step="先完成一次回播后再使用历史功能",
+        ui.show_empty_history_replay_result(
+            "先完成一次回播后再使用历史功能",
         )
         return None
     return _select_filtered_value(
