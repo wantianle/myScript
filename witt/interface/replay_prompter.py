@@ -169,7 +169,12 @@ def select_playback_entry(
         if entry.date == target_date and entry.vehicle == vehicle
     ]
     if not filtered_library:
-        ui.print_status("当前目录下没有符合条件的回播数据", "WARN")
+        ui.show_result_section(
+            "回播库",
+            "当前目录下没有符合条件的回播数据",
+            "WARN",
+            next_step="检查车辆、日期和本地回播目录后重试",
+        )
         return None
     return _select_filtered_value(
         filtered_library,
@@ -191,7 +196,12 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
     """从单个回放条目中选择要播放的 SOC 记录。"""
     selection_items, default_choice = _build_soc_selection_items(tag_entry.socs)
     if not selection_items:
-        ui.print_status("当前回播条目没有可用的 SOC 数据", "WARN")
+        ui.show_result_section(
+            "SOC 选择",
+            "当前回播条目没有可用的 SOC 数据",
+            "WARN",
+            next_step="重新选择其他回播条目",
+        )
         return []
     option_labels = [option_label for _, option_label, _ in selection_items]
     default_index = int(default_choice) if default_choice.isdigit() else 0
@@ -248,7 +258,12 @@ def select_replay_history_index(
 ) -> Optional[int]:
     """在浏览历史后输入序号选择一条回播记录。"""
     if not history_entries:
-        ui.print_status("当前没有可用的回播历史", "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "当前没有可用的回播历史",
+            "WARN",
+            next_step="先完成一次回播后再使用历史功能",
+        )
         return None
     return _select_filtered_value(
         history_entries,
@@ -397,5 +412,10 @@ def get_dragged_input() -> List[Path]:
             record_files.append(path_obj)
     sorted_paths = parser.sort_records(list(set(record_files)))
     if not sorted_paths:
-        ui.print_status("无效路径", "ERROR")
+        ui.show_result_section(
+            "手动回播模式",
+            "无效路径",
+            "ERROR",
+            next_step="请重新粘贴 record 文件或目录路径",
+        )
     return sorted_paths

@@ -27,18 +27,22 @@ def _task_entry_search_values(task_entry) -> List[str]:
 def _show_skipped_batches(skipped_batches) -> None:
     """输出被跳过批次的摘要信息。"""
     for skipped_batch in skipped_batches:
-        ui.print_status(
-            f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过: {skipped_batch.reason}",
-            "ERROR",
+        ui.show_notice_section(
+            "切片批次",
+            f"{skipped_batch.task_name}[{skipped_batch.soc_name}] 跳过",
+            "WARN",
+            details=[str(skipped_batch.reason)],
         )
 
 
 def _show_failed_batches(failed_batches) -> None:
     """输出失败批次的摘要信息。"""
     for failed_batch in failed_batches:
-        ui.print_status(
-            f"{failed_batch.task_name}[{failed_batch.soc_name}] 失败: {failed_batch.reason}",
-            "WARN",
+        ui.show_notice_section(
+            "切片批次",
+            f"{failed_batch.task_name}[{failed_batch.soc_name}] 失败",
+            "ERROR",
+            details=[str(failed_batch.reason)],
         )
 
 
@@ -88,7 +92,12 @@ def slice_progress(session: AppSession) -> None:
         return
     valid_tasks = [task_entry for task_entry in selected_tasks if task_entry.paths]
     if not valid_tasks:
-        ui.print_status("所选序号无效或无路径数据", "ERROR")
+        ui.show_result_section(
+            "切片结果",
+            "所选序号无效或无路径数据",
+            "ERROR",
+            next_step="重新选择包含有效路径的 Tag",
+        )
         return
     session.ctx.logic.blacklist = (
         channel_prompter.get_tasks_channels(
@@ -163,7 +172,12 @@ def full_source_progress(session: AppSession, preset_mode=None) -> None:
         return
     valid_tasks = [task_entry for task_entry in task_list if task_entry.paths]
     if not valid_tasks:
-        ui.print_status("未找到可处理的有效 Tag 数据", "ERROR")
+        ui.show_result_section(
+            "全量回播",
+            "未找到可处理的有效 Tag 数据",
+            "ERROR",
+            next_step="检查查询结果是否包含有效原始路径",
+        )
         return
     replay_workflow.full_source_replay_flow(session, valid_tasks)
 

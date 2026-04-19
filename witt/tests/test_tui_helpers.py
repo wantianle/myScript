@@ -278,5 +278,29 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("已清空全部回播历史", rendered)
         self.assertIn("本次操作不可恢复", rendered)
 
+    def test_show_input_feedback_renders_summary_and_hint(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_input_feedback(
+                "输入无效，请重新选择",
+                hint="可输入序号或候选项名称",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("输入校验", rendered)
+        self.assertIn("输入无效，请重新选择", rendered)
+        self.assertIn("可输入序号或候选项名称", rendered)
+
 if __name__ == "__main__":
     unittest.main()

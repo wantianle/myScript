@@ -59,14 +59,16 @@ def menu() -> None:
         command_map = _build_command_map(session)
         action = command_map.get(command_invocation.name)
         if action is None:
-            ui.print_status("未知命令: {0}".format(raw_command), "WARN")
-            ui.print_status("输入 help 查看可用命令", "WARN")
+            ui.show_input_feedback(
+                "未知命令: {0}".format(raw_command),
+                hint="输入 help 查看可用命令",
+            )
             continue
 
         try:
             action()
         except KeyboardInterrupt:
-            ui.print_status("用户终止程序...", "WARN")
+            ui.show_notice_section("命令执行", "用户终止程序", "WARN")
         except Exception as e:
             logging.error(f"执行命令 {command_invocation.name} 时发生异常: {e}")
 
@@ -90,18 +92,16 @@ def _validate_command_args(command_invocation: prompter.CommandInvocation) -> bo
         command_invocation.name in INTENT_ONLY_COMMANDS
         and command_invocation.args
     ):
-        ui.print_status(
+        ui.show_input_feedback(
             "{0} 不接受参数，请直接输入 {0}".format(command_invocation.name),
-            "WARN",
         )
         return False
     if command_invocation.name == "help" and len(command_invocation.args) > 1:
-        ui.print_status("help 仅支持: help 或 help <command>", "WARN")
+        ui.show_input_feedback("help 仅支持: help 或 help <command>")
         return False
     if command_invocation.name == "history" and len(command_invocation.args) > 1:
-        ui.print_status(
+        ui.show_input_feedback(
             "history 仅支持: history | history clear | history last | history <序号>",
-            "WARN",
         )
         return False
     return True
@@ -127,7 +127,12 @@ def _handle_help_command(command_invocation: prompter.CommandInvocation) -> None
 def _handle_config_command(session: AppSession) -> AppSession:
     """打开配置文件并在退出编辑器后重建当前会话。"""
     config_path = session.ctx.config_path
-    ui.print_status("打开用户配置文件: {0}".format(config_path))
+    ui.show_progress_section(
+        "配置编辑",
+        "打开用户配置文件",
+        details=[str(config_path)],
+        hint="编辑完成后会尝试重建当前会话",
+    )
     if not _open_in_editor(config_path):
         return session
     try:
@@ -141,7 +146,10 @@ def _handle_config_command(session: AppSession) -> AppSession:
             next_step="检查 settings.yaml 格式后重新执行 config",
         )
         return session
-    ui.print_status("配置编辑已结束，已重建当前会话配置")
+    ui.show_notice_section(
+        "配置编辑",
+        "配置编辑已结束，已重建当前会话配置",
+    )
     return reloaded_session
 
 

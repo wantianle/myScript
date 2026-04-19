@@ -495,9 +495,11 @@ def _replay_records(
                 playback_rate,
             )
         except (ValueError, PathMappingError) as e:
-            ui.print_status(str(e), "WARN")
+            ui.show_input_feedback(str(e))
             if use_history_params_this_round:
-                ui.print_status("历史参数无效，请重新调整播放时间和倍速", "WARN")
+                ui.show_input_feedback(
+                    "历史参数无效，请重新调整播放时间和倍速",
+                )
             continue
         last_playback_plan = playback_plan
         last_start = start
@@ -776,7 +778,12 @@ def full_source_replay_flow(session: AppSession, task_entries) -> None:
             return
         source_records = _build_source_replay_records(session, task_entry)
         if not source_records:
-            ui.print_status(f"{task_entry.name} 未匹配到可回放的原始数据", "WARN")
+            ui.show_result_section(
+                "全量回播",
+                "{0} 未匹配到可回放的原始数据".format(task_entry.name),
+                "WARN",
+                next_step="重新选择其他 Tag 或调整查询条件",
+            )
             continue
         _update_playback_blacklist(session, source_records, REPLAY_MODE_STANDARD)
         _replay_records(
@@ -824,7 +831,13 @@ def manual_replay_paths_flow(
         info_start = session.recorder.get_info(str(paths[0]))
         info_end = session.recorder.get_info(str(paths[-1]))
     except RecordInfoError as e:
-        ui.print_status(str(e), "ERROR")
+        ui.show_result_section(
+            "手动回播模式",
+            "读取 record 信息失败",
+            "ERROR",
+            details=[str(e)],
+            next_step="检查输入路径和 record 文件后重试",
+        )
         return
     tag_start = info_start.begin
     tag_end = info_end.end

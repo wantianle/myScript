@@ -320,7 +320,12 @@ def get_selected_indices(
     """根据用户输入的序号表达式返回选中的任务对象列表。"""
     total_count = len(all_tasks)
     if total_count == 0:
-        ui.print_status("任务列表为空", "ERROR")
+        ui.show_result_section(
+            "选择列表",
+            "任务列表为空",
+            "ERROR",
+            next_step="请先准备可选数据后重试",
+        )
         return []
 
     current_tasks = list(all_tasks)
@@ -374,7 +379,13 @@ def get_selected_indices(
         preview_str = ", ".join(map(str, display_ids))
         if len(final_ids) > preview_limit:
             preview_str += " ..."
-        ui.print_status(f"选中待处理序号: [{preview_str}(共 {len(final_ids)} 项)]")
+        ui.show_notice_section(
+            "选择确认",
+            "选中待处理序号: [{0}(共 {1} 项)]".format(
+                preview_str,
+                len(final_ids),
+            ),
+        )
         if get_confirm_input("确认执行？", True):
             return [current_tasks[i - 1] for i in final_ids]
         ui.show_input_feedback("已取消", "WARN")

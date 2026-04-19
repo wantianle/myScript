@@ -99,10 +99,22 @@ def _get_paths_channels(
                     channels_map[channel_name].count += channel.count
             seen_socs.add(soc)
     except RecordInfoError as e:
-        ui.print_status(str(e), "ERROR")
+        ui.show_result_section(
+            "频道分析",
+            "读取频道信息失败",
+            "ERROR",
+            details=[str(e)],
+            next_step="检查 record 文件是否可读后重试",
+        )
         raise
     except Exception as e:
-        ui.print_status("频道获取失败", "ERROR")
+        ui.show_result_section(
+            "频道分析",
+            "频道获取失败",
+            "ERROR",
+            details=[str(e)],
+            next_step="检查 record 信息解析链路后重试",
+        )
         raise RuntimeError("频道获取失败") from e
     return sorted(channels_map.values(), key=lambda channel: channel.name)
 
