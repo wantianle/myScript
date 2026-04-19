@@ -589,11 +589,10 @@ def _replay_records(
             next_step="重新选择回播条目或检查本地目录",
         )
         return
-    if not _prepare_replay(session, records, replay_mode):
-        return
     last_playback_plan: Optional[PlaybackPlan] = None
     last_start = 0
     last_end = 0
+    runtime_prepared = False
     should_use_history_params = replay_history_entry is not None
     while True:
         ui.show_progress_section(
@@ -626,6 +625,10 @@ def _replay_records(
                     "历史参数无效，请重新调整播放时间和倍速",
                 )
             continue
+        if not runtime_prepared:
+            if not _prepare_replay(session, records, replay_mode):
+                return
+            runtime_prepared = True
         last_playback_plan = playback_plan
         last_start = start
         last_end = end

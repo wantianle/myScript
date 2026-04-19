@@ -400,6 +400,124 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         init_logging.assert_called_once_with()
         replay_records.assert_called_once()
 
+    def test_replay_records_prepares_runtime_after_range_and_rate_selection(self) -> None:
+        event_log = []
+        execute_interactive = Mock(side_effect=lambda command: event_log.append(("execute", command)))
+        build_playback_plan = Mock(
+            side_effect=lambda records, start, end, rate: (
+                event_log.append(("plan", start, end, rate)) or
+                SimpleNamespace(
+                    display_tag="demo_tag",
+                    duration=10,
+                    rate=rate,
+                    command="cyber_recorder play -r 1",
+                )
+            )
+        )
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
+                player=SimpleNamespace(build_playback_plan=build_playback_plan),
+                executor=SimpleNamespace(execute_interactive=execute_interactive),
+            ),
+        )
+        replay_records = [
+            ReplayRecord(
+                path="/tmp/demo.record",
+                begin="2026-04-19 12:00:00",
+                duration=10,
+            )
+        ]
+
+        with patch(
+            "interface.replay_workflow.replay_prompter.get_playback_range",
+            side_effect=lambda: event_log.append(("range",)) or (0, 0),
+        ):
+            with patch(
+                "interface.replay_workflow.replay_prompter.get_playback_rate",
+                side_effect=lambda: event_log.append(("rate",)) or 1.0,
+            ):
+                with patch(
+                    "interface.replay_workflow._prepare_replay",
+                    side_effect=lambda *args, **kwargs: event_log.append(("prepare",)) or True,
+                ) as prepare_replay:
+                    with patch("interface.replay_workflow.ui.show_progress_section"):
+                        with patch("interface.replay_workflow.ui.show_playback_info"):
+                            with patch("interface.replay_workflow.prompter.get_confirm_input", return_value=False):
+                                with patch("interface.replay_workflow._collect_issue_marker", return_value=None):
+                                    with patch("interface.replay_workflow._post_replay_issue_draft"):
+                                        replay_workflow._replay_records(
+                                            session,
+                                            replay_records,
+                                            replay_workflow.REPLAY_MODE_STANDARD,
+                                            "已加载 1 个文件",
+                                        )
+
+        self.assertEqual(
+            [event[0] for event in event_log[:5]],
+            ["range", "rate", "plan", "prepare", "execute"],
+        )
+        prepare_replay.assert_called_once_with(
+            session,
+            replay_records,
+            replay_workflow.REPLAY_MODE_STANDARD,
+        )
+
+    def test_replay_records_only_prepare_runtime_once_across_multiple_rounds(self) -> None:
+        execute_interactive = Mock()
+        build_playback_plan = Mock(
+            return_value=SimpleNamespace(
+                display_tag="demo_tag",
+                duration=10,
+                rate=1.0,
+                command="cyber_recorder play -r 1",
+            )
+        )
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
+                player=SimpleNamespace(build_playback_plan=build_playback_plan),
+                executor=SimpleNamespace(execute_interactive=execute_interactive),
+            ),
+        )
+        replay_records = [
+            ReplayRecord(
+                path="/tmp/demo.record",
+                begin="2026-04-19 12:00:00",
+                duration=10,
+            )
+        ]
+
+        with patch(
+            "interface.replay_workflow.replay_prompter.get_playback_range",
+            side_effect=[(0, 0), (1, 0)],
+        ):
+            with patch(
+                "interface.replay_workflow.replay_prompter.get_playback_rate",
+                side_effect=[1.0, 1.0],
+            ):
+                with patch("interface.replay_workflow._prepare_replay", return_value=True) as prepare_replay:
+                    with patch("interface.replay_workflow.ui.show_progress_section"):
+                        with patch("interface.replay_workflow.ui.show_playback_info"):
+                            with patch("interface.replay_workflow.prompter.get_confirm_input", side_effect=[True, False]):
+                                with patch("interface.replay_workflow._collect_issue_marker", return_value=None):
+                                    with patch("interface.replay_workflow._post_replay_issue_draft"):
+                                        replay_workflow._replay_records(
+                                            session,
+                                            replay_records,
+                                            replay_workflow.REPLAY_MODE_STANDARD,
+                                            "已加载 1 个文件",
+                                        )
+
+        prepare_replay.assert_called_once_with(
+            session,
+            replay_records,
+            replay_workflow.REPLAY_MODE_STANDARD,
+        )
+        self.assertEqual(execute_interactive.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
