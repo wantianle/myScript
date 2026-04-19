@@ -566,13 +566,8 @@ def show_playback_info(
         )
     if version_details:
         playback_version_details = list(version_details)
-        lines.append(
-            Text.assemble(
-                ("版本信息: ", "label"),
-                (playback_version_details[0], "accent"),
-            )
-        )
-        for detail_text in playback_version_details[1:]:
+        lines.append(Text("版本信息:", style="label"))
+        for detail_text in playback_version_details:
             lines.append(Text("  {0}".format(detail_text), style="accent"))
     if command:
         lines.append(
