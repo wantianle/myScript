@@ -191,6 +191,9 @@ class TuiHelperTests(unittest.TestCase):
                 tag="demo_tag",
                 duration=20,
                 rate=1.0,
+                source_label="自动回放",
+                mode_label="标准回放",
+                selection_label="demo_tag | soc1 | 1 files",
                 command="cyber_recorder play -r 1",
                 version_source="/tmp/version.json",
                 version_details=["mdrive: 1.2.3", "mdrive_conf: E171.2.3"],
@@ -200,6 +203,12 @@ class TuiHelperTests(unittest.TestCase):
 
         rendered = buffer.getvalue()
         self.assertIn("回播信息", rendered)
+        self.assertIn("回放来源", rendered)
+        self.assertIn("自动回放", rendered)
+        self.assertIn("回放模式", rendered)
+        self.assertIn("标准回放", rendered)
+        self.assertIn("回放条目", rendered)
+        self.assertIn("demo_tag | soc1 | 1 files", rendered)
         self.assertIn("版本文件", rendered)
         self.assertIn("/tmp/version.json", rendered)
         self.assertIn("版本信息", rendered)

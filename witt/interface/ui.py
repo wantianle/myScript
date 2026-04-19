@@ -539,6 +539,9 @@ def show_playback_info(
     tag: str,
     duration: int,
     rate: float = 1.0,
+    source_label: str = "",
+    mode_label: str = "",
+    selection_label: str = "",
     channels: Optional[List[str]] = None,
     command: str = "",
     version_source: str = "",
@@ -547,9 +550,25 @@ def show_playback_info(
     """打印当前回放的概要信息。"""
     lines = [
         Text.assemble(("当前回播: ", "label"), (tag, "accent")),
+    ]
+    if source_label:
+        lines.append(
+            Text.assemble(("回放来源: ", "label"), (source_label, "accent"))
+        )
+    if mode_label:
+        lines.append(
+            Text.assemble(("回放模式: ", "label"), (mode_label, "accent"))
+        )
+    if selection_label:
+        lines.append(
+            Text.assemble(("回放条目: ", "label"), (selection_label, "accent"))
+        )
+    lines.extend(
+        [
         Text.assemble(("总时长: ", "label"), ("{0}s".format(duration), "accent")),
         Text.assemble(("播放倍速: ", "label"), ("x{0:g}".format(rate), "accent")),
-    ]
+        ]
+    )
     if channels:
         lines.append(
             Text.assemble(

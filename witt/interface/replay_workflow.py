@@ -34,6 +34,26 @@ REPLAY_SOURCE_HISTORY = "history"
 _RUNTIME_ENVIRONMENT_MANAGER = RuntimeEnvironmentManager()
 
 
+def _format_replay_source_label(source_type: str) -> str:
+    """将内部回放来源标识转换为稳定展示文案。"""
+    source_label_map = {
+        REPLAY_SOURCE_AUTO: "自动回放",
+        REPLAY_SOURCE_FULL_SOURCE: "原始数据回放",
+        REPLAY_SOURCE_MANUAL: "手动回放",
+        REPLAY_SOURCE_HISTORY: "历史回放",
+    }
+    return source_label_map.get(source_type, source_type or "未知来源")
+
+
+def _format_replay_mode_label(replay_mode: str) -> str:
+    """将内部回放模式标识转换为稳定展示文案。"""
+    replay_mode_label_map = {
+        REPLAY_MODE_STANDARD: "标准回放",
+        REPLAY_MODE_TRAFFIC_LIGHT: "红绿灯回灌",
+    }
+    return replay_mode_label_map.get(replay_mode, replay_mode or "未知模式")
+
+
 def _show_script_failure(
     title: str,
     script_error: ScriptExecutionError,
@@ -626,6 +646,9 @@ def _replay_records(
             tag=display_tag or playback_plan.display_tag,
             duration=playback_plan.duration,
             rate=playback_plan.rate,
+            source_label=_format_replay_source_label(source_type),
+            mode_label=_format_replay_mode_label(replay_mode),
+            selection_label=current_selection_label,
             channels=getattr(session.ctx, "playback_blacklist", []) or None,
             command=playback_plan.command,
             version_source=current_version_source or "未提供 version 文件",
