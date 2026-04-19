@@ -5,7 +5,7 @@ from alive_progress import alive_bar
 from datetime import datetime, timedelta
 from pathlib import Path
 from shlex import quote
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
 from core.models import RecordMeta, TaskEntry
@@ -81,6 +81,10 @@ class RecordDownloader:
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
 
+    def _build_batch_failure_reason(self, failure_type: str, target_path: Path) -> str:
+        """统一构造切片批次失败原因，保留失败分类和关键路径。"""
+        return "{0}: {1}，已清理当前批次".format(failure_type, target_path)
+
     def _cleanup_failed_batch(self, save_dir: Path):
         """清理失败批次的残留数据，避免留下半成品目录"""
         if save_dir.exists():
@@ -147,18 +151,46 @@ class RecordDownloader:
         )
         self.metadata_repository.save(meta_path, record_meta)
 
-    def _post_process_task(self, task_entry: TaskEntry, save_dir, file_infos):
-        """生成元数据并同步版本文件。"""
-        # 同步 version
+    def _post_process_task(
+        self,
+        task_entry: TaskEntry,
+        save_dir: Path,
+        file_infos,
+    ) -> Optional[str]:
+        """生成元数据并同步版本文件，失败时返回具体原因。"""
         src_dir = Path(file_infos[0][0]).parent
-        self._sync_version_files(src_dir, save_dir)
-        # 生成元数据文件
-        self._save_contract(task_entry, save_dir, file_infos)
+        try:
+            self._sync_version_files(src_dir, save_dir)
+        except Exception as e:
+            logging.warning(
+                "[TASK_VERSION_SYNC_FAIL] Tag: %s | Save_dir: %s | %s",
+                task_entry.name,
+                save_dir,
+                e,
+            )
+            return self._build_batch_failure_reason("version 同步失败", src_dir)
+        try:
+            self._save_contract(task_entry, save_dir, file_infos)
+        except Exception as e:
+            meta_path = save_dir.parent / "meta.json"
+            logging.warning(
+                "[TASK_METADATA_WRITE_FAIL] Tag: %s | Meta: %s | %s",
+                task_entry.name,
+                meta_path,
+                e,
+            )
+            return self._build_batch_failure_reason("metadata 写入失败", meta_path)
         logging.info(f"[TASK_COMPLETE] Tag: {task_entry.name} | Saved to: {save_dir}")
         logging.info(f"  Files: {[Path(f[1]).name for f in file_infos]}")
+        return None
 
-    def _sync_file(self, src, dest, task_entry: TaskEntry) -> bool:
-        """生成 .split 文件，全量覆盖，最后清理中间文件"""
+    def _sync_file(
+        self,
+        src,
+        dest,
+        task_entry: TaskEntry,
+    ) -> Optional[str]:
+        """生成 .split 文件，失败时返回具体原因。"""
         logic = self.ctx.logic
         tag_dt = parser.str_to_time(task_entry.time)
         t_start = tag_dt - timedelta(seconds=int(logic.before))
@@ -169,26 +201,26 @@ class RecordDownloader:
         if self.ctx.logic.mode != 3:
             try:
                 self.session.recorder.split(src, dest, t_start, t_end, blacklist)
-                return True
+                return None
             except RecordSplitError:
                 if Path(dest).exists():
                     Path(dest).unlink()
-                return False
+                return self._build_batch_failure_reason("切片失败", Path(src))
         remote_out = f"{src}.split"
         self._cleanup_remote_temp_file(remote_out, "before_split")
         try:
             self.session.recorder.split(src, remote_out, t_start, t_end, blacklist)
         except RecordSplitError:
             self._cleanup_remote_temp_file(remote_out, "after_split_error")
-            return False
+            return self._build_batch_failure_reason("切片失败", Path(src))
         try:
             self.session.executor.fetch_file(remote_out, dest)
-            return True
+            return None
         except Exception as e:
             logging.debug(f"{src} 拉取异常: {e}")
             if Path(dest).exists():
                 Path(dest).unlink()
-            return False
+            return self._build_batch_failure_reason("远端拉取失败", Path(src))
         finally:
             self._cleanup_remote_temp_file(remote_out, "after_fetch")
 
@@ -252,23 +284,50 @@ class RecordDownloader:
             skipped_batches=skipped_batches,
         )
 
-    def _finalize_batch(self, batch, processed_files, batch_failed, summary: DownloadSummary):
+    def _finalize_batch(
+        self,
+        batch,
+        processed_files,
+        batch_failure_reason: str,
+        summary: DownloadSummary,
+    ) -> None:
         task_entry = batch.task
-        if batch_failed or not processed_files:
+        if batch_failure_reason or not processed_files:
             self._cleanup_failed_batch(batch.save_dir)
+            failure_reason = (
+                batch_failure_reason
+                or self._build_batch_failure_reason(
+                    "批次存在异常",
+                    batch.save_dir,
+                )
+            )
             summary.failed_batches.append(
                 FailedBatch(
                     task_name=task_entry.name,
                     soc_name=batch.soc_name,
-                    reason="批次存在异常，已清理残留数据",
+                    reason=failure_reason,
                 )
             )
             logging.warning(
-                f"[TASK_SKIP] Tag: {task_entry.name} | Soc: {batch.soc_name} | 批次存在异常，已清理残留数据"
+                f"[TASK_SKIP] Tag: {task_entry.name} | Soc: {batch.soc_name} | {failure_reason}"
             )
             return
         try:
-            self._post_process_task(task_entry, batch.save_dir, processed_files)
+            post_process_failure_reason = self._post_process_task(
+                task_entry,
+                batch.save_dir,
+                processed_files,
+            )
+            if post_process_failure_reason is not None:
+                self._cleanup_failed_batch(batch.save_dir)
+                summary.failed_batches.append(
+                    FailedBatch(
+                        task_name=task_entry.name,
+                        soc_name=batch.soc_name,
+                        reason=post_process_failure_reason,
+                    )
+                )
+                return
             summary.completed_batches.append(
                 CompletedBatch(
                     task_name=task_entry.name,
@@ -279,11 +338,15 @@ class RecordDownloader:
             )
         except Exception as e:
             self._cleanup_failed_batch(batch.save_dir)
+            failure_reason = self._build_batch_failure_reason(
+                "后处理失败",
+                batch.save_dir,
+            )
             summary.failed_batches.append(
                 FailedBatch(
                     task_name=task_entry.name,
                     soc_name=batch.soc_name,
-                    reason=f"{batch.save_dir} 后处理失败，已清理当前批次",
+                    reason=failure_reason,
                 )
             )
             logging.warning(
@@ -293,18 +356,24 @@ class RecordDownloader:
     def _run_task_batch(self, batch, bar, summary: DownloadSummary):
         task_entry = batch.task
         processed_files = []
-        batch_failed = False
+        batch_failure_reason = ""
         for item in batch.items:
             bar.text = f"-> [Tag: {task_entry.name[:15]}]"
-            if not batch_failed:
-                if self._sync_file(item.src, item.dest, task_entry):
+            if not batch_failure_reason:
+                item_failure_reason = self._sync_file(item.src, item.dest, task_entry)
+                if item_failure_reason is None:
                     processed_files.append(
                         (str(item.src), str(item.dest), batch.soc_name)
                     )
                 else:
-                    batch_failed = True
+                    batch_failure_reason = item_failure_reason
             bar()
-        self._finalize_batch(batch, processed_files, batch_failed, summary)
+        self._finalize_batch(
+            batch,
+            processed_files,
+            batch_failure_reason,
+            summary,
+        )
 
     def download_records(self, task_list) -> DownloadSummary:
         """
