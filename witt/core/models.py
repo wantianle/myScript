@@ -297,11 +297,11 @@ class ReplayHistoryEntry:
     created_at: str
     source_type: str
     replay_mode: str
-    selection_label: str
     display_tag: str
     issue_timestamp: str
     vehicle: str
     target_date: str
+    selection_label: str = ""
     records: List[ReplayRecord] = field(default_factory=list)
     start_sec: int = 0
     end_sec: int = 0
@@ -332,12 +332,22 @@ class ReplayHistoryEntry:
             ],
         )
 
+    @property
+    def resolved_selection_label(self) -> str:
+        """返回历史记录展示摘要，优先兼容旧数据中的显式字段。"""
+        if self.selection_label:
+            return self.selection_label
+        return build_history_selection_label(
+            self.records,
+            self.display_tag,
+            self.source_type,
+        )
+
     def to_dict(self) -> RawReplayHistoryEntry:
         return {
             "created_at": self.created_at,
             "source_type": self.source_type,
             "replay_mode": self.replay_mode,
-            "selection_label": self.selection_label,
             "display_tag": self.display_tag,
             "issue_timestamp": self.issue_timestamp,
             "vehicle": self.vehicle,
@@ -351,6 +361,35 @@ class ReplayHistoryEntry:
             "playback_rate": self.playback_rate,
             "channel_filters": self.channel_filters,
         }
+
+
+def build_history_selection_label(
+    records: Sequence[ReplayRecord],
+    display_tag: str,
+    source_type: str,
+) -> str:
+    """根据记录列表和来源生成稳定的历史摘要标题。"""
+    if not records:
+        return display_tag or source_type
+    file_count = len(records)
+    soc_names = sorted(
+        {
+            Path(replay_record.path).parent.name
+            for replay_record in records
+            if Path(replay_record.path).parent.name.startswith("soc")
+        }
+    )
+    soc_text = ",".join(soc_names) if soc_names else "single"
+    if source_type == "manual":
+        return "manual | {0} | {1} files".format(
+            Path(records[0].path).name,
+            file_count,
+        )
+    return "{0} | {1} | {2} files".format(
+        display_tag or Path(records[0].path).name,
+        soc_text,
+        file_count,
+    )
 
 
 @dataclass

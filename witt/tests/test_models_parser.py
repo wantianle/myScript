@@ -11,9 +11,11 @@ from core.models import (
     LogicConfig,
     RecordInfo,
     RecordMeta,
+    ReplayHistoryEntry,
     ReplayRecord,
     TagInfo,
     TaskEntry,
+    build_history_selection_label,
 )
 from utils import parser
 
@@ -191,6 +193,51 @@ class ParserTests(unittest.TestCase):
         parsed_time = parser.str_to_time("2026-04-15T10:16:08")
 
         self.assertEqual(parsed_time, datetime(2026, 4, 15, 10, 16, 8))
+
+    def test_replay_history_entry_resolved_selection_label_uses_legacy_value_first(self) -> None:
+        history_entry = ReplayHistoryEntry(
+            created_at="2026-04-19 12:00:00",
+            source_type="auto",
+            replay_mode="standard",
+            selection_label="legacy label",
+            display_tag="demo_tag",
+            issue_timestamp="2026-04-19 11:59:00",
+            vehicle="XZB600001",
+            target_date="20260419",
+            records=[],
+        )
+
+        self.assertEqual(history_entry.resolved_selection_label, "legacy label")
+
+    def test_replay_history_entry_to_dict_omits_redundant_selection_label(self) -> None:
+        history_entry = ReplayHistoryEntry(
+            created_at="2026-04-19 12:00:00",
+            source_type="manual",
+            replay_mode="standard",
+            display_tag="manual",
+            issue_timestamp="2026-04-19 11:59:00",
+            vehicle="XZB600001",
+            target_date="20260419",
+            records=[
+                ReplayRecord(
+                    path="/tmp/demo.record",
+                    begin="2026-04-19 12:00:00",
+                    duration=10,
+                )
+            ],
+        )
+
+        raw_entry = history_entry.to_dict()
+
+        self.assertNotIn("selection_label", raw_entry)
+        self.assertEqual(
+            history_entry.resolved_selection_label,
+            build_history_selection_label(
+                history_entry.records,
+                history_entry.display_tag,
+                history_entry.source_type,
+            ),
+        )
 
 class ReplayWorkflowTests(unittest.TestCase):
     def test_build_source_replay_records_uses_tag_window(self) -> None:

@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 class LibraryLoadResult:
     library: List[LibraryEntry]
     cache_hit: bool
-    cache_path: Path
 
 
 @dataclass
@@ -55,14 +54,12 @@ class RecordPlayer:
             return LibraryLoadResult(
                 library=cached_library,
                 cache_hit=True,
-                cache_path=self.library_file,
             )
         library_list = self.scan_local_library()
         self.library_cache.save(fp, library_list)
         return LibraryLoadResult(
             library=library_list,
             cache_hit=False,
-            cache_path=self.library_file,
         )
 
     def scan_local_library(self) -> List[LibraryEntry]:

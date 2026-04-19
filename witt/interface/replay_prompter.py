@@ -98,7 +98,7 @@ def _filter_history_entries(
                 history_entry.created_at,
                 history_entry.issue_timestamp,
                 history_entry.vehicle,
-                history_entry.selection_label,
+                history_entry.resolved_selection_label,
                 history_entry.display_tag,
                 history_entry.source_type,
                 history_entry.replay_mode,

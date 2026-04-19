@@ -713,7 +713,7 @@ def _build_history_table(history_entries: List[ReplayHistoryEntry]) -> Table:
             history_entry.issue_timestamp or "未知时间",
             history_entry.vehicle or "未知车型",
             source_mode_text,
-            history_entry.display_tag or history_entry.selection_label or "未命名回播",
+            history_entry.display_tag or history_entry.resolved_selection_label or "未命名回播",
             _format_history_range(history_entry.start_sec, history_entry.end_sec),
             "x{0:g}".format(history_entry.playback_rate),
             _format_history_status(history_entry),

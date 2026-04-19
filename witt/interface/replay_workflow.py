@@ -14,7 +14,12 @@ from . import ui
 from core.engine.runtime_env import RuntimeEnvironmentManager
 from core.engine.player import PlaybackPlan
 from core.errors import RecordInfoError, PathMappingError, ScriptExecutionError
-from core.models import ReplayHistoryEntry, ReplayRecord, TaskEntry
+from core.models import (
+    ReplayHistoryEntry,
+    ReplayRecord,
+    TaskEntry,
+    build_history_selection_label,
+)
 from core.issue_draft import (
     IssueDraft,
     ReplayIssueMarker,
@@ -447,35 +452,6 @@ def _build_issue_playback_command(
     return issue_command
 
 
-def _build_history_selection_label(
-    records: List[ReplayRecord],
-    display_tag: str,
-    source_type: str,
-) -> str:
-    """生成历史记录中用于识别本次回播的摘要标题。"""
-    if not records:
-        return display_tag or source_type
-    file_count = len(records)
-    soc_names = sorted(
-        {
-            Path(replay_record.path).parent.name
-            for replay_record in records
-            if Path(replay_record.path).parent.name.startswith("soc")
-        }
-    )
-    soc_text = ",".join(soc_names) if soc_names else "single"
-    if source_type == REPLAY_SOURCE_MANUAL:
-        return "manual | {0} | {1} files".format(
-            Path(records[0].path).name,
-            file_count,
-        )
-    return "{0} | {1} | {2} files".format(
-        display_tag or Path(records[0].path).name,
-        soc_text,
-        file_count,
-    )
-
-
 def _build_replay_history_entry(
     session: AppSession,
     records: List[ReplayRecord],
@@ -486,7 +462,6 @@ def _build_replay_history_entry(
     start_sec: int,
     end_sec: int,
     source_type: str,
-    selection_label: str,
 ) -> ReplayHistoryEntry:
     """构造当前回播的历史记录对象。"""
     replay_records = [
@@ -497,7 +472,6 @@ def _build_replay_history_entry(
         created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         source_type=source_type,
         replay_mode=replay_mode,
-        selection_label=selection_label,
         display_tag=display_tag or playback_plan.display_tag,
         issue_timestamp=issue_timestamp,
         vehicle=str(getattr(session.ctx, "vehicle", "")),
@@ -520,7 +494,6 @@ def _save_replay_history(
     start_sec: int,
     end_sec: int,
     source_type: str,
-    selection_label: str,
 ) -> None:
     """保存本次回播参数到历史记录。"""
     history_repository = getattr(session, "replay_history_repository", None)
@@ -536,7 +509,6 @@ def _save_replay_history(
         start_sec,
         end_sec,
         source_type,
-        selection_label,
     )
     try:
         history_repository.append(history_entry)
@@ -657,7 +629,7 @@ def _replay_records(
         last_playback_plan = playback_plan
         last_start = start
         last_end = end
-        current_selection_label = selection_label or _build_history_selection_label(
+        current_selection_label = selection_label or build_history_selection_label(
             records,
             display_tag or playback_plan.display_tag,
             source_type,
@@ -685,7 +657,6 @@ def _replay_records(
             start,
             end,
             source_type,
-            current_selection_label,
         )
         try:
             session.executor.execute_interactive(playback_plan.command)
@@ -806,11 +777,11 @@ def replay_history_entry(
         session,
         history_entry.records,
         history_entry.replay_mode,
-        "历史回播已加载: {0}".format(history_entry.selection_label),
+        "历史回播已加载: {0}".format(history_entry.resolved_selection_label),
         display_tag=history_entry.display_tag,
         issue_timestamp=history_entry.issue_timestamp,
         source_type=REPLAY_SOURCE_HISTORY,
-        selection_label=history_entry.selection_label,
+        selection_label=history_entry.resolved_selection_label,
         replay_history_entry=history_entry,
     )
     return True
@@ -848,7 +819,7 @@ def auto_replay_flow(
                 ui.show_progress_section(
                     "自动回播",
                     "本地库状态未变，正在加载缓存",
-                    details=[str(library_result.cache_path)],
+                    details=[str(session.player.library_file)],
                     hint="正在读取回播库条目",
                 )
             else:
@@ -888,7 +859,7 @@ def auto_replay_flow(
             display_tag=selected_tag.tag,
             issue_timestamp=selected_tag.time,
             source_type=REPLAY_SOURCE_AUTO,
-            selection_label=_build_history_selection_label(
+            selection_label=build_history_selection_label(
                 target_records,
                 selected_tag.tag,
                 REPLAY_SOURCE_AUTO,
@@ -935,7 +906,7 @@ def full_source_replay_flow(
             display_tag=task_entry.name,
             issue_timestamp=task_entry.time,
             source_type=REPLAY_SOURCE_FULL_SOURCE,
-            selection_label=_build_history_selection_label(
+            selection_label=build_history_selection_label(
                 source_records,
                 task_entry.name,
                 REPLAY_SOURCE_FULL_SOURCE,
@@ -991,7 +962,7 @@ def manual_replay_paths_flow(
         f"已加载 {len(paths)} 个文件，总长 {tag_duration}s",
         issue_timestamp=tag_start.strftime("%Y-%m-%d %H:%M:%S"),
         source_type=REPLAY_SOURCE_MANUAL,
-        selection_label=_build_history_selection_label(
+        selection_label=build_history_selection_label(
             current_records,
             "manual",
             REPLAY_SOURCE_MANUAL,
