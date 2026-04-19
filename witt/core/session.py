@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 from core.context import TaskContext
-from core.runner import ScriptRunner
+from core.runner import RuntimeCoordinator
 from core.adapter.docker import DockerAdapter
 from core.adapter.ssh import SSHAdapter
 from core.engine.player import RecordPlayer
@@ -46,7 +46,8 @@ class AppSession:
             else ensure_user_config_path()
         )
         self.ctx = TaskContext(resolved_config_path)
-        self.runner = ScriptRunner(self.ctx)
+        self.runtime = RuntimeCoordinator(self.ctx)
+        self.runner = self.runtime
         self.recorder = Recorder(self)
         self.metadata_repository = MetadataRepository()
         self.library_cache_repository = LibraryCacheRepository(

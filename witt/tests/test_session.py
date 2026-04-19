@@ -1,8 +1,10 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from core.session import ensure_user_config_path
+from core.session import AppSession, ensure_user_config_path
 
 
 class SessionConfigTests(unittest.TestCase):
@@ -48,6 +50,22 @@ class SessionConfigTests(unittest.TestCase):
                 user_config_path.read_text(encoding="utf-8"),
                 "logic:\n  vehicle: XZT500001\n",
             )
+
+    def test_app_session_exposes_runtime_and_runner_as_same_instance(self) -> None:
+        runtime = object()
+        with patch("core.session.ensure_user_config_path", return_value=Path("/tmp/settings.yaml")):
+            with patch("core.session.TaskContext", return_value=SimpleNamespace(work_dir=Path("/tmp/work"))):
+                with patch("core.session.RuntimeCoordinator", return_value=runtime):
+                    with patch("core.session.Recorder", return_value=object()):
+                        with patch("core.session.MetadataRepository", return_value=object()):
+                            with patch("core.session.LibraryCacheRepository", return_value=object()):
+                                with patch("core.session.ReplayHistoryRepository", return_value=object()):
+                                    with patch("core.engine.downloader.RecordDownloader", return_value=object()):
+                                        with patch("core.session.RecordPlayer", return_value=object()):
+                                            session = AppSession()
+
+        self.assertIs(session.runtime, runtime)
+        self.assertIs(session.runner, runtime)
 
 
 if __name__ == "__main__":

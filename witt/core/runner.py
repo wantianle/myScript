@@ -24,8 +24,8 @@ from core.models import TaskEntry
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
-class ScriptRunner:
-    """负责本地调用外部脚本完成各项任务"""
+class RuntimeCoordinator:
+    """负责协调查询、环境恢复、回放栈启动和开发环境入口。"""
 
     def __init__(self, ctx):
         self.ctx = ctx
@@ -209,3 +209,7 @@ class ScriptRunner:
     def into_docker(self) -> None:
         """进入运行中的 docker 容器。"""
         self._run_script("dev_into.sh")
+
+
+# Backward-compatible alias for older imports/tests.
+ScriptRunner = RuntimeCoordinator

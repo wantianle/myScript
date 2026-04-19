@@ -105,8 +105,10 @@
 - [session.py](/home/mini/dev/myScript/witt/core/session.py)
   - 应用装配根
   - 负责：
-    - 组合 `context + runner + engine + adapter`
+    - 组合 `context + runtime + engine + adapter`
     - 决定当前使用 docker 还是 ssh 执行通道
+  - `session.runtime` 是主运行时协调入口
+  - `session.runner` 仅作为兼容别名保留
 
 - [runner.py](/home/mini/dev/myScript/witt/core/runner.py)
   - 运行时编排服务

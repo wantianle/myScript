@@ -7,12 +7,12 @@ from unittest.mock import Mock, patch
 from core.errors import CommandExecutionError
 from core.errors import FindRecordError
 from core.errors import ScriptExecutionError
-from core.runner import ScriptRunner
+from core.runner import RuntimeCoordinator
 
 
-class ScriptRunnerTests(unittest.TestCase):
+class RuntimeCoordinatorTests(unittest.TestCase):
     def test_build_script_execution_error_prefers_domain_error_summary(self) -> None:
-        runner = ScriptRunner(
+        runner = RuntimeCoordinator(
             cast(
                 Any,
                 SimpleNamespace(
@@ -42,7 +42,7 @@ class ScriptRunnerTests(unittest.TestCase):
         )
 
     def test_run_find_record_delegates_to_record_query_service(self) -> None:
-        runner = ScriptRunner(
+        runner = RuntimeCoordinator(
             cast(
                 Any,
                 SimpleNamespace(
@@ -64,7 +64,7 @@ class ScriptRunnerTests(unittest.TestCase):
         self.assertEqual(returned_tasks, task_entries)
 
     def test_run_find_record_wraps_remote_connection_error(self) -> None:
-        runner = ScriptRunner(
+        runner = RuntimeCoordinator(
             cast(
                 Any,
                 SimpleNamespace(
@@ -89,7 +89,7 @@ class ScriptRunnerTests(unittest.TestCase):
         self.assertEqual(raised.exception.operation_name, "record_query")
 
     def test_run_find_record_wraps_domain_query_error(self) -> None:
-        runner = ScriptRunner(
+        runner = RuntimeCoordinator(
             cast(
                 Any,
                 SimpleNamespace(
@@ -111,7 +111,7 @@ class ScriptRunnerTests(unittest.TestCase):
         self.assertEqual(raised.exception.operation_name, "record_query")
 
     def test_restore_runtime_environment_uses_python_runtime_sync(self) -> None:
-        runner = ScriptRunner(
+        runner = RuntimeCoordinator(
             cast(
                 Any,
                 SimpleNamespace(
@@ -138,7 +138,7 @@ class ScriptRunnerTests(unittest.TestCase):
         )
 
     def test_start_replay_stack_uses_python_replay_stack(self) -> None:
-        runner = ScriptRunner(
+        runner = RuntimeCoordinator(
             cast(
                 Any,
                 SimpleNamespace(
@@ -158,7 +158,7 @@ class ScriptRunnerTests(unittest.TestCase):
         start_standard_replay_stack.assert_called_once_with(runner.ctx)
 
     def test_start_traffic_light_stack_uses_python_replay_stack(self) -> None:
-        runner = ScriptRunner(
+        runner = RuntimeCoordinator(
             cast(
                 Any,
                 SimpleNamespace(
