@@ -217,7 +217,7 @@ def get_int_input(prompt: str, default_value, history_name: str = "int") -> int:
         try:
             return int(raw_val)
         except ValueError:
-            ui.print_status("请输入整数", "WARN")
+            ui.show_input_feedback("请输入整数")
 
 
 def choose_option(
@@ -253,7 +253,10 @@ def choose_option(
         for option_index, option_text in enumerate(options, 1):
             if val.lower() == option_text.lower():
                 return option_index if index else option_text
-        ui.print_status("输入无效，请重新选择", "WARN")
+        ui.show_input_feedback(
+            "输入无效，请重新选择",
+            hint="可输入序号或候选项名称",
+        )
 
 
 def resolve_filter_keyword(raw_input: str) -> Optional[str]:
@@ -335,7 +338,7 @@ def get_selected_indices(
         filter_keyword = resolve_filter_keyword(raw_input)
         if filter_keyword is not None:
             if search_values_getter is None:
-                ui.print_status("当前列表不支持关键字筛选", "WARN")
+                ui.show_input_feedback("当前列表不支持关键字筛选")
                 continue
             next_tasks = [
                 task
@@ -346,15 +349,24 @@ def get_selected_indices(
             current_tasks = next_tasks if filter_keyword else list(all_tasks)
             continue
         if not current_tasks:
-            ui.print_status("当前筛选结果为空，请调整关键字或输入 / 清空筛选", "WARN")
+            ui.show_input_feedback(
+                "当前筛选结果为空",
+                hint="请调整关键字或输入 / 清空筛选",
+            )
             continue
         try:
             final_ids = parse_index_expression(raw_input, len(current_tasks))
         except ValueError:
-            ui.print_status("输入无效，请重新输入", "WARN")
+            ui.show_input_feedback(
+                "输入无效，请重新输入",
+                hint="支持单选、多选、反选和范围表达式",
+            )
             continue
         if not final_ids:
-            ui.print_status("未选中任何有效序号，请检查输入", "ERROR")
+            ui.show_input_feedback(
+                "未选中任何有效序号，请检查输入",
+                "ERROR",
+            )
             continue
 
         preview_limit = 10
@@ -365,7 +377,7 @@ def get_selected_indices(
         ui.print_status(f"选中待处理序号: [{preview_str}(共 {len(final_ids)} 项)]")
         if get_confirm_input("确认执行？", True):
             return [current_tasks[i - 1] for i in final_ids]
-        ui.print_status("已取消...", "WARN")
+        ui.show_input_feedback("已取消", "WARN")
 
 
 def get_confirm_input(prompt: str, default: bool = False) -> bool:

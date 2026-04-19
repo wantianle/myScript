@@ -412,6 +412,31 @@ def show_notice_section(
     )
 
 
+def show_input_feedback(
+    summary: str,
+    level: str = "WARN",
+    hint: str = "",
+) -> None:
+    """打印统一风格的输入校验反馈。"""
+    level_style_map = {
+        "INFO": "info",
+        "WARN": "warn",
+        "ERROR": "error",
+    }
+    style_name = level_style_map.get(level, "warn")
+    lines = [Text(summary, style=style_name)]
+    if hint:
+        lines.append(Text(hint, style="muted"))
+    _CONSOLE.print(
+        Panel(
+            Group(*lines),
+            title="输入校验",
+            border_style=style_name,
+            padding=(0, 2),
+        )
+    )
+
+
 def show_progress_section(
     title: str,
     summary: str,

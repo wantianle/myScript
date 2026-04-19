@@ -20,7 +20,7 @@ def get_vehicle_name(default_vehicle: str = "") -> str:
         ).upper()
         if _is_valid_vehicle_name(vehicle_name):
             return vehicle_name
-        ui.print_status(
+        ui.show_input_feedback(
             "车号格式必须是 XZB6/XZT5/XZA0 开头并跟 5 位数字，例如 XZB600001",
             "ERROR",
         )
@@ -68,10 +68,10 @@ def get_split_params(ctx) -> None:
             history_name="slice_after",
         )
         if before < 0:
-            ui.print_status("before 不能小于 0", "WARN")
+            ui.show_input_feedback("before 不能小于 0")
             continue
         if before + after <= 0:
-            ui.print_status("切片总时长必须大于 0 秒", "WARN")
+            ui.show_input_feedback("切片总时长必须大于 0 秒")
             continue
         ctx.logic.before = before
         ctx.logic.after = after
@@ -147,7 +147,7 @@ def get_json_input() -> str:
                 path_completion=True,
             )
             if not raw_data:
-                ui.print_status("输入为空，请重新输入！", "WARN")
+                ui.show_input_feedback("输入为空，请重新输入")
                 continue
             processed_path = raw_data.strip("'\"").replace("file://", "")
             processed_path = urllib.parse.unquote(processed_path)

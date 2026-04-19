@@ -35,7 +35,10 @@ def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str
             current_channels = next_channels if next_keyword else list(channels)
             continue
         if not current_channels:
-            ui.print_status("当前筛选结果为空，请调整关键字或输入 / 清空筛选", "WARN")
+            ui.show_input_feedback(
+                "当前筛选结果为空",
+                hint="请调整关键字或输入 / 清空筛选",
+            )
             continue
         try:
             selected_indices = prompter.parse_index_expression(
@@ -43,10 +46,16 @@ def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str
                 len(current_channels),
             )
         except ValueError:
-            ui.print_status("输入无效，请重新选择", "WARN")
+            ui.show_input_feedback(
+                "输入无效，请重新选择",
+                hint="支持序号、范围和反选表达式",
+            )
             continue
         if not selected_indices:
-            ui.print_status("未选中任何频道，请检查输入", "WARN")
+            ui.show_input_feedback(
+                "未选中任何频道，请检查输入",
+                hint="可输入序号、范围或 0 进行反选",
+            )
             continue
         return [current_channels[index - 1].name for index in selected_indices]
 

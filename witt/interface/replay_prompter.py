@@ -145,13 +145,16 @@ def _select_filtered_value(
         if extra_choices and raw_choice in extra_choices:
             return extra_choices[raw_choice]
         if not current_items:
-            ui.print_status(empty_warn_message, "WARN")
+            ui.show_input_feedback(empty_warn_message)
             continue
         if raw_choice.isdigit():
             selected_index = int(raw_choice)
             if 1 <= selected_index <= len(current_items):
                 return selection_resolver(current_items, selected_index)
-        ui.print_status("输入无效，请重新选择", "WARN")
+        ui.show_input_feedback(
+            "输入无效，请重新选择",
+            hint="可输入序号或使用 /关键字 继续筛选",
+        )
 
 
 def select_playback_entry(
@@ -214,7 +217,10 @@ def select_replay_records(tag_entry: LibraryEntry) -> List[ReplayRecord]:
         for option_value, option_label, option_records in selection_items:
             if choice == option_value or normalized_choice == option_label.lower():
                 return option_records
-        ui.print_status("输入无效，请重新选择", "WARN")
+        ui.show_input_feedback(
+            "输入无效，请重新选择",
+            hint="可输入序号或 SOC 名称",
+        )
 
 
 def select_source_task_entry(
@@ -295,11 +301,11 @@ def get_playback_rate() -> float:
         try:
             playback_rate = float(rate_input)
         except ValueError:
-            ui.print_status("请输入合法倍速", "WARN")
+            ui.show_input_feedback("请输入合法倍速")
             continue
         if 0.1 <= playback_rate <= 10:
             return playback_rate
-        ui.print_status("播放倍速需在 0.1 到 10 之间", "WARN")
+        ui.show_input_feedback("播放倍速需在 0.1 到 10 之间")
 
 
 def get_issue_marker() -> Optional[ReplayIssueMarker]:
@@ -331,7 +337,7 @@ def _get_issue_start_sec() -> int:
         )
         if raw_value.isdigit():
             return int(raw_value)
-        ui.print_status("请输入非负整数秒数", "WARN")
+        ui.show_input_feedback("请输入非负整数秒数")
 
 
 def _get_issue_description() -> str:
@@ -348,7 +354,7 @@ def _get_issue_description() -> str:
         )
         if issue_description:
             return issue_description
-        ui.print_status("备注不能为空", "WARN")
+        ui.show_input_feedback("备注不能为空")
 
 
 def get_manual_replay_paths() -> List[Path]:

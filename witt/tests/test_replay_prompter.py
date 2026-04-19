@@ -13,7 +13,7 @@ class ReplayPrompterTests(unittest.TestCase):
             "interface.replay_prompter.prompter.prompt_text",
             side_effect=lambda *args, **kwargs: next(user_inputs),
         ):
-            with patch("interface.replay_prompter.ui.print_status") as print_status:
+            with patch("interface.replay_prompter.ui.show_input_feedback") as show_input_feedback:
                 selected_item = replay_prompter._select_filtered_value(
                     ["foo", "bar", "baz"],
                     lambda items, keyword, total: render_calls.append(
@@ -35,7 +35,7 @@ class ReplayPrompterTests(unittest.TestCase):
                 (["bar"], "bar", 3),
             ],
         )
-        print_status.assert_not_called()
+        show_input_feedback.assert_not_called()
 
     def test_select_filtered_value_handles_empty_filter_and_extra_choice(self) -> None:
         render_calls = []
@@ -45,7 +45,7 @@ class ReplayPrompterTests(unittest.TestCase):
             "interface.replay_prompter.prompter.prompt_text",
             side_effect=lambda *args, **kwargs: next(user_inputs),
         ):
-            with patch("interface.replay_prompter.ui.print_status") as print_status:
+            with patch("interface.replay_prompter.ui.show_input_feedback") as show_input_feedback:
                 selected_value = replay_prompter._select_filtered_value(
                     [1],
                     lambda items, keyword, total: render_calls.append(
@@ -69,9 +69,8 @@ class ReplayPrompterTests(unittest.TestCase):
                 ([], "missing", 1),
             ],
         )
-        print_status.assert_called_once_with(
+        show_input_feedback.assert_called_once_with(
             "当前筛选结果为空，请调整关键字或输入 / 清空筛选",
-            "WARN",
         )
 
 
