@@ -79,11 +79,6 @@ class ReplayHistoryRepository:
             for raw_entry in raw_entries
         ]
 
-    def load_last(self) -> Optional[ReplayHistoryEntry]:
-        """读取最近一次回播历史。"""
-        history_entries = self.load()
-        return history_entries[-1] if history_entries else None
-
     def save(self, history_entries: List[ReplayHistoryEntry]) -> None:
         """保存回播历史列表。"""
         self.history_path.parent.mkdir(parents=True, exist_ok=True)

@@ -318,14 +318,6 @@ def show_channel_candidates(
         )
     _CONSOLE.print(table)
 
-
-def print_text_block(text: str) -> None:
-    """按原样打印多行文本块。"""
-    if not text:
-        return
-    _CONSOLE.print(Text.from_ansi(text), end="" if text.endswith("\n") else "\n")
-
-
 def show_manual_play_header() -> None:
     """打印手动回播模式标题。"""
     _CONSOLE.print(
@@ -611,22 +603,6 @@ def _format_playback_selection_label(selection_label: str) -> str:
     if len(compact_label) <= _PLAYBACK_SELECTION_MAX_LENGTH:
         return compact_label
     return "{0}...".format(compact_label[: _PLAYBACK_SELECTION_MAX_LENGTH - 3])
-def show_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
-    """打印回播历史列表。"""
-    _CONSOLE.print(
-        _build_selector_state_panel(
-            "回播历史",
-            "历史记录",
-            len(history_entries),
-            len(history_entries),
-            "",
-        )
-    )
-    if not history_entries:
-        _CONSOLE.print(_build_selector_empty_panel("回播历史", "历史记录"))
-        return
-    _CONSOLE.print(_build_history_table(history_entries))
-
 
 def show_filtered_replay_history(
     history_entries: List[ReplayHistoryEntry],

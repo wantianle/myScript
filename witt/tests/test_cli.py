@@ -123,6 +123,34 @@ class CliTests(unittest.TestCase):
         self.assertTrue(handled)
         show_result_section.assert_called_once()
 
+    def test_handle_history_subcommand_last_replays_latest_entry(self) -> None:
+        session = cast(AppSession, SimpleNamespace())
+        command_invocation = prompter.CommandInvocation(
+            name="history",
+            args=["last"],
+            raw="history last",
+        )
+
+        with patch("interface.cli.replay_workflow.replay_latest_history_entry") as replay_latest_history_entry:
+            handled = cli._handle_history_subcommand(session, command_invocation)
+
+        self.assertTrue(handled)
+        replay_latest_history_entry.assert_called_once_with(session)
+
+    def test_handle_history_subcommand_numeric_replays_by_index(self) -> None:
+        session = cast(AppSession, SimpleNamespace())
+        command_invocation = prompter.CommandInvocation(
+            name="history",
+            args=["3"],
+            raw="history 3",
+        )
+
+        with patch("interface.cli.replay_workflow.replay_history_by_index") as replay_history_by_index:
+            handled = cli._handle_history_subcommand(session, command_invocation)
+
+        self.assertTrue(handled)
+        replay_history_by_index.assert_called_once_with(session, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

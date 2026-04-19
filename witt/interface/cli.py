@@ -237,10 +237,10 @@ def _handle_history_subcommand(
         )
         return True
     if subcommand == "last":
-        workflow.replay_workflow.replay_latest_history_entry(session)
+        replay_workflow.replay_latest_history_entry(session)
         return True
     if subcommand.isdigit():
-        workflow.replay_workflow.replay_history_by_index(session, int(subcommand))
+        replay_workflow.replay_history_by_index(session, int(subcommand))
         return True
     ui.show_result_section(
         "历史命令",
