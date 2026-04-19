@@ -352,6 +352,40 @@ def show_flow_section(
     _CONSOLE.print(_build_page_intro_panel(title, summary, hint))
 
 
+def show_result_section(
+    title: str,
+    summary: str,
+    level: str = "INFO",
+    details: Optional[Sequence[str]] = None,
+    next_step: str = "",
+) -> None:
+    """打印统一风格的流程结束态页面。"""
+    level_style_map = {
+        "INFO": "info",
+        "WARN": "warn",
+        "ERROR": "error",
+    }
+    style_name = level_style_map.get(level, "info")
+    lines = [Text(summary, style=style_name)]
+    for detail_text in details or []:
+        lines.append(Text(detail_text, style="muted"))
+    if next_step:
+        lines.append(
+            Text.assemble(
+                ("下一步: ", "label"),
+                (next_step, "accent"),
+            )
+        )
+    _CONSOLE.print(
+        Panel(
+            Group(*lines),
+            title=title,
+            border_style=style_name,
+            padding=(0, 2),
+        )
+    )
+
+
 def show_replay_section(
     title: str,
     summary: str = "",

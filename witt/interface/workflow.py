@@ -57,7 +57,12 @@ def _load_task_entries(
     )
     task_list = parser.parse_manifest(session.ctx.manifest_path)
     if not task_list:
-        ui.print_status("未找到相关 Record 记录", "ERROR")
+        ui.show_result_section(
+            "查询结果",
+            "未找到相关 Record 记录",
+            "ERROR",
+            next_step="调整车辆、日期或源路径后重试",
+        )
         return []
     return task_list
 
@@ -95,7 +100,13 @@ def slice_progress(session: AppSession) -> None:
     )
     planned_summary = session.record_downloader.plan_download(valid_tasks)
     if planned_summary.total_files <= 0:
-        ui.print_status("下载队列为空", "WARN")
+        ui.show_result_section(
+            "切片结果",
+            "下载队列为空",
+            "WARN",
+            details=["没有可执行的切片批次"],
+            next_step="检查筛选的 Tag、路径和切片时间窗",
+        )
         _show_skipped_batches(planned_summary.skipped_batches)
         return
     ui.print_status(f"准备同步 {planned_summary.total_files} 个 Record 片段...")
@@ -104,9 +115,23 @@ def slice_progress(session: AppSession) -> None:
     _show_skipped_batches(download_summary.skipped_batches)
     _show_failed_batches(download_summary.failed_batches)
     if not download_summary.completed_batches:
-        ui.print_status("没有成功完成的切片批次", "WARN")
+        ui.show_result_section(
+            "切片结果",
+            "没有成功完成的切片批次",
+            "WARN",
+            next_step="检查失败或跳过原因后重试",
+        )
         return
-    ui.print_status("所有同步任务已完成！")
+    ui.show_result_section(
+        "切片结果",
+        "所有同步任务已完成！",
+        details=[
+            "已完成 {0} 个切片批次".format(
+                len(download_summary.completed_batches)
+            )
+        ],
+        next_step="可立即进入回播，或返回 REPL 继续其他操作",
+    )
     if prompter.get_confirm_input("\n切片处理完成，是否立即回播数据?", True):
         replay_workflow.auto_replay_flow(
             session,

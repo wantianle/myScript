@@ -219,9 +219,20 @@ def _post_replay_issue_draft(
             issue_timestamp=issue_timestamp,
         )
     except OSError as e:
-        ui.print_status("生成 issue.md 失败: {0}".format(e), "ERROR")
+        ui.show_result_section(
+            "Issue 草稿",
+            "生成 issue.md 失败",
+            "ERROR",
+            details=[str(e)],
+            next_step="检查工作目录写权限后重试",
+        )
         return
-    ui.print_status("issue 草稿已生成: {0}".format(issue_path))
+    ui.show_result_section(
+        "Issue 草稿",
+        "issue 草稿已生成",
+        details=[str(issue_path)],
+        next_step="可检查并补充 issue 内容",
+    )
 
 
 def _try_build_issue_paths(
@@ -381,7 +392,12 @@ def _restore_replay_history_context(
 def _validate_history_records(records: List[ReplayRecord]) -> bool:
     """检查历史回播依赖的文件是否仍然存在。"""
     if not records:
-        ui.print_status("历史回播记录为空", "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "历史回播记录为空",
+            "WARN",
+            next_step="重新选择历史记录或清空无效历史",
+        )
         return False
     missing_paths = [
         replay_record.path
@@ -419,7 +435,12 @@ def _replay_records(
 ) -> None:
     """执行一轮可重复调整时间窗的回放循环。"""
     if not records:
-        ui.print_status("回播列表为空", "WARN")
+        ui.show_result_section(
+            "回播准备",
+            "回播列表为空",
+            "WARN",
+            next_step="重新选择回播条目或检查本地目录",
+        )
         return
     if not _prepare_replay(session, records, replay_mode):
         return
@@ -509,7 +530,12 @@ def replay_history_flow(session: AppSession) -> None:
     """先浏览历史记录，再选择一次回播。"""
     history_entries = get_sorted_replay_history_entries(session)
     if not history_entries:
-        ui.print_status("当前没有可重放的回播历史", "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "当前没有可重放的回播历史",
+            "WARN",
+            next_step="先完成一次回播，或使用其他模式进入回播",
+        )
         return
     ui.browse_replay_history(history_entries)
     while True:
@@ -542,7 +568,12 @@ def replay_latest_history_entry(session: AppSession) -> bool:
     """直接回播最新一条历史记录。"""
     history_entries = get_sorted_replay_history_entries(session)
     if not history_entries:
-        ui.print_status("当前没有可重放的回播历史", "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "当前没有可重放的回播历史",
+            "WARN",
+            next_step="先完成一次回播，或使用 history 浏览历史",
+        )
         return False
     return replay_history_entry(session, history_entries[0])
 
@@ -551,7 +582,12 @@ def replay_history_by_index(session: AppSession, history_index: int) -> bool:
     """按展示序号回播一条历史记录。"""
     history_entries = get_sorted_replay_history_entries(session)
     if not history_entries:
-        ui.print_status("当前没有可重放的回播历史", "WARN")
+        ui.show_result_section(
+            "历史回播",
+            "当前没有可重放的回播历史",
+            "WARN",
+            next_step="先完成一次回播，或使用 history 浏览历史",
+        )
         return False
     if history_index < 1 or history_index > len(history_entries):
         ui.print_status("历史序号超出范围: {0}".format(history_index), "WARN")
@@ -626,7 +662,13 @@ def auto_replay_flow(
             ui.print_status(f"已扫描本地库 {session.ctx.work_dir}...")
         library = library_result.library
         if not library:
-            ui.print_status("本地目录为空！", "WARN")
+            ui.show_result_section(
+                "自动回播",
+                "本地目录为空",
+                "WARN",
+                details=[str(session.ctx.work_dir)],
+                next_step="检查扫描目录，或先完成切片/同步",
+            )
             return
         selected_tag = replay_prompter.select_playback_entry(
             library,
@@ -659,7 +701,12 @@ def auto_replay_flow(
 def full_source_replay_flow(session: AppSession, task_entries) -> None:
     """直接基于查询结果回放原始 record 数据，不生成任何导出文件。"""
     if not task_entries:
-        ui.print_status("没有可回放的 Tag", "WARN")
+        ui.show_result_section(
+            "全量回播",
+            "没有可回放的 Tag",
+            "WARN",
+            next_step="先执行查询，或调整车辆和日期条件",
+        )
         return
     while True:
         task_entry = replay_prompter.select_source_task_entry(task_entries)

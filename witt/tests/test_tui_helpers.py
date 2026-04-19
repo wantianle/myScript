@@ -191,5 +191,33 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("查询 Record -> 选择 Tag -> 切片 -> 可选回播", rendered)
         self.assertIn("适合先做批量切片", rendered)
 
+    def test_show_result_section_renders_details_and_next_step(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_result_section(
+                "切片结果",
+                "所有同步任务已完成！",
+                details=["已完成 3 个切片批次"],
+                next_step="可立即进入回播，或返回 REPL 继续其他操作",
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("切片结果", rendered)
+        self.assertIn("所有同步任务已完成！", rendered)
+        self.assertIn("已完成 3 个切片批次", rendered)
+        self.assertIn("下一步", rendered)
+        self.assertIn("可立即进入回播", rendered)
+
 if __name__ == "__main__":
     unittest.main()
