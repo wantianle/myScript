@@ -13,6 +13,7 @@ DATA_ROOT="/media/mini"
 VENV_DIR="$DIR/../.venv"
 VENV_PIP="$VENV_DIR/bin/pip"
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+RUNNING_CONTAINER_ID="$(docker ps -q -f name=$CONTAINER)"
 
 ensure_venv_support() {
     if python3 -m venv --help >/dev/null 2>&1; then
@@ -87,18 +88,9 @@ if [[ ! -O "$DATA_ROOT" ]]; then
     sudo chown -R "$USER:$USER" "$DATA_ROOT"
 fi
 
-CONTAINER_ID="$(docker ps -a -q -f name=$CONTAINER)"
-RUNNING_CONTAINER_ID="$(docker ps -q -f name=$CONTAINER)"
-
-if [[ -z "$CONTAINER_ID" ]]; then
-    log_warning "docker 容器不存在, 尝试创建环境..."
-    bash "$DEV_START_SCRIPT"
-elif [[ -z "$RUNNING_CONTAINER_ID" ]]; then
-    log_warning "docker 容器未运行, 尝试启动..."
-    if ! docker start "$CONTAINER" >/dev/null; then
-        log_error "docker 容器启动失败！"
-        exit 1
-    fi
+if [[ -z "$RUNNING_CONTAINER_ID" ]]; then
+    log_warning "docker 容器未启动, 尝试创建环境..."
+    bash "$DEV_START_SCRIPT" --remove
 fi
 
 if ! docker exec "$CONTAINER" /bin/bash -c "source /mdrive/mdrive/setup.sh && cyber_recorder --help" >/dev/null 2>&1; then
