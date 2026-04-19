@@ -849,6 +849,8 @@ def full_source_replay_flow(
             )
             continue
         _show_full_source_preview(task_entry, source_records)
+        if not prompter.get_confirm_input("是否确认回放?", True):
+            continue
         _update_playback_blacklist(session, source_records, REPLAY_MODE_STANDARD)
         _replay_records(
             session,

@@ -174,13 +174,56 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 return_value=source_records,
             ):
                 with patch("interface.replay_workflow._show_full_source_preview") as show_preview:
-                    with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
-                        with patch("interface.replay_workflow._replay_records") as replay_records:
-                            replay_workflow.full_source_replay_flow(session, [task_entry])
+                    with patch(
+                        "interface.replay_workflow.prompter.get_confirm_input",
+                        return_value=True,
+                    ):
+                        with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
+                            with patch("interface.replay_workflow._replay_records") as replay_records:
+                                replay_workflow.full_source_replay_flow(session, [task_entry])
 
         show_preview.assert_called_once_with(task_entry, source_records)
         update_blacklist.assert_called_once()
         replay_records.assert_called_once()
+
+    def test_full_source_replay_flow_skips_replay_when_confirm_declined(self) -> None:
+        task_entry = TaskEntry(
+            time="2026-04-19 12:00:00",
+            name="demo_tag",
+            soc_paths={"soc1": ["/tmp/a"], "soc2": []},
+            paths=["/tmp/a"],
+            id="01",
+        )
+        source_records = [
+            ReplayRecord(
+                path="/tmp/demo.record",
+                begin=datetime(2026, 4, 19, 11, 59, 50),
+                duration=20,
+            )
+        ]
+        session = cast(AppSession, SimpleNamespace())
+
+        with patch(
+            "interface.replay_workflow.replay_prompter.select_source_task_entry",
+            side_effect=[task_entry, None],
+        ):
+            with patch(
+                "interface.replay_workflow._build_source_replay_records",
+                return_value=source_records,
+            ):
+                with patch("interface.replay_workflow._show_full_source_preview") as show_preview:
+                    with patch(
+                        "interface.replay_workflow.prompter.get_confirm_input",
+                        return_value=False,
+                    ) as get_confirm_input:
+                        with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
+                            with patch("interface.replay_workflow._replay_records") as replay_records:
+                                replay_workflow.full_source_replay_flow(session, [task_entry])
+
+        show_preview.assert_called_once_with(task_entry, source_records)
+        get_confirm_input.assert_called_once_with("是否确认回放?", True)
+        update_blacklist.assert_not_called()
+        replay_records.assert_not_called()
 
 
 if __name__ == "__main__":
