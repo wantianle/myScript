@@ -42,3 +42,11 @@ class TaskBatchPlanningError(WittCoreError):
 
 class VersionFileMissingError(TaskBatchPlanningError):
     """Raised when a task batch cannot proceed because version files are missing."""
+
+
+class FindRecordError(WittCoreError):
+    """Raised when record discovery cannot produce query candidates."""
+
+
+class TagFileMissingError(FindRecordError):
+    """Raised when a query root has candidate records but no tag files."""
