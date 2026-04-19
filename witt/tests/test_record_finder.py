@@ -123,6 +123,20 @@ class RecordFinderTests(unittest.TestCase):
                     after=5,
                 )
 
+    def test_find_local_tasks_raises_when_tag_has_no_valid_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_root = Path(tmpdir)
+            tag_file = data_root / "demo_tag_20260419.pb.txt"
+            tag_file.write_text("not-a-valid-tag-line\n", encoding="utf-8")
+
+            with self.assertRaises(FindRecordError):
+                record_finder.find_local_tasks(
+                    data_root,
+                    target_date="20260419",
+                    before=15,
+                    after=5,
+                )
+
     def test_find_local_tasks_raises_when_data_root_has_no_related_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             data_root = Path(tmpdir)
@@ -136,6 +150,24 @@ class RecordFinderTests(unittest.TestCase):
                     before=15,
                     after=5,
                 )
+
+    def test_dump_manifest_writes_existing_manifest_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest_path = Path(tmpdir) / "tasks.list"
+            task_entries = [
+                record_finder.TaskEntry.from_manifest_parts(
+                    time="2026-04-19 12:00:00",
+                    name="demo_tag",
+                    paths=["/tmp/a.record", "/tmp/b.record"],
+                )
+            ]
+
+            manifest_text = record_finder.dump_manifest(task_entries, manifest_path)
+
+        self.assertEqual(
+            manifest_text,
+            "2026-04-19 12:00:00|demo_tag|/tmp/a.record /tmp/b.record",
+        )
 
 
 if __name__ == "__main__":

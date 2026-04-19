@@ -155,9 +155,26 @@ def find_local_tasks(
                 )
             )
     task_entries.sort(key=lambda task_entry: task_entry.time)
+    if not task_entries:
+        raise FindRecordError("未找到到任何有效 record")
     for index, task_entry in enumerate(task_entries, 1):
         task_entry.assign_id(index)
     return task_entries
+
+
+def dump_manifest(task_entries: Sequence[TaskEntry], manifest_path: Path) -> str:
+    """按既有 manifest 格式写出查询结果。"""
+    manifest_lines = [
+        "{0}|{1}|{2}".format(
+            task_entry.time,
+            task_entry.name,
+            " ".join(task_entry.paths),
+        )
+        for task_entry in task_entries
+    ]
+    manifest_text = "\n".join(manifest_lines)
+    manifest_path.write_text(manifest_text, encoding="utf-8")
+    return manifest_text
 
 
 def _is_record_candidate(

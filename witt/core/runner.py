@@ -6,7 +6,8 @@ import sys
 import pty
 from pathlib import Path
 
-from core.errors import ScriptExecutionError
+from core.engine import record_finder
+from core.errors import FindRecordError, ScriptExecutionError
 
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -136,11 +137,37 @@ class ScriptRunner:
             if process is not None and process.poll() is None:
                 process.wait()
 
+    def _resolve_find_record_root(self) -> Path:
+        """按当前模式解析查询根目录。"""
+        if self.ctx.logic.mode == 2:
+            return (
+                Path(self.ctx.host.nas_root)
+                / self.ctx.target_date[:8]
+                / self.ctx.vehicle
+            )
+        return Path(str(self.ctx.host.data_root).rstrip("/"))
+
     def run_find_record(self) -> None:
         """执行 record 查询脚本。"""
-        self.ctx.find_record_output = self._run_script_with_terminal_capture(
-            "find_record.sh",
-            False,
+        if self.ctx.logic.mode == 3:
+            self.ctx.find_record_output = self._run_script_with_terminal_capture(
+                "find_record.sh",
+                False,
+            )
+            return
+        try:
+            task_entries = record_finder.find_local_tasks(
+                self._resolve_find_record_root(),
+                target_date=self.ctx.target_date,
+                before=int(self.ctx.logic.before),
+                after=int(self.ctx.logic.after),
+                soc_filter=str(getattr(self.ctx.logic, "soc", "")),
+            )
+        except FindRecordError as e:
+            raise ScriptExecutionError("find_record", str(e)) from e
+        self.ctx.find_record_output = record_finder.dump_manifest(
+            task_entries,
+            self.ctx.manifest_path,
         )
 
     def restore_runtime_environment(self) -> None:
