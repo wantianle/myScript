@@ -286,40 +286,6 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("当前阶段", rendered)
         self.assertIn("正在构建回播条目列表", rendered)
 
-    def test_show_replay_preview_renders_preview_fields(self) -> None:
-        buffer = StringIO()
-        console = Console(
-            file=buffer,
-            width=120,
-            force_terminal=False,
-            highlight=False,
-            theme=ui._THEME,
-        )
-        previous_console = ui._CONSOLE
-        try:
-            ui._CONSOLE = console
-            ui.show_replay_preview(
-                tag_time="2026-04-19 12:00:00",
-                replay_start="2026-04-19 11:59:50",
-                replay_end="2026-04-19 12:00:10",
-                duration=20,
-                file_count=2,
-                soc_count=1,
-                version_source="自动发现: /tmp/version.json",
-                version_details=["mdrive: 1.2.3", "mdrive_conf: E171.2.3"],
-            )
-        finally:
-            ui._CONSOLE = previous_console
-
-        rendered = buffer.getvalue()
-        self.assertIn("回播前预览", rendered)
-        self.assertIn("Tag 时间", rendered)
-        self.assertIn("回播开始", rendered)
-        self.assertIn("回播结束", rendered)
-        self.assertIn("自动发现: /tmp/version.json", rendered)
-        self.assertIn("版本信息", rendered)
-        self.assertIn("mdrive: 1.2.3", rendered)
-
     def test_show_notice_section_renders_summary_and_details(self) -> None:
         buffer = StringIO()
         console = Console(

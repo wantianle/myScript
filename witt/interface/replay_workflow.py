@@ -230,24 +230,10 @@ def _build_source_replay_records(
     ]
 
 
-def _get_replay_begin(record: ReplayRecord) -> datetime:
-    """将回放记录的起始时间收窄为 datetime，便于后续计算。"""
-    if isinstance(record.begin, datetime):
-        return record.begin
-    return parser.str_to_time(record.begin)
-
-
-def _format_preview_time(time_value: Union[str, datetime]) -> str:
-    """格式化预览面板中的时间字段。"""
-    if isinstance(time_value, datetime):
-        return time_value.strftime("%Y-%m-%d %H:%M:%S")
-    return str(time_value)
-
-
-def _build_version_preview_details(
+def _build_version_display_details(
     version_source: Optional[Union[str, Path]],
 ) -> List[str]:
-    """构造回播前预览中的版本信息摘要。"""
+    """构造回放信息展示中的版本信息摘要。"""
     if not version_source:
         return ["未提供版本信息"]
     version_path = Path(version_source)
@@ -297,56 +283,6 @@ def _build_version_preview_details(
             if line.strip()
         ]
         return raw_version_lines[:5] or ["未提供版本信息"]
-
-
-def _show_replay_preview_for_records(
-    tag_time: str,
-    records: List[ReplayRecord],
-) -> None:
-    """展示统一的回放前预览页面。"""
-    if not records:
-        return
-    replay_start = _get_replay_begin(records[0])
-    replay_duration = max(replay_record.duration for replay_record in records)
-    replay_end = replay_start + timedelta(seconds=replay_duration)
-    version_path = _find_version_path_from_records(records)
-    version_details = _build_version_preview_details(version_path)
-    soc_count = len(
-        {
-            Path(replay_record.path).parent.name
-            for replay_record in records
-            if Path(replay_record.path).parent.name.startswith("soc")
-        }
-    )
-    version_source = (
-        "自动发现: {0}".format(version_path)
-        if version_path is not None
-        else "未发现 version 文件"
-    )
-    ui.show_replay_preview(
-        tag_time=tag_time,
-        replay_start=_format_preview_time(replay_start),
-        replay_end=_format_preview_time(replay_end),
-        duration=replay_duration,
-        file_count=len(records),
-        soc_count=soc_count,
-        version_source=version_source,
-        version_details=version_details,
-    )
-
-
-def _show_full_source_preview(
-    task_entry: TaskEntry,
-    source_records: List[ReplayRecord],
-) -> None:
-    """展示原始数据回放（不切片）的回播前预览。"""
-    _show_replay_preview_for_records(task_entry.time, source_records)
-
-
-def _confirm_replay_preview(tag_time: str, records: List[ReplayRecord]) -> bool:
-    """展示预览并确认是否继续进入回放流程。"""
-    _show_replay_preview_for_records(tag_time, records)
-    return prompter.get_confirm_input("是否确认回放?", True)
 
 
 def _format_playback_range(start_sec: int, end_sec: int) -> str:
@@ -416,7 +352,6 @@ def _post_replay_issue_draft(
         "Issue 草稿",
         "issue 草稿已生成",
         details=[str(issue_path)],
-        next_step="可检查并补充 issue 内容",
     )
 
 
@@ -694,7 +629,7 @@ def _replay_records(
             channels=getattr(session.ctx, "playback_blacklist", []) or None,
             command=playback_plan.command,
             version_source=current_version_source or "未提供 version 文件",
-            version_details=_build_version_preview_details(current_version_source),
+            version_details=_build_version_display_details(current_version_source),
         )
         _save_replay_history(
             session,
@@ -821,11 +756,6 @@ def replay_history_entry(
         return False
     if validate_only:
         return True
-    preview_tag_time = history_entry.issue_timestamp or _format_preview_time(
-        _get_replay_begin(history_entry.records[0])
-    )
-    if not _confirm_replay_preview(preview_tag_time, history_entry.records):
-        return False
     _restore_replay_history_context(session, history_entry)
     session.init_logging()
     _replay_records(
@@ -902,8 +832,6 @@ def auto_replay_flow(
         target_records = replay_prompter.select_replay_records(selected_tag)
         if not target_records:
             continue
-        if not _confirm_replay_preview(selected_tag.time, target_records):
-            continue
         _update_playback_blacklist(session, target_records, replay_mode)
         total_duration = max(replay_record.duration for replay_record in target_records)
         _replay_records(
@@ -947,8 +875,6 @@ def full_source_replay_flow(
                 "WARN",
                 next_step="重新选择其他 Tag 或调整查询条件",
             )
-            continue
-        if not _confirm_replay_preview(task_entry.time, source_records):
             continue
         _update_playback_blacklist(session, source_records, REPLAY_MODE_STANDARD)
         _replay_records(
@@ -1011,11 +937,6 @@ def manual_replay_paths_flow(
         ReplayRecord(path=str(path_obj), begin=tag_start, duration=tag_duration)
         for path_obj in paths
     ]
-    if not _confirm_replay_preview(
-        tag_start.strftime("%Y-%m-%d %H:%M:%S"),
-        current_records,
-    ):
-        return
     _update_playback_blacklist(session, current_records, replay_mode)
     _replay_records(
         session,

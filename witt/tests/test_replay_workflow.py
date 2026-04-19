@@ -180,45 +180,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
 
         show_result_section.assert_called_once()
 
-    def test_show_full_source_preview_builds_preview_from_selected_tag(self) -> None:
-        task_entry = TaskEntry(
-            time="2026-04-19 12:00:00",
-            name="demo_tag",
-            soc_paths={"soc1": ["/tmp/a"], "soc2": ["/tmp/b"]},
-            paths=["/tmp/a", "/tmp/b"],
-            id="01",
-        )
-        source_records = [
-            ReplayRecord(
-                path="/tmp/demo.record",
-                begin=datetime(2026, 4, 19, 11, 59, 50),
-                duration=20,
-            )
-        ]
-
-        with patch(
-            "interface.replay_workflow._find_version_path_from_records",
-            return_value=Path("/tmp/version.json"),
-        ):
-            with patch(
-                "interface.replay_workflow._build_version_preview_details",
-                return_value=["mdrive: 1.2.3", "mdrive_conf: E171.2.3"],
-            ):
-                with patch("interface.replay_workflow.ui.show_replay_preview") as show_replay_preview:
-                    replay_workflow._show_full_source_preview(task_entry, source_records)
-
-        show_replay_preview.assert_called_once_with(
-            tag_time="2026-04-19 12:00:00",
-            replay_start="2026-04-19 11:59:50",
-            replay_end="2026-04-19 12:00:10",
-            duration=20,
-            file_count=1,
-            soc_count=0,
-            version_source="自动发现: /tmp/version.json",
-            version_details=["mdrive: 1.2.3", "mdrive_conf: E171.2.3"],
-        )
-
-    def test_full_source_replay_flow_shows_preview_before_replay(self) -> None:
+    def test_full_source_replay_flow_replays_without_preview_confirmation(self) -> None:
         task_entry = TaskEntry(
             time="2026-04-19 12:00:00",
             name="demo_tag",
@@ -243,56 +205,14 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 "interface.replay_workflow._build_source_replay_records",
                 return_value=source_records,
             ):
-                with patch(
-                    "interface.replay_workflow._confirm_replay_preview",
-                    return_value=True,
-                ) as confirm_replay_preview:
-                    with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
-                        with patch("interface.replay_workflow._replay_records") as replay_records:
-                            replay_workflow.full_source_replay_flow(session, [task_entry])
+                with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
+                    with patch("interface.replay_workflow._replay_records") as replay_records:
+                        replay_workflow.full_source_replay_flow(session, [task_entry])
 
-        confirm_replay_preview.assert_called_once_with(task_entry.time, source_records)
         update_blacklist.assert_called_once()
         replay_records.assert_called_once()
 
-    def test_full_source_replay_flow_skips_replay_when_confirm_declined(self) -> None:
-        task_entry = TaskEntry(
-            time="2026-04-19 12:00:00",
-            name="demo_tag",
-            soc_paths={"soc1": ["/tmp/a"], "soc2": []},
-            paths=["/tmp/a"],
-            id="01",
-        )
-        source_records = [
-            ReplayRecord(
-                path="/tmp/demo.record",
-                begin=datetime(2026, 4, 19, 11, 59, 50),
-                duration=20,
-            )
-        ]
-        session = cast(AppSession, SimpleNamespace())
-
-        with patch(
-            "interface.replay_workflow.replay_prompter.select_source_task_entry",
-            side_effect=[task_entry, None],
-        ):
-            with patch(
-                "interface.replay_workflow._build_source_replay_records",
-                return_value=source_records,
-            ):
-                with patch(
-                    "interface.replay_workflow._confirm_replay_preview",
-                    return_value=False,
-                ) as confirm_replay_preview:
-                    with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
-                        with patch("interface.replay_workflow._replay_records") as replay_records:
-                            replay_workflow.full_source_replay_flow(session, [task_entry])
-
-        confirm_replay_preview.assert_called_once_with(task_entry.time, source_records)
-        update_blacklist.assert_not_called()
-        replay_records.assert_not_called()
-
-    def test_auto_replay_flow_confirms_preview_before_replay(self) -> None:
+    def test_auto_replay_flow_replays_without_preview_confirmation(self) -> None:
         selected_tag = SimpleNamespace(
             tag="demo_tag",
             time="2026-04-19 12:00:00",
@@ -331,19 +251,14 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 "interface.replay_workflow.replay_prompter.select_replay_records",
                 return_value=target_records,
             ):
-                with patch(
-                    "interface.replay_workflow._confirm_replay_preview",
-                    return_value=True,
-                ) as confirm_replay_preview:
-                    with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
-                        with patch("interface.replay_workflow._replay_records") as replay_records:
-                            replay_workflow.auto_replay_flow(session)
+                with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
+                    with patch("interface.replay_workflow._replay_records") as replay_records:
+                        replay_workflow.auto_replay_flow(session)
 
-        confirm_replay_preview.assert_called_once_with(selected_tag.time, target_records)
         update_blacklist.assert_called_once()
         replay_records.assert_called_once()
 
-    def test_manual_replay_paths_flow_skips_replay_when_preview_declined(self) -> None:
+    def test_manual_replay_paths_flow_replays_without_preview_confirmation(self) -> None:
         session = cast(
             AppSession,
             SimpleNamespace(
@@ -365,29 +280,15 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         )
         paths = [Path("/tmp/demo.record")]
 
-        with patch("interface.replay_workflow.os.name", "nt"):
-            with patch(
-                "interface.replay_workflow._confirm_replay_preview",
-                return_value=False,
-            ) as confirm_replay_preview:
-                with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
-                    with patch("interface.replay_workflow._replay_records") as replay_records:
-                        replay_workflow.manual_replay_paths_flow(session, paths)
+        with patch("interface.replay_workflow.termios.tcflush"):
+            with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
+                with patch("interface.replay_workflow._replay_records") as replay_records:
+                    replay_workflow.manual_replay_paths_flow(session, paths)
 
-        confirm_replay_preview.assert_called_once_with(
-            "2026-04-19 12:00:00",
-            [
-                ReplayRecord(
-                    path="/tmp/demo.record",
-                    begin=datetime(2026, 4, 19, 12, 0, 0),
-                    duration=10,
-                )
-            ],
-        )
-        update_blacklist.assert_not_called()
-        replay_records.assert_not_called()
+        update_blacklist.assert_called_once()
+        replay_records.assert_called_once()
 
-    def test_replay_history_entry_skips_replay_when_preview_declined(self) -> None:
+    def test_replay_history_entry_replays_without_preview_confirmation(self) -> None:
         history_entry = ReplayHistoryEntry(
             created_at="2026-04-19 12:00:00",
             source_type="auto",
@@ -414,20 +315,12 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             ),
         )
 
-        with patch(
-            "interface.replay_workflow._confirm_replay_preview",
-            return_value=False,
-        ) as confirm_replay_preview:
-            with patch("interface.replay_workflow._replay_records") as replay_records:
-                replayed = replay_workflow.replay_history_entry(session, history_entry)
+        with patch("interface.replay_workflow._replay_records") as replay_records:
+            replayed = replay_workflow.replay_history_entry(session, history_entry)
 
-        self.assertFalse(replayed)
-        confirm_replay_preview.assert_called_once_with(
-            history_entry.issue_timestamp,
-            history_entry.records,
-        )
-        init_logging.assert_not_called()
-        replay_records.assert_not_called()
+        self.assertTrue(replayed)
+        init_logging.assert_called_once_with()
+        replay_records.assert_called_once()
 
 
 if __name__ == "__main__":
