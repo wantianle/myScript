@@ -84,7 +84,7 @@ class ScriptRunnerTests(unittest.TestCase):
                     runner,
                     "_run_script_with_terminal_capture",
                 ) as run_script_with_terminal_capture:
-                    runner.run_find_record()
+                    returned_tasks = runner.run_find_record()
 
             find_local_tasks.assert_called_once_with(
                 Path("/tmp/local_root"),
@@ -94,6 +94,7 @@ class ScriptRunnerTests(unittest.TestCase):
                 soc_filter="soc1",
             )
             run_script_with_terminal_capture.assert_not_called()
+            self.assertEqual(returned_tasks, task_entries)
             parsed_tasks = parser.parse_manifest(manifest_path)
             self.assertEqual(len(parsed_tasks), 1)
             self.assertEqual(parsed_tasks[0].name, "demo_tag")
@@ -133,7 +134,7 @@ class ScriptRunnerTests(unittest.TestCase):
                     "core.runner.record_finder.dump_manifest",
                     return_value="",
                 ):
-                    runner.run_find_record()
+                    returned_tasks = runner.run_find_record()
 
             find_local_tasks.assert_called_once_with(
                 Path("/tmp/nas_root/20260419/XZB600001"),
@@ -142,6 +143,7 @@ class ScriptRunnerTests(unittest.TestCase):
                 after=5,
                 soc_filter="",
             )
+            self.assertEqual(returned_tasks, [])
 
     def test_run_find_record_keeps_shell_path_for_remote_mode(self) -> None:
         runner = ScriptRunner(
@@ -171,18 +173,31 @@ class ScriptRunnerTests(unittest.TestCase):
         with patch(
             "core.runner.record_finder.find_local_tasks",
         ) as find_local_tasks:
+            parsed_tasks = [
+                TaskEntry.from_manifest_parts(
+                    time="2026-04-19 12:00:00",
+                    name="demo_tag",
+                    paths=["/tmp/remote/soc1/a.record"],
+                )
+            ]
             with patch.object(
                 runner,
                 "_run_script_with_terminal_capture",
                 return_value="shell-output",
             ) as run_script_with_terminal_capture:
-                runner.run_find_record()
+                with patch(
+                    "core.runner.parser.parse_manifest",
+                    return_value=parsed_tasks,
+                ) as parse_manifest:
+                    returned_tasks = runner.run_find_record()
 
         find_local_tasks.assert_not_called()
         run_script_with_terminal_capture.assert_called_once_with(
             "find_record.sh",
             False,
         )
+        parse_manifest.assert_called_once_with(Path("/tmp/tasks.list"))
+        self.assertEqual(returned_tasks, parsed_tasks)
         self.assertEqual(runner.ctx.find_record_output, "shell-output")
 
 

@@ -1,5 +1,4 @@
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock, patch
@@ -27,15 +26,12 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("1", values)
 
     def test_load_task_entries_shows_result_when_manifest_is_empty(self) -> None:
-        session = cast(
-            AppSession,
-            SimpleNamespace(ctx=SimpleNamespace(manifest_path=Path("/tmp/manifest"))),
-        )
+        session = cast(AppSession, SimpleNamespace())
 
         with patch("interface.workflow.search_flow") as search_flow:
-            with patch("interface.workflow.parser.parse_manifest", return_value=[]):
-                with patch("interface.workflow.ui.show_result_section") as show_result_section:
-                    task_entries = workflow._load_task_entries(session)
+            search_flow.return_value = []
+            with patch("interface.workflow.ui.show_result_section") as show_result_section:
+                task_entries = workflow._load_task_entries(session)
 
         self.assertEqual(task_entries, [])
         search_flow.assert_called_once()
@@ -109,7 +105,16 @@ class WorkflowTests(unittest.TestCase):
 
     def test_search_flow_calls_prompt_collectors_and_runner(self) -> None:
         init_logging = Mock()
-        run_find_record = Mock()
+        task_entries = [
+            TaskEntry(
+                time="2026-04-19 12:00:00",
+                name="demo_tag",
+                soc_paths={"soc1": ["/tmp/a"], "soc2": []},
+                paths=["/tmp/a"],
+                id="01",
+            )
+        ]
+        run_find_record = Mock(return_value=task_entries)
         session = cast(
             AppSession,
             SimpleNamespace(
@@ -123,7 +128,7 @@ class WorkflowTests(unittest.TestCase):
             with patch("interface.workflow.config_prompter.get_source_path_params") as get_source_path_params:
                 with patch("interface.workflow.config_prompter.get_export_path_params") as get_export_path_params:
                     with patch("interface.workflow.config_prompter.get_split_params") as get_split_params:
-                        workflow.search_flow(session, need_export_path=True)
+                        returned_tasks = workflow.search_flow(session, need_export_path=True)
 
         get_basic_params.assert_called_once_with(session.ctx)
         get_source_path_params.assert_called_once()
@@ -131,6 +136,7 @@ class WorkflowTests(unittest.TestCase):
         get_split_params.assert_called_once_with(session.ctx, "切片窗口")
         init_logging.assert_called_once_with()
         run_find_record.assert_called_once_with()
+        self.assertEqual(returned_tasks, task_entries)
 
     def test_search_flow_shows_result_when_find_record_script_fails(self) -> None:
         init_logging = Mock()
@@ -158,7 +164,7 @@ class WorkflowTests(unittest.TestCase):
                         with patch("interface.workflow.ui.show_result_section") as show_result_section:
                             loaded = workflow.search_flow(session)
 
-        self.assertFalse(loaded)
+        self.assertIsNone(loaded)
         show_result_section.assert_called_once()
 
     def test_load_task_entries_passes_replay_window_name(self) -> None:
@@ -169,22 +175,16 @@ class WorkflowTests(unittest.TestCase):
             paths=["/tmp/a"],
             id="01",
         )
-        session = cast(
-            AppSession,
-            SimpleNamespace(ctx=SimpleNamespace(manifest_path=Path("/tmp/manifest"))),
-        )
+        session = cast(AppSession, SimpleNamespace())
 
         with patch("interface.workflow.search_flow") as search_flow:
-            with patch(
-                "interface.workflow.parser.parse_manifest",
-                return_value=[task_entry],
-            ):
-                task_entries = workflow._load_task_entries(
-                    session,
-                    need_export_path=False,
-                    allow_remote=False,
-                    split_window_name="回播窗口",
-                )
+            search_flow.return_value = [task_entry]
+            task_entries = workflow._load_task_entries(
+                session,
+                need_export_path=False,
+                allow_remote=False,
+                split_window_name="回播窗口",
+            )
 
         self.assertEqual(task_entries, [task_entry])
         search_flow.assert_called_once_with(

@@ -5,9 +5,12 @@ import subprocess
 import sys
 import pty
 from pathlib import Path
+from typing import List
 
 from core.engine import record_finder
+from core.models import TaskEntry
 from core.errors import FindRecordError, ScriptExecutionError
+from utils import parser
 
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -147,14 +150,14 @@ class ScriptRunner:
             )
         return Path(str(self.ctx.host.data_root).rstrip("/"))
 
-    def run_find_record(self) -> None:
+    def run_find_record(self) -> List[TaskEntry]:
         """执行 record 查询脚本。"""
         if self.ctx.logic.mode == 3:
             self.ctx.find_record_output = self._run_script_with_terminal_capture(
                 "find_record.sh",
                 False,
             )
-            return
+            return parser.parse_manifest(self.ctx.manifest_path)
         try:
             task_entries = record_finder.find_local_tasks(
                 self._resolve_find_record_root(),
@@ -169,6 +172,7 @@ class ScriptRunner:
             task_entries,
             self.ctx.manifest_path,
         )
+        return task_entries
 
     def restore_runtime_environment(self) -> None:
         """恢复运行环境版本配置。"""

@@ -10,7 +10,6 @@ from core.engine.downloader import FailedBatch, SkippedBatch
 from core.errors import ScriptExecutionError
 from core.models import TaskEntry
 from core.session import AppSession
-from utils import parser
 
 
 def _task_entry_search_values(task_entry: TaskEntry) -> List[str]:
@@ -56,16 +55,16 @@ def _load_task_entries(
     preset_mode: Optional[int] = None,
     split_window_name: str = "切片窗口",
 ) -> List[TaskEntry]:
-    """执行查询并加载 manifest 中的任务列表。"""
-    if not search_flow(
+    """执行查询并加载任务列表。"""
+    task_list = search_flow(
         session,
         need_export_path=need_export_path,
         allow_remote=allow_remote,
         preset_mode=preset_mode,
         split_window_name=split_window_name,
-    ):
+    )
+    if task_list is None:
         return []
-    task_list = parser.parse_manifest(session.ctx.manifest_path)
     if not task_list:
         ui.show_result_section(
             "查询结果",
@@ -259,7 +258,7 @@ def search_flow(
     allow_remote: bool = True,
     preset_mode: Optional[int] = None,
     split_window_name: str = "切片窗口",
-) -> bool:
+) -> Optional[List[TaskEntry]]:
     """采集查询条件并执行 Record 检索脚本。"""
     config_prompter.get_basic_params(session.ctx)
     session.init_logging()
@@ -272,7 +271,7 @@ def search_flow(
         config_prompter.get_export_path_params(session.ctx)
     config_prompter.get_split_params(session.ctx, split_window_name)
     try:
-        session.runner.run_find_record()
+        return session.runner.run_find_record()
     except ScriptExecutionError as e:
         ui.show_result_section(
             "查询结果",
@@ -281,8 +280,7 @@ def search_flow(
             details=e.details,
             next_step="检查数据源路径、车辆、日期和执行环境后重试",
         )
-        return False
-    return True
+        return None
 
 full_progress = slice_progress
 restore_environment_flow = replay_workflow.restore_environment_flow
