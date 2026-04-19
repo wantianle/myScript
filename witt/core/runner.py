@@ -5,7 +5,7 @@ import subprocess
 import sys
 import pty
 from pathlib import Path
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from core.engine import record_finder
 from core.engine import record_query
@@ -20,6 +20,9 @@ from core.errors import (
 )
 from core.models import TaskEntry
 
+if TYPE_CHECKING:
+    from core.context import TaskContext
+
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -27,7 +30,7 @@ _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 class RuntimeCoordinator:
     """负责协调查询、环境恢复、回放栈启动和开发环境入口。"""
 
-    def __init__(self, ctx):
+    def __init__(self, ctx: "TaskContext") -> None:
         self.ctx = ctx
         self.record_finder_manager = record_finder.RecordFinderManager()
         self.record_query_service = record_query.RecordQueryService(
@@ -83,7 +86,7 @@ class RuntimeCoordinator:
         )
 
     def _run_script(self, script_name: str, quiet: bool = False, *args: str) -> None:
-        """注入环境变量并执行指定脚本。"""
+        """注入环境变量并执行辅助脚本。"""
         script_path = self._resolve_script_path(script_name)
         env_vars = self.ctx.get_env_vars()
         bash_cmd = ["bash"]
@@ -111,7 +114,7 @@ class RuntimeCoordinator:
         echo_output: bool = True,
         *args: str
     ) -> str:
-        """按需回显终端输出，并同时捕获脚本输出。"""
+        """按需回显终端输出，并同时捕获辅助脚本输出。"""
         script_path = self._resolve_script_path(script_name)
         env_vars = self.ctx.get_env_vars()
         cmd = ["bash", str(script_path), *args]
@@ -156,7 +159,7 @@ class RuntimeCoordinator:
                 process.wait()
 
     def run_find_record(self) -> List[TaskEntry]:
-        """执行 record 查询脚本。"""
+        """执行 record 查询并返回任务列表。"""
         try:
             return self.record_query_service.run_query()
         except CommandExecutionError as e:
@@ -209,7 +212,3 @@ class RuntimeCoordinator:
     def into_docker(self) -> None:
         """进入运行中的 docker 容器。"""
         self._run_script("dev_into.sh")
-
-
-# Backward-compatible alias for older imports/tests.
-ScriptRunner = RuntimeCoordinator

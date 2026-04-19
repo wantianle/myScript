@@ -18,7 +18,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             AppSession,
             SimpleNamespace(
                 ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
-                runner=SimpleNamespace(
+                runtime=SimpleNamespace(
                     restore_runtime_environment=restore_runtime_environment,
                     start_standard_replay_stack=Mock(),
                     start_traffic_light_stack=Mock(),
@@ -54,7 +54,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             AppSession,
             SimpleNamespace(
                 ctx=SimpleNamespace(logic=SimpleNamespace(version="/tmp/version.json")),
-                runner=SimpleNamespace(
+                runtime=SimpleNamespace(
                     restore_runtime_environment=Mock(
                         side_effect=ScriptExecutionError(
                             "runtime_environment",

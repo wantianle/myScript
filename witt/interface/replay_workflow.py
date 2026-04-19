@@ -62,7 +62,7 @@ def restore_environment_flow(
             )
             return False
     try:
-        session.runner.restore_runtime_environment()
+        session.runtime.restore_runtime_environment()
     except ScriptExecutionError as e:
         _show_script_failure(
             "环境恢复",
@@ -75,7 +75,7 @@ def restore_environment_flow(
             "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
         ):
             try:
-                session.runner.start_standard_replay_stack()
+                session.runtime.start_standard_replay_stack()
             except ScriptExecutionError as e:
                 _show_script_failure(
                     "环境恢复",
@@ -87,7 +87,7 @@ def restore_environment_flow(
             "是否需要打开 Debug_Driver-Camera & Perception-TrafficLight？"
         ):
             try:
-                session.runner.start_traffic_light_stack()
+                session.runtime.start_traffic_light_stack()
             except ScriptExecutionError as e:
                 _show_script_failure(
                     "环境恢复",
@@ -100,7 +100,7 @@ def restore_environment_flow(
             "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
         ):
             try:
-                session.runner.start_standard_replay_stack()
+                session.runtime.start_standard_replay_stack()
             except ScriptExecutionError as e:
                 _show_script_failure(
                     "环境恢复",

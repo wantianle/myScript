@@ -2,11 +2,14 @@ import os
 import shlex
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from core.engine.record_finder import RecordFinderManager
 from core.errors import CommandExecutionError
 from core.models import TaskEntry
+
+if TYPE_CHECKING:
+    from core.context import TaskContext
 
 
 class RecordQueryService:
@@ -14,7 +17,7 @@ class RecordQueryService:
 
     def __init__(
         self,
-        ctx,
+        ctx: "TaskContext",
         finder_manager: Optional[RecordFinderManager] = None,
     ) -> None:
         self.ctx = ctx

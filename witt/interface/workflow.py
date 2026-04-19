@@ -271,7 +271,7 @@ def search_flow(
         config_prompter.get_export_path_params(session.ctx)
     config_prompter.get_split_params(session.ctx, split_window_name)
     try:
-        return session.runner.run_find_record()
+        return session.runtime.run_find_record()
     except ScriptExecutionError as e:
         ui.show_result_section(
             "查询结果",

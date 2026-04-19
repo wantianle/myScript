@@ -120,7 +120,7 @@ class WorkflowTests(unittest.TestCase):
             SimpleNamespace(
                 ctx=SimpleNamespace(),
                 init_logging=init_logging,
-                runner=SimpleNamespace(run_find_record=run_find_record),
+                runtime=SimpleNamespace(run_find_record=run_find_record),
             ),
         )
 
@@ -145,7 +145,7 @@ class WorkflowTests(unittest.TestCase):
             SimpleNamespace(
                 ctx=SimpleNamespace(),
                 init_logging=init_logging,
-                runner=SimpleNamespace(
+                runtime=SimpleNamespace(
                     run_find_record=Mock(
                         side_effect=ScriptExecutionError(
                             "record_query",

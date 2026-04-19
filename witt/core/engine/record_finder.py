@@ -7,6 +7,8 @@ from core.errors import FindRecordError, TagFileMissingError
 from core.models import TaskEntry
 from utils import parser
 
+PathTextReader = Callable[[str], str]
+RecordIndex = Dict[int, List[Tuple[int, Path]]]
 _TAG_LINE_RE = re.compile(r'msg:\ "([^"]+)"')
 _TAG_TIME_RE = re.compile(
     r"([0-9]{4})/([0-9]{1,2})/([0-9]{1,2}) ([0-9]{1,2}):([0-9]{2}):([0-9]{2})"
@@ -49,7 +51,7 @@ def parse_tag_message(message: str) -> Tuple[str, datetime]:
     )
 
 
-def build_record_index(record_paths: Sequence[Path]) -> Dict[int, List[Tuple[int, Path]]]:
+def build_record_index(record_paths: Sequence[Path]) -> RecordIndex:
     """按分钟桶建立 record 索引，保留秒级偏移用于后续窗口匹配。"""
     records_by_minute = {}
     for record_path in record_paths:
@@ -68,7 +70,7 @@ def build_record_index(record_paths: Sequence[Path]) -> Dict[int, List[Tuple[int
 
 
 def select_matching_record_paths(
-    records_by_minute: Dict[int, List[Tuple[int, Path]]],
+    records_by_minute: RecordIndex,
     tag_time: datetime,
     before: int,
     after: int,
@@ -132,7 +134,7 @@ def find_local_tasks(
 
 def find_tasks_from_path_texts(
     path_texts: Sequence[str],
-    read_text: Callable[[str], str],
+    read_text: PathTextReader,
     target_date: str,
     before: int,
     after: int,
@@ -219,11 +221,6 @@ def _is_tag_candidate(path_obj: Path, target_date: str) -> bool:
     return "tag" in file_name and target_date in file_name
 
 
-def _load_tag_messages(tag_path: Path) -> List[str]:
-    tag_content = _read_local_text(str(tag_path))
-    return _load_tag_messages_from_text(tag_content)
-
-
 def _load_tag_messages_from_text(tag_content: str) -> List[str]:
     tag_messages = []
     for line in tag_content.splitlines():
@@ -251,21 +248,24 @@ class RecordFinderManager:
     """负责按既有规则解析 tag 并匹配 record 查询结果。"""
 
     def parse_tag_message(self, message: str) -> Tuple[str, datetime]:
+        """解析单条 tag 消息中的名称和时间。"""
         return parse_tag_message(message)
 
     def build_record_index(
         self,
         record_paths: Sequence[Path],
-    ) -> Dict[int, List[Tuple[int, Path]]]:
+    ) -> RecordIndex:
+        """按分钟桶构建 record 索引。"""
         return build_record_index(record_paths)
 
     def select_matching_record_paths(
         self,
-        records_by_minute: Dict[int, List[Tuple[int, Path]]],
+        records_by_minute: RecordIndex,
         tag_time: datetime,
         before: int,
         after: int,
     ) -> List[Path]:
+        """根据时间窗从索引中筛出匹配的 record 路径。"""
         return select_matching_record_paths(records_by_minute, tag_time, before, after)
 
     def find_local_tasks(
@@ -276,6 +276,7 @@ class RecordFinderManager:
         after: int,
         soc_filter: str = "",
     ) -> List[TaskEntry]:
+        """扫描本地或 NAS 根目录并返回查询任务。"""
         return find_local_tasks(
             data_root,
             target_date=target_date,
@@ -287,13 +288,14 @@ class RecordFinderManager:
     def find_tasks_from_path_texts(
         self,
         path_texts: Sequence[str],
-        read_text: Callable[[str], str],
+        read_text: PathTextReader,
         target_date: str,
         before: int,
         after: int,
         soc_filter: str = "",
         source_root: str = "",
     ) -> List[TaskEntry]:
+        """基于路径列表和文本读取器构造查询任务。"""
         return find_tasks_from_path_texts(
             path_texts,
             read_text,
@@ -309,4 +311,5 @@ class RecordFinderManager:
         task_entries: Sequence[TaskEntry],
         manifest_path: Path,
     ) -> str:
+        """按既有格式写出 manifest 文件。"""
         return dump_manifest(task_entries, manifest_path)

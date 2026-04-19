@@ -2,9 +2,12 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from core.errors import ReplayStackError
+
+if TYPE_CHECKING:
+    from core.context import TaskContext
 
 _BASE_DIR = Path(__file__).resolve().parents[2]
 _CONFIG_DIR = _BASE_DIR / "config"
@@ -23,7 +26,7 @@ _CONTAINER_CAMERA_CONFIG_PATH = (
 class ReplayStackManager:
     """负责启动标准回播和红绿灯回灌所需的运行模块。"""
 
-    def start_standard_replay_stack(self, ctx) -> None:
+    def start_standard_replay_stack(self, ctx: "TaskContext") -> None:
         """启动标准回播栈。"""
         container = ctx.docker.container
         self._allow_failure(["xhost", "+local:docker"])
@@ -73,7 +76,7 @@ class ReplayStackManager:
         self._run_detached_command(multiviz_cmd, "启动 mdrive_multiviz 失败")
         self._open_browser("http://localhost:8888")
 
-    def start_traffic_light_stack(self, ctx) -> None:
+    def start_traffic_light_stack(self, ctx: "TaskContext") -> None:
         """启动红绿灯回灌栈。"""
         container = ctx.docker.container
         traffic_light_config_path = (
