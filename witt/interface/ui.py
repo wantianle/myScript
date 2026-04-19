@@ -541,6 +541,8 @@ def show_playback_info(
     rate: float = 1.0,
     channels: Optional[List[str]] = None,
     command: str = "",
+    version_source: str = "",
+    version_details: Optional[Sequence[str]] = None,
 ) -> None:
     """打印当前回放的概要信息。"""
     lines = [
@@ -555,6 +557,23 @@ def show_playback_info(
                 (", ".join(channels), "accent"),
             )
         )
+    if version_source:
+        lines.append(
+            Text.assemble(
+                ("版本文件: ", "label"),
+                (version_source, "accent"),
+            )
+        )
+    if version_details:
+        playback_version_details = list(version_details)
+        lines.append(
+            Text.assemble(
+                ("版本信息: ", "label"),
+                (playback_version_details[0], "accent"),
+            )
+        )
+        for detail_text in playback_version_details[1:]:
+            lines.append(Text("  {0}".format(detail_text), style="accent"))
     if command:
         lines.append(
             Text.assemble(
@@ -573,6 +592,7 @@ def show_replay_preview(
     file_count: int,
     soc_count: int,
     version_source: str,
+    version_details: Optional[Sequence[str]] = None,
 ) -> None:
     """打印回播前预览摘要。"""
     lines = [
@@ -584,6 +604,16 @@ def show_replay_preview(
         Text.assemble(("SOC 数: ", "label"), (str(soc_count), "accent")),
         Text.assemble(("版本来源: ", "label"), (version_source, "accent")),
     ]
+    if version_details:
+        preview_version_details = list(version_details)
+        lines.append(
+            Text.assemble(
+                ("版本信息: ", "label"),
+                (preview_version_details[0], "accent"),
+            )
+        )
+        for detail_text in preview_version_details[1:]:
+            lines.append(Text("  {0}".format(detail_text), style="accent"))
     _CONSOLE.print(
         _build_info_panel(
             "回播前预览",

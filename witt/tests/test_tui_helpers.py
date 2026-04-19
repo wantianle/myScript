@@ -175,6 +175,36 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("默认 1.0x，可设置 0.1 到 10x", rendered)
         self.assertIn("常用值: 0.5 / 1.0 / 1.5 / 2.0", rendered)
 
+    def test_show_playback_info_renders_version_details(self) -> None:
+        buffer = StringIO()
+        console = Console(
+            file=buffer,
+            width=120,
+            force_terminal=False,
+            highlight=False,
+            theme=ui._THEME,
+        )
+        previous_console = ui._CONSOLE
+        try:
+            ui._CONSOLE = console
+            ui.show_playback_info(
+                tag="demo_tag",
+                duration=20,
+                rate=1.0,
+                command="cyber_recorder play -r 1",
+                version_source="/tmp/version.json",
+                version_details=["mdrive: 1.2.3", "mdrive_conf: E171.2.3"],
+            )
+        finally:
+            ui._CONSOLE = previous_console
+
+        rendered = buffer.getvalue()
+        self.assertIn("回播信息", rendered)
+        self.assertIn("版本文件", rendered)
+        self.assertIn("/tmp/version.json", rendered)
+        self.assertIn("版本信息", rendered)
+        self.assertIn("mdrive: 1.2.3", rendered)
+
     def test_show_flow_section_renders_summary_and_hint(self) -> None:
         buffer = StringIO()
         console = Console(
@@ -276,6 +306,7 @@ class TuiHelperTests(unittest.TestCase):
                 file_count=2,
                 soc_count=1,
                 version_source="自动发现: /tmp/version.json",
+                version_details=["mdrive: 1.2.3", "mdrive_conf: E171.2.3"],
             )
         finally:
             ui._CONSOLE = previous_console
@@ -286,6 +317,8 @@ class TuiHelperTests(unittest.TestCase):
         self.assertIn("回播开始", rendered)
         self.assertIn("回播结束", rendered)
         self.assertIn("自动发现: /tmp/version.json", rendered)
+        self.assertIn("版本信息", rendered)
+        self.assertIn("mdrive: 1.2.3", rendered)
 
     def test_show_notice_section_renders_summary_and_details(self) -> None:
         buffer = StringIO()
