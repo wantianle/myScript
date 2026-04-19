@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock, patch
 
+from core.errors import ScriptExecutionError
 from core.models import ReplayHistoryEntry, ReplayRecord, TaskEntry
 from core.session import AppSession
 from interface import replay_workflow
@@ -47,6 +48,31 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
 
         self.assertEqual(issue_paths, [])
         show_notice_section.assert_called_once()
+
+    def test_restore_environment_flow_shows_result_when_restore_script_fails(self) -> None:
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(logic=SimpleNamespace(version="/tmp/version.json")),
+                runner=SimpleNamespace(
+                    restore_runtime_environment=Mock(
+                        side_effect=ScriptExecutionError(
+                            "restore_runtime_env.sh",
+                            "文件不存在: /tmp/version.json",
+                            details=["restore_runtime_env.sh退出状态码: 1"],
+                        )
+                    ),
+                    start_standard_replay_stack=Mock(),
+                    start_traffic_light_stack=Mock(),
+                ),
+            ),
+        )
+
+        with patch("interface.replay_workflow.ui.show_result_section") as show_result_section:
+            restored = replay_workflow.restore_environment_flow(session, auto=True)
+
+        self.assertFalse(restored)
+        show_result_section.assert_called_once()
 
     def test_validate_history_records_reports_missing_path(self) -> None:
         replay_records = [

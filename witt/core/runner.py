@@ -1,9 +1,15 @@
 import errno
 import os
+import re
 import subprocess
 import sys
 import pty
 from pathlib import Path
+
+from core.errors import ScriptExecutionError
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class ScriptRunner:
@@ -21,6 +27,42 @@ class ScriptRunner:
             script_path = Path(self.ctx.docker.docker_scripts) / script_name
         return script_path
 
+    def _build_script_execution_error(
+        self,
+        script_name: str,
+        output_text: str,
+    ) -> ScriptExecutionError:
+        """将脚本输出解析为结构化异常，优先提取脚本中的 ERROR 行。"""
+        normalized_lines = [
+            _ANSI_ESCAPE_RE.sub("", line).strip()
+            for line in output_text.splitlines()
+            if _ANSI_ESCAPE_RE.sub("", line).strip()
+        ]
+        error_lines = []
+        for line in normalized_lines:
+            if "[ERROR]" not in line:
+                continue
+            error_message = line.split("[ERROR]", 1)[1].strip()
+            if error_message:
+                error_lines.append(error_message)
+        if not error_lines:
+            return ScriptExecutionError(
+                script_name,
+                "{0} 脚本执行失败".format(script_name),
+            )
+        user_facing_errors = [
+            line
+            for line in error_lines
+            if "退出状态码:" not in line and "命令在第 " not in line
+        ]
+        summary = user_facing_errors[0] if user_facing_errors else error_lines[0]
+        details = [line for line in error_lines if line != summary]
+        return ScriptExecutionError(
+            script_name,
+            summary,
+            details=details,
+        )
+
     def _run_script(self, script_name: str, quiet: bool = False, *args: str) -> None:
         """注入环境变量并执行指定脚本。"""
         script_path = self._resolve_script_path(script_name)
@@ -29,10 +71,20 @@ class ScriptRunner:
         # if self.ctx.config["env"]["debug"]:
         #     bash_cmd.append("-x")
         cmd = bash_cmd + [str(script_path), *args]
-        try:
-            subprocess.run(cmd, env=env_vars, text=True, check=True, capture_output=quiet)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"{script_name} 脚本执行失败") from e
+        completed_process = subprocess.run(
+            cmd,
+            env=env_vars,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        script_output = completed_process.stdout or ""
+        if not quiet and script_output:
+            sys.stdout.write(script_output)
+            sys.stdout.flush()
+        if completed_process.returncode != 0:
+            raise self._build_script_execution_error(script_name, script_output)
 
     def _run_script_with_terminal_capture(
         self,
@@ -72,7 +124,10 @@ class ScriptRunner:
                     sys.stdout.flush()
             return_code = process.wait()
             if return_code != 0:
-                raise RuntimeError(f"{script_name} 脚本执行失败")
+                raise self._build_script_execution_error(
+                    script_name,
+                    "".join(output_chunks),
+                )
             return "".join(output_chunks)
         finally:
             if slave_fd >= 0:

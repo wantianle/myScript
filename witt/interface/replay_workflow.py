@@ -11,6 +11,7 @@ from . import prompter
 from . import replay_prompter
 from . import ui
 from core.engine.player import PlaybackPlan
+from core.errors import RecordInfoError, PathMappingError, ScriptExecutionError
 from core.models import ReplayHistoryEntry, ReplayRecord, TaskEntry
 from core.issue_draft import (
     IssueDraft,
@@ -19,7 +20,6 @@ from core.issue_draft import (
     load_version_text,
     save_issue_draft,
 )
-from core.errors import RecordInfoError, PathMappingError
 from core.session import AppSession
 from utils import parser
 
@@ -29,6 +29,21 @@ REPLAY_SOURCE_AUTO = "auto"
 REPLAY_SOURCE_FULL_SOURCE = "full_source"
 REPLAY_SOURCE_MANUAL = "manual"
 REPLAY_SOURCE_HISTORY = "history"
+
+
+def _show_script_failure(
+    title: str,
+    script_error: ScriptExecutionError,
+    next_step: str,
+) -> None:
+    """统一展示脚本执行失败的结构化结果。"""
+    ui.show_result_section(
+        title,
+        script_error.summary,
+        "ERROR",
+        details=script_error.details,
+        next_step=next_step,
+    )
 
 
 def restore_environment_flow(
@@ -46,21 +61,53 @@ def restore_environment_flow(
                 "WARN",
             )
             return False
-    session.runner.restore_runtime_environment()
+    try:
+        session.runner.restore_runtime_environment()
+    except ScriptExecutionError as e:
+        _show_script_failure(
+            "环境恢复",
+            e,
+            "检查 version 文件、MDrive 环境和脚本依赖后重试",
+        )
+        return False
     if replay_mode == REPLAY_MODE_TRAFFIC_LIGHT:
         if prompter.get_confirm_input(
             "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
         ):
-            session.runner.start_standard_replay_stack()
+            try:
+                session.runner.start_standard_replay_stack()
+            except ScriptExecutionError as e:
+                _show_script_failure(
+                    "环境恢复",
+                    e,
+                    "检查 docker 容器、显示环境和 supervisor 状态后重试",
+                )
+                return False
         if prompter.get_confirm_input(
             "是否需要打开 Debug_Driver-Camera & Perception-TrafficLight？"
         ):
-            session.runner.start_traffic_light_stack()
+            try:
+                session.runner.start_traffic_light_stack()
+            except ScriptExecutionError as e:
+                _show_script_failure(
+                    "环境恢复",
+                    e,
+                    "检查 docker 容器、显示环境和 supervisor 状态后重试",
+                )
+                return False
     elif replay_mode == REPLAY_MODE_STANDARD:
         if prompter.get_confirm_input(
             "是否需要打开 Supervisor &  Debug_Driver-LiDAR & Dreamview & Multiviz？"
         ):
-            session.runner.start_standard_replay_stack()
+            try:
+                session.runner.start_standard_replay_stack()
+            except ScriptExecutionError as e:
+                _show_script_failure(
+                    "环境恢复",
+                    e,
+                    "检查 docker 容器、显示环境和 supervisor 状态后重试",
+                )
+                return False
     return True
 
 

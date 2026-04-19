@@ -1,3 +1,6 @@
+from typing import List, Optional
+
+
 class WittCoreError(Exception):
     """Core-layer base exception for structured error propagation."""
 
@@ -8,6 +11,21 @@ class PathMappingError(WittCoreError):
 
 class CommandExecutionError(WittCoreError):
     """Raised when a command fails in docker/ssh execution."""
+
+
+class ScriptExecutionError(WittCoreError):
+    """Raised when a managed shell script fails with structured output."""
+
+    def __init__(
+        self,
+        script_name: str,
+        summary: str,
+        details: Optional[List[str]] = None,
+    ) -> None:
+        super().__init__(summary)
+        self.script_name = script_name
+        self.summary = summary
+        self.details = list(details or [])
 
 
 class RecordInfoError(WittCoreError):

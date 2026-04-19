@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock, patch
 
+from core.errors import ScriptExecutionError
 from core.models import TaskEntry
 from core.session import AppSession
 from interface import workflow
@@ -130,6 +131,35 @@ class WorkflowTests(unittest.TestCase):
         get_split_params.assert_called_once_with(session.ctx, "切片窗口")
         init_logging.assert_called_once_with()
         run_find_record.assert_called_once_with()
+
+    def test_search_flow_shows_result_when_find_record_script_fails(self) -> None:
+        init_logging = Mock()
+        session = cast(
+            AppSession,
+            SimpleNamespace(
+                ctx=SimpleNamespace(),
+                init_logging=init_logging,
+                runner=SimpleNamespace(
+                    run_find_record=Mock(
+                        side_effect=ScriptExecutionError(
+                            "find_record.sh",
+                            "无法连接车机或找不到对应record 文件！",
+                            details=["find_record.sh退出状态码: 1"],
+                        )
+                    )
+                ),
+            ),
+        )
+
+        with patch("interface.workflow.config_prompter.get_basic_params"):
+            with patch("interface.workflow.config_prompter.get_source_path_params"):
+                with patch("interface.workflow.config_prompter.get_export_path_params"):
+                    with patch("interface.workflow.config_prompter.get_split_params"):
+                        with patch("interface.workflow.ui.show_result_section") as show_result_section:
+                            loaded = workflow.search_flow(session)
+
+        self.assertFalse(loaded)
+        show_result_section.assert_called_once()
 
     def test_load_task_entries_passes_replay_window_name(self) -> None:
         task_entry = TaskEntry(
