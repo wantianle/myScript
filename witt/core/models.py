@@ -436,23 +436,9 @@ class LibraryEntry:
             last_update=dict(record_meta.last_update),
         )
         for soc_name, file_names in record_meta.files.items():
-            soc_path = tag_dir / soc_name
-            if not soc_path.exists():
-                continue
-            replay_records = []
-            for file_name in file_names:
-                file_path = soc_path / file_name
-                if file_path.exists():
-                    replay_records.append(
-                        ReplayRecord.from_local_file(
-                            file_path=file_path,
-                            begin=record_meta.tag_info.abs_start,
-                            duration=record_meta.tag_info.offset_bf
-                            + record_meta.tag_info.offset_af,
-                        )
-                    )
+            del file_names
+            replay_records = record_meta.build_soc_replay_records(tag_dir, soc_name)
             if replay_records:
-                replay_records.sort(key=lambda replay_record: replay_record.begin)
                 entry.socs[soc_name] = replay_records
         return entry
 
@@ -572,6 +558,35 @@ class RecordMeta:
         self.last_update[soc_name] = updated_at or datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
         )
+
+    @property
+    def replay_duration(self) -> int:
+        """返回当前 tag 窗口对应的回放总时长。"""
+        return self.tag_info.offset_bf + self.tag_info.offset_af
+
+    def build_replay_record(self, file_path: Path) -> ReplayRecord:
+        """基于当前元数据窗口为单个文件构造回放记录。"""
+        return ReplayRecord.from_local_file(
+            file_path=file_path,
+            begin=self.tag_info.abs_start,
+            duration=self.replay_duration,
+        )
+
+    def build_soc_replay_records(
+        self,
+        tag_dir: Path,
+        soc_name: str,
+    ) -> List[ReplayRecord]:
+        """根据当前 meta 和 tag 目录恢复某个 SOC 的回放文件列表。"""
+        soc_path = tag_dir / soc_name
+        if not soc_path.exists():
+            return []
+        replay_records = []
+        for file_name in self.files.get(soc_name, []):
+            file_path = soc_path / file_name
+            if file_path.exists():
+                replay_records.append(self.build_replay_record(file_path))
+        return sorted(replay_records, key=lambda replay_record: replay_record.begin)
 
     def to_dict(self) -> RawRecordMeta:
         return {

@@ -143,6 +143,38 @@ class MetadataModelTests(unittest.TestCase):
         self.assertEqual(library_entry.socs["soc1"][0].path, str(record_file.absolute()))
         self.assertEqual(library_entry.last_update["soc1"], "2026-04-15 12:01:00")
 
+    def test_record_meta_build_soc_replay_records_skips_missing_files(self) -> None:
+        task_entry = TaskEntry.from_record_paths(
+            time="2026-04-15 12:00:00",
+            name="demo_tag",
+            paths=[],
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tag_dir = Path(tmpdir) / "tag_dir"
+            soc_dir = tag_dir / "soc1"
+            soc_dir.mkdir(parents=True, exist_ok=True)
+            record_file = soc_dir / "a.record"
+            record_file.write_text("record", encoding="utf-8")
+
+            record_meta = RecordMeta.from_task_entry(
+                task_entry=task_entry,
+                vehicle="XZB600013",
+                date="20260415",
+                before=15,
+                after=5,
+            )
+            record_meta.update_soc_files(
+                soc_name="soc1",
+                file_names=["missing.record", "a.record"],
+                updated_at="2026-04-15 12:01:00",
+            )
+
+            replay_records = record_meta.build_soc_replay_records(tag_dir, "soc1")
+
+        self.assertEqual(len(replay_records), 1)
+        self.assertEqual(replay_records[0].path, str(record_file.absolute()))
+        self.assertEqual(replay_records[0].duration, 20)
+
     def test_library_entry_cache_roundtrip(self) -> None:
         library_entry = LibraryEntry(
             tag="demo_tag",
