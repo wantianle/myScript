@@ -44,6 +44,10 @@ class ReplayStackManager:
                 "bash",
                 "-c",
                 (
+                    "set -a && "
+                    "source <(sed -n -e '/^MDRIVE_VEHICLE_MODEL=/p' "
+                    "-e '/^MDRIVE_VEHICLE_NAME=/p' /mdrive/vmc.sh) && "
+                    "set +a && "
                     "sudo -E bash /mdrive/mdrive/scripts/cmd.sh && "
                     "sudo supervisorctl start Dreamview && "
                     "sudo supervisorctl start Debug_Driver-LiDAR"

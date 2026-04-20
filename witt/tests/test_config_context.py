@@ -1,6 +1,8 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from core.context import TaskContext
 from core.models import AppConfig
@@ -104,14 +106,13 @@ class TaskContextTests(unittest.TestCase):
                 "/host/dest/{0}/{1}".format(task_context.target_date[:8], task_context.vehicle),
             )
 
-            env_vars = task_context.get_env_vars()
+            with patch.dict(os.environ, {"WITT_TEST_ENV": "demo"}, clear=False):
+                env_vars = task_context.get_env_vars()
+                self.assertEqual(env_vars["WITT_TEST_ENV"], "demo")
+                env_vars["WITT_TEST_ENV"] = "changed"
+                self.assertEqual(os.environ["WITT_TEST_ENV"], "demo")
 
-        self.assertEqual(env_vars["VEHICLE"], "XZB600013")
-        self.assertEqual(env_vars["DEST_ROOT"], "/host/dest")
-        self.assertEqual(env_vars["MODE"], "1")
-        self.assertEqual(env_vars["AFTER"], "5")
-        self.assertEqual(env_vars["CONTAINER"], "demo_container")
-        self.assertEqual(env_vars["REMOTE_IP"], "192.168.10.2")
+        self.assertEqual(env_vars["WITT_TEST_ENV"], "changed")
 
     def test_setup_logger_writes_into_current_work_dir_and_reinitializes_for_new_vehicle_date(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

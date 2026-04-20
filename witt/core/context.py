@@ -137,24 +137,5 @@ class TaskContext:
         return f"{datetime.now().day}_{latest_mtime}"
 
     def get_env_vars(self) -> Dict[str, str]:
-        """构建注入 Shell 脚本的环境变量字典"""
-        vars = {
-            "VEHICLE": self.vehicle,
-            "TARGET_DATE": self.target_date,
-            "NAS_ROOT": self.host.nas_root,
-            "DEST_ROOT": self.host.dest_root,
-            "MDRIVE_ROOT": self.host.mdrive_root,
-            "DATA_ROOT": self.host.data_root,
-            "SOC": self.logic.soc,
-            "BEFORE": self.logic.before,
-            "AFTER": self.logic.after,
-            "MODE": self.logic.mode,
-            "VERSION": self.logic.version,
-            "CONTAINER": self.docker.container,
-            "REMOTE_USER": self.remote.user,
-            "REMOTE_IP": self.remote.ip,
-            "REMOTE_DATA_ROOT": self.remote.data_root,
-        }
-        full_env = os.environ.copy()
-        full_env.update({k: str(v) for k, v in vars.items()})
-        return full_env
+        """返回当前进程环境变量副本。"""
+        return os.environ.copy()

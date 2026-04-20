@@ -1,6 +1,6 @@
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from core.context import TaskContext
 from core.runner import RuntimeCoordinator
@@ -13,7 +13,6 @@ from core.repository import (
     MetadataRepository,
     ReplayHistoryRepository,
 )
-from core.adapter.base import BaseAdapter
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_TEMPLATE_PATH = BASE_DIR / "config" / "settings.yaml"
@@ -66,7 +65,7 @@ class AppSession:
         )
 
     @property
-    def executor(self) -> BaseAdapter:
+    def executor(self) -> Union[DockerAdapter, SSHAdapter]:
         return (
             DockerAdapter(self.ctx)
             if self.ctx.logic.mode != 3
