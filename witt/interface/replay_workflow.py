@@ -23,6 +23,7 @@ from core.models import (
 from core.issue_draft import (
     IssueDraft,
     ReplayIssueMarker,
+    build_issue_title_from_vmc,
     format_issue_data_path,
     load_version_text,
     save_issue_draft,
@@ -332,9 +333,9 @@ def _build_version_display_details(
 
 
 def _format_playback_range(start_sec: int, end_sec: int) -> str:
-    """格式化回播起始偏移，便于写入 issue 草稿的 range(-s)。"""
+    """格式化回播起始偏移，便于写入 issue 草稿的 start(-s)。"""
     del end_sec
-    return "{0}s".format(max(0, start_sec))
+    return str(max(0, start_sec))
 
 
 def _post_replay_issue_draft(
@@ -376,6 +377,10 @@ def _post_replay_issue_draft(
         playback_rate=playback_plan.rate,
         playback_range_text=playback_range_text,
         playback_channels=list(getattr(session.ctx, "playback_blacklist", [])),
+        suggested_title=build_issue_title_from_vmc(
+            Path(session.ctx.host.mdrive_root) / "vmc.sh",
+            display_tag or playback_plan.display_tag,
+        ),
         issue_description=issue_description,
     )
     try:

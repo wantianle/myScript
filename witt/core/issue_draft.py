@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import List, Optional, Union
 
 SUGGESTED_TITLE_TEMPLATE = "[车型-模块-车号]问题简述"
@@ -59,7 +60,7 @@ def render_issue_markdown(issue_draft: IssueDraft) -> str:
 ```
 - **回播参数：**
 ```text
-range(-s): {issue_draft.playback_range_text}
+start(-s): {issue_draft.playback_range_text}
 rate(-r): x{issue_draft.playback_rate:g}
 channels(-k): {channels_text}
 ```
@@ -92,6 +93,24 @@ def load_version_text(version_source: Union[str, Path]) -> str:
         return str(version_source)
 
 
+def build_issue_title_from_vmc(
+    vmc_path: Union[str, Path],
+    tag_text: str,
+) -> str:
+    """从 vmc.sh 读取车型和车号，生成 issue 建议标题。"""
+    if not vmc_path:
+        return SUGGESTED_TITLE_TEMPLATE
+    try:
+        vmc_text = Path(vmc_path).read_text(encoding="utf-8")
+    except (OSError, TypeError, ValueError):
+        return SUGGESTED_TITLE_TEMPLATE
+    vehicle_model = _extract_vmc_value(vmc_text, "MDRIVE_VEHICLE_MODEL")
+    vehicle_name = _extract_vmc_value(vmc_text, "MDRIVE_VEHICLE_NAME")
+    if not vehicle_model or not vehicle_name or not tag_text:
+        return SUGGESTED_TITLE_TEMPLATE
+    return "[{0}-模块-{1}]{2}".format(vehicle_model, vehicle_name, tag_text)
+
+
 def _normalize_issue_timestamp(issue_timestamp: Union[str, datetime]) -> str:
     """将原始时间文本规范化为 issue 文件名时间戳。"""
     if isinstance(issue_timestamp, datetime):
@@ -110,6 +129,18 @@ def _normalize_issue_timestamp(issue_timestamp: Union[str, datetime]) -> str:
         except ValueError:
             continue
     return timestamp_text
+
+
+def _extract_vmc_value(vmc_text: str, key_name: str) -> str:
+    """从 vmc.sh 文本中提取指定环境变量值。"""
+    matched_value = re.search(
+        r"^{0}=(.*)$".format(key_name),
+        vmc_text,
+        flags=re.MULTILINE,
+    )
+    if matched_value is None:
+        return ""
+    return matched_value.group(1).strip().strip('"')
 
 
 def format_issue_data_path(

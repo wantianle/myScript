@@ -4,6 +4,7 @@ from pathlib import Path
 
 from core.issue_draft import (
     IssueDraft,
+    build_issue_title_from_vmc,
     build_issue_filename,
     format_issue_data_path,
     load_version_text,
@@ -27,20 +28,51 @@ class IssueDraftTests(unittest.TestCase):
             playback_command="cyber_recorder play -r 2",
             version_text='{"version":"demo"}',
             playback_rate=2.0,
-            playback_range_text="5s",
+            playback_range_text="5",
             playback_channels=["/apollo/foo"],
+            suggested_title="[E171-模块-XZB600013]demo_tag",
         )
 
         markdown_text = render_issue_markdown(issue_draft)
 
         self.assertIn("demo_tag", markdown_text)
-        self.assertIn("[车型-模块-车号]问题简述", markdown_text)
+        self.assertIn("[E171-模块-XZB600013]demo_tag", markdown_text)
         self.assertIn("XZB600013 | 20260416", markdown_text)
         self.assertIn("cyber_recorder play -r 2", markdown_text)
-        self.assertIn("range(-s): 5s", markdown_text)
+        self.assertIn("start(-s): 5", markdown_text)
+        self.assertNotIn("range(-s):", markdown_text)
         self.assertIn("rate(-r): x2", markdown_text)
         self.assertIn("channels(-k): /apollo/foo", markdown_text)
         self.assertNotIn("数据路径", markdown_text)
+
+    def test_build_issue_title_from_vmc_uses_vehicle_fields_and_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vmc_path = Path(tmpdir) / "vmc.sh"
+            vmc_path.write_text(
+                "\n".join(
+                    [
+                        'MDRIVE_VEHICLE_MODEL="E171"',
+                        'MDRIVE_VEHICLE_NAME="XZB600013"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            suggested_title = build_issue_title_from_vmc(vmc_path, "demo_tag")
+
+        self.assertEqual(suggested_title, "[E171-模块-XZB600013]demo_tag")
+
+    def test_build_issue_title_from_vmc_falls_back_when_fields_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vmc_path = Path(tmpdir) / "vmc.sh"
+            vmc_path.write_text(
+                'MDRIVE_VEHICLE_MODEL="E171"\n',
+                encoding="utf-8",
+            )
+
+            suggested_title = build_issue_title_from_vmc(vmc_path, "demo_tag")
+
+        self.assertEqual(suggested_title, "[车型-模块-车号]问题简述")
 
     def test_save_issue_draft_writes_into_work_dir_issues(self) -> None:
         issue_draft = IssueDraft(

@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -5,6 +6,7 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock, patch
 
+from core.engine.player import PlaybackPlan
 from core.errors import ScriptExecutionError
 from core.models import ReplayHistoryEntry, ReplayRecord, TaskEntry
 from core.session import AppSession
@@ -517,6 +519,74 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             replay_workflow.REPLAY_MODE_STANDARD,
         )
         self.assertEqual(execute_interactive.call_count, 2)
+
+    def test_post_replay_issue_draft_uses_vmc_title_and_start_seconds(self) -> None:
+        with patch("interface.replay_workflow._try_build_issue_paths", return_value=[]):
+            with patch(
+                "interface.replay_workflow._build_issue_playback_command",
+                return_value="cyber_recorder play -r 1",
+            ):
+                with patch("interface.replay_workflow.ui.show_result_section"):
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        work_dir = Path(tmpdir)
+                        mdrive_root = work_dir / "mdrive_root"
+                        mdrive_root.mkdir()
+                        (mdrive_root / "vmc.sh").write_text(
+                            "\n".join(
+                                [
+                                    'MDRIVE_VEHICLE_MODEL="E171"',
+                                    'MDRIVE_VEHICLE_NAME="XZB600013"',
+                                ]
+                            ),
+                            encoding="utf-8",
+                        )
+                        version_path = work_dir / "version.txt"
+                        version_path.write_text("demo-version", encoding="utf-8")
+                        session = cast(
+                            AppSession,
+                            SimpleNamespace(
+                                ctx=SimpleNamespace(
+                                    work_dir=work_dir,
+                                    target_date="20260419",
+                                    vehicle="XZB600013",
+                                    host=SimpleNamespace(mdrive_root=str(mdrive_root)),
+                                    logic=SimpleNamespace(version=str(version_path)),
+                                    playback_blacklist=[],
+                                ),
+                            ),
+                        )
+                        records = [
+                            ReplayRecord(
+                                path="/tmp/demo.record",
+                                begin="2026-04-19 12:00:00",
+                                duration=10,
+                            )
+                        ]
+                        playback_plan = cast(
+                            PlaybackPlan,
+                            SimpleNamespace(
+                                display_tag="plan_tag",
+                                rate=1.0,
+                                command="cyber_recorder play -r 1",
+                            ),
+                        )
+
+                        with patch(
+                            "interface.replay_workflow.save_issue_draft"
+                        ) as save_issue_draft:
+                            replay_workflow._post_replay_issue_draft(
+                                session,
+                                records,
+                                playback_plan,
+                                "demo_tag",
+                                "20260419_120000",
+                                5,
+                                0,
+                            )
+
+        issue_draft = save_issue_draft.call_args.args[1]
+        self.assertEqual(issue_draft.suggested_title, "[E171-模块-XZB600013]demo_tag")
+        self.assertEqual(issue_draft.playback_range_text, "5")
 
 
 if __name__ == "__main__":
