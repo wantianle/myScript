@@ -22,7 +22,7 @@ class ReplayStackTests(unittest.TestCase):
 
         with patch.object(self.replay_stack_manager, "_allow_failure") as allow_failure:
             with patch.object(self.replay_stack_manager, "_copy_file_to_container") as copy_file:
-                with patch.object(self.replay_stack_manager, "_run_detached_command") as run_detached_command:
+                with patch.object(self.replay_stack_manager, "_run_command") as run_command:
                     with patch(
                         "core.engine.replay_stack.ReplayStackManager._container_has_xauthority",
                         return_value=True,
@@ -32,8 +32,8 @@ class ReplayStackTests(unittest.TestCase):
 
         allow_failure.assert_called_once_with(["xhost", "+local:docker"])
         copy_file.assert_called_once()
-        self.assertEqual(run_detached_command.call_count, 2)
-        standard_stack_cmd = run_detached_command.call_args_list[0].args[0][6]
+        self.assertEqual(run_command.call_count, 2)
+        standard_stack_cmd = run_command.call_args_list[0].args[0][6]
         self.assertIn("MDRIVE_VEHICLE_MODEL", standard_stack_cmd)
         self.assertIn("MDRIVE_VEHICLE_NAME", standard_stack_cmd)
         self.assertIn("/mdrive/vmc.sh", standard_stack_cmd)
@@ -63,7 +63,7 @@ class ReplayStackTests(unittest.TestCase):
             )
 
             with patch.object(self.replay_stack_manager, "_copy_file_to_container") as copy_file:
-                with patch.object(self.replay_stack_manager, "_run_detached_command") as run_detached_command:
+                with patch.object(self.replay_stack_manager, "_run_command") as run_command:
                     self.replay_stack_manager.start_traffic_light_stack(ctx)
 
             updated_config = traffic_light_config_path.read_text(encoding="utf-8")
@@ -71,7 +71,7 @@ class ReplayStackTests(unittest.TestCase):
             self.assertTrue(data_test_path.exists())
 
         copy_file.assert_called_once()
-        run_detached_command.assert_called_once()
+        run_command.assert_called_once()
         self.assertIn("save_debug_img: true", updated_config)
 
 

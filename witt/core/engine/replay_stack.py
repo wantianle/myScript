@@ -35,7 +35,7 @@ class ReplayStackManager:
             container,
             _CONTAINER_MULTIVIZ_CONFIG_PATH,
         )
-        self._run_detached_command(
+        self._run_command(
             [
                 "docker",
                 "exec",
@@ -77,7 +77,7 @@ class ReplayStackManager:
                 _CONTAINER_MULTIVIZ_CONFIG_PATH,
             ]
         )
-        self._run_detached_command(multiviz_cmd, "启动 mdrive_multiviz 失败")
+        self._run_command(multiviz_cmd, "启动 mdrive_multiviz 失败")
         self._open_browser("http://localhost:8888")
 
     def start_traffic_light_stack(self, ctx: "TaskContext") -> None:
@@ -97,7 +97,7 @@ class ReplayStackManager:
         )
         (Path(ctx.host.mdrive_root) / "data" / "test").mkdir(parents=True, exist_ok=True)
         self._enable_save_debug_images(traffic_light_config_path)
-        self._run_detached_command(
+        self._run_command(
             [
                 "docker",
                 "exec",
@@ -143,9 +143,6 @@ class ReplayStackManager:
             check=False,
         )
         return completed_process.returncode == 0
-
-    def _run_detached_command(self, cmd: List[str], error_summary: str) -> None:
-        self._run_command(cmd, error_summary)
 
     def _open_browser(self, url: str) -> None:
         try:

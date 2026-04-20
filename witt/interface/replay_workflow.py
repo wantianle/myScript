@@ -827,7 +827,7 @@ def auto_replay_flow(
                 ui.show_progress_section(
                     "自动回播",
                     "本地库状态未变，正在加载缓存",
-                    details=[str(session.player.library_file)],
+                    details=[str(session.player.library_cache.cache_path)],
                     hint="正在读取回播库条目",
                 )
             else:

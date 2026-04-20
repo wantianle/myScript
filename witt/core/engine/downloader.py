@@ -68,12 +68,7 @@ class RecordDownloader:
     ) -> None:
         self.session = session
         self.ctx = session.ctx
-        self.recorder = session.recorder
         self.metadata_repository = metadata_repository
-
-    @property
-    def mode(self):
-        return self.ctx.logic.mode
 
     def _prepare_dir(self, target_dir: Path) -> None:
         """彻底清理目标目录，确保没有旧数据干扰。"""
@@ -94,7 +89,7 @@ class RecordDownloader:
             tag_dir.rmdir()
 
     def _get_version_files(self, src_dir: Path) -> List[Path]:
-        if self.mode == 3:
+        if self.ctx.logic.mode == 3:
             find_cmd = (
                 f"find {quote(str(src_dir))} -maxdepth 1 -type f "
                 f"-name 'version*' 2>/dev/null"
@@ -109,22 +104,18 @@ class RecordDownloader:
             raise VersionFileMissingError(f"{src_dir} 未找到 version 文件，已跳过当前任务")
         return version_files
 
-    def _sync_version_files(self, src_dir: Path, save_dir: Path) -> List[Path]:
+    def _sync_version_files(self, src_dir: Path, save_dir: Path) -> None:
         version_files = self._ensure_version_files(src_dir)
-        synced_files = []
-        if self.mode == 3:
+        if self.ctx.logic.mode == 3:
             for remote_v_path in version_files:
                 v_name = remote_v_path.name
                 v_dest = save_dir / v_name
                 self.session.executor.fetch_file(str(remote_v_path), v_dest)
-                synced_files.append(v_dest)
                 logging.info(f"[SYNC_VERSION] 成功同步远程文件: {v_name}")
         else:
             for v_src in version_files:
                 v_dest = save_dir / v_src.name
                 shutil.copy2(v_src, v_dest)
-                synced_files.append(v_dest)
-        return synced_files
 
     def _save_contract(self, task_entry: TaskEntry, save_dir, file_infos):
         """保存元数据，实现数据信息缓存，减少底层重复计算，并为回播提供必要的上下文信息"""
@@ -376,9 +367,7 @@ class RecordDownloader:
         )
 
     def download_records(self, task_list) -> DownloadSummary:
-        """
-        负责高层调度和进度条
-        """
+        """负责高层调度并展示整体进度。"""
         batches, skipped_batches = self._collect_task_batches(task_list)
         summary = DownloadSummary(skipped_batches=skipped_batches)
         if not batches:
