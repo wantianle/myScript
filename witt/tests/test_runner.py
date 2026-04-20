@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from core.errors import CommandExecutionError
 from core.errors import FindRecordError
@@ -11,6 +11,21 @@ from core.runner import RuntimeCoordinator
 
 
 class RuntimeCoordinatorTests(unittest.TestCase):
+    def _build_runtime_runner(self) -> RuntimeCoordinator:
+        return RuntimeCoordinator(
+            cast(
+                Any,
+                SimpleNamespace(
+                    paths=SimpleNamespace(scripts_dir="scripts"),
+                    docker=SimpleNamespace(docker_scripts="/tmp"),
+                    host=SimpleNamespace(mdrive_root="/tmp/mdrive"),
+                    logic=SimpleNamespace(version="/tmp/version.json"),
+                    vehicle="XZB600001",
+                    get_env_vars=Mock(return_value={"TEST_ENV": "1"}),
+                ),
+            )
+        )
+
     def test_build_script_execution_error_prefers_domain_error_summary(self) -> None:
         runner = RuntimeCoordinator(
             cast(
@@ -111,30 +126,50 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         self.assertEqual(raised.exception.operation_name, "record_query")
 
     def test_restore_runtime_environment_uses_python_runtime_sync(self) -> None:
-        runner = RuntimeCoordinator(
-            cast(
-                Any,
-                SimpleNamespace(
-                    paths=SimpleNamespace(scripts_dir="scripts"),
-                    docker=SimpleNamespace(docker_scripts="/tmp"),
-                    host=SimpleNamespace(mdrive_root="/tmp/mdrive"),
-                    logic=SimpleNamespace(version="/tmp/version.json"),
-                    vehicle="XZB600001",
-                ),
-            )
-        )
+        runner = self._build_runtime_runner()
 
         with patch.object(
             runner.runtime_environment_manager,
             "restore_runtime_environment",
             return_value=False,
-        ) as restore_runtime_environment:
+        ) as restore_runtime_environment, patch(
+            "core.runner.subprocess.run"
+        ) as subprocess_run:
             runner.restore_runtime_environment()
 
         restore_runtime_environment.assert_called_once_with(
             version_path=Path("/tmp/version.json"),
             vmc_path=Path("/tmp/mdrive/vmc.sh"),
             vehicle_name="XZB600001",
+        )
+        subprocess_run.assert_not_called()
+
+    def test_restore_runtime_environment_executes_vmc_when_runtime_changes(self) -> None:
+        runner = self._build_runtime_runner()
+        completed_process = Mock(returncode=0, stdout="")
+
+        with patch.object(
+            runner.runtime_environment_manager,
+            "restore_runtime_environment",
+            return_value=True,
+        ) as restore_runtime_environment, patch(
+            "core.runner.subprocess.run",
+            return_value=completed_process,
+        ) as subprocess_run:
+            runner.restore_runtime_environment()
+
+        restore_runtime_environment.assert_called_once_with(
+            version_path=Path("/tmp/version.json"),
+            vmc_path=Path("/tmp/mdrive/vmc.sh"),
+            vehicle_name="XZB600001",
+        )
+        subprocess_run.assert_called_once_with(
+            ["bash", "/tmp/mdrive/vmc.sh"],
+            env={"TEST_ENV": "1"},
+            text=True,
+            stdout=ANY,
+            stderr=ANY,
+            check=False,
         )
 
     def test_start_replay_stack_uses_python_replay_stack(self) -> None:
