@@ -7,7 +7,6 @@ import pty
 from pathlib import Path
 from typing import List, TYPE_CHECKING
 
-from core.engine import record_finder
 from core.engine import record_query
 from core.engine import replay_stack
 from core.engine import runtime_env
@@ -32,12 +31,7 @@ class RuntimeCoordinator:
 
     def __init__(self, ctx: "TaskContext") -> None:
         self.ctx = ctx
-        self.record_finder_manager = record_finder.RecordFinderManager()
-        self.record_query_service = record_query.RecordQueryService(
-            ctx,
-            finder_manager=self.record_finder_manager,
-        )
-        self.runtime_environment_manager = runtime_env.RuntimeEnvironmentManager()
+        self.record_query_service = record_query.RecordQueryService(ctx)
         self.replay_stack_manager = replay_stack.ReplayStackManager()
         PROJECT_ROOT = Path(__file__).resolve().parents[1]
         self.scripts_dir = (PROJECT_ROOT / self.ctx.paths.scripts_dir).resolve()
@@ -172,7 +166,7 @@ class RuntimeCoordinator:
         """恢复运行环境版本配置并执行 vmc.sh 安装依赖。"""
         vmc_path = Path(self.ctx.host.mdrive_root) / "vmc.sh"
         try:
-            runtime_changed = self.runtime_environment_manager.restore_runtime_environment(
+            runtime_changed = runtime_env.restore_runtime_environment(
                 version_path=Path(str(self.ctx.logic.version)),
                 vmc_path=vmc_path,
                 vehicle_name=self.ctx.vehicle,

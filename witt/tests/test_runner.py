@@ -128,9 +128,8 @@ class RuntimeCoordinatorTests(unittest.TestCase):
     def test_restore_runtime_environment_uses_python_runtime_sync(self) -> None:
         runner = self._build_runtime_runner()
 
-        with patch.object(
-            runner.runtime_environment_manager,
-            "restore_runtime_environment",
+        with patch(
+            "core.runner.runtime_env.restore_runtime_environment",
             return_value=False,
         ) as restore_runtime_environment, patch(
             "core.runner.subprocess.run"
@@ -148,9 +147,8 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         runner = self._build_runtime_runner()
         completed_process = Mock(returncode=0, stdout="")
 
-        with patch.object(
-            runner.runtime_environment_manager,
-            "restore_runtime_environment",
+        with patch(
+            "core.runner.runtime_env.restore_runtime_environment",
             return_value=True,
         ) as restore_runtime_environment, patch(
             "core.runner.subprocess.run",

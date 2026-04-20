@@ -11,7 +11,7 @@ from . import config_prompter
 from . import prompter
 from . import replay_prompter
 from . import ui
-from core.engine.runtime_env import RuntimeEnvironmentManager
+from core.engine import runtime_env
 from core.engine.player import PlaybackPlan
 from core.errors import RecordInfoError, PathMappingError, ScriptExecutionError
 from core.models import (
@@ -37,7 +37,6 @@ REPLAY_SOURCE_AUTO = "auto"
 REPLAY_SOURCE_FULL_SOURCE = "full_source"
 REPLAY_SOURCE_MANUAL = "manual"
 REPLAY_SOURCE_HISTORY = "history"
-_RUNTIME_ENVIRONMENT_MANAGER = RuntimeEnvironmentManager()
 
 
 def _format_replay_source_label(source_type: str) -> str:
@@ -285,7 +284,7 @@ def _build_version_display_details(
         return ["未提供版本信息"]
     version_path = Path(version_source)
     try:
-        version_info = _RUNTIME_ENVIRONMENT_MANAGER.load_version_info(version_path)
+        version_info = runtime_env.load_version_info(version_path)
         version_lines = []
         if version_info.mdrive_ver:
             version_lines.append("mdrive: {0}".format(version_info.mdrive_ver))

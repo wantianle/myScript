@@ -2,9 +2,9 @@ import os
 import shlex
 import subprocess
 from pathlib import Path
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, TYPE_CHECKING
 
-from core.engine.record_finder import RecordFinderManager
+from core.engine import record_finder
 from core.errors import CommandExecutionError
 from core.models import TaskEntry
 
@@ -15,18 +15,13 @@ if TYPE_CHECKING:
 class RecordQueryService:
     """负责按模式执行 record 查询并返回任务列表。"""
 
-    def __init__(
-        self,
-        ctx: "TaskContext",
-        finder_manager: Optional[RecordFinderManager] = None,
-    ) -> None:
+    def __init__(self, ctx: "TaskContext") -> None:
         self.ctx = ctx
-        self.finder_manager = finder_manager or RecordFinderManager()
 
     def run_query(self) -> List[TaskEntry]:
         """执行本地、NAS 或远程查询并返回任务列表。"""
         if self.ctx.logic.mode == 3:
-            task_entries = self.finder_manager.find_tasks_from_path_texts(
+            return record_finder.find_tasks_from_path_texts(
                 self._run_remote_find_paths(),
                 self._read_remote_text,
                 target_date=self.ctx.target_date,
@@ -35,15 +30,13 @@ class RecordQueryService:
                 soc_filter=str(getattr(self.ctx.logic, "soc", "")),
                 source_root=str(self.ctx.remote.data_root),
             )
-        else:
-            task_entries = self.finder_manager.find_local_tasks(
-                self._resolve_find_record_root(),
-                target_date=self.ctx.target_date,
-                before=int(self.ctx.logic.before),
-                after=int(self.ctx.logic.after),
-                soc_filter=str(getattr(self.ctx.logic, "soc", "")),
-            )
-        return task_entries
+        return record_finder.find_local_tasks(
+            self._resolve_find_record_root(),
+            target_date=self.ctx.target_date,
+            before=int(self.ctx.logic.before),
+            after=int(self.ctx.logic.after),
+            soc_filter=str(getattr(self.ctx.logic, "soc", "")),
+        )
 
     def _resolve_find_record_root(self) -> Path:
         """按当前模式解析查询根目录。"""

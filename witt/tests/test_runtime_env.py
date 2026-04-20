@@ -7,9 +7,6 @@ from core.errors import RuntimeEnvironmentError
 
 
 class RuntimeEnvTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.runtime_environment_manager = runtime_env.RuntimeEnvironmentManager()
-
     def test_load_version_info_supports_json_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             version_path = Path(tmpdir) / "version.json"
@@ -26,7 +23,7 @@ class RuntimeEnvTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            version_info = self.runtime_environment_manager.load_version_info(version_path)
+            version_info = runtime_env.load_version_info(version_path)
 
         self.assertEqual(version_info.mdrive_ver, "1.2.3")
         self.assertEqual(version_info.conf_ver, "E171.2.3")
@@ -51,7 +48,7 @@ class RuntimeEnvTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            version_info = self.runtime_environment_manager.load_version_info(version_path)
+            version_info = runtime_env.load_version_info(version_path)
 
         self.assertEqual(version_info.mdrive_ver, "1.2.3")
         self.assertEqual(version_info.conf_ver, "E171.2.3")
@@ -66,7 +63,7 @@ class RuntimeEnvTests(unittest.TestCase):
             )
 
             with self.assertRaises(RuntimeEnvironmentError):
-                self.runtime_environment_manager.load_version_info(version_path)
+                runtime_env.load_version_info(version_path)
 
     def test_sync_runtime_environment_updates_vmc_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -94,7 +91,7 @@ class RuntimeEnvTests(unittest.TestCase):
                 vehicle_model="E171",
             )
 
-            changed = self.runtime_environment_manager.sync_runtime_environment(
+            changed = runtime_env.sync_runtime_environment(
                 vmc_path,
                 version_info,
                 vehicle_name="XZB600001",
@@ -136,7 +133,7 @@ class RuntimeEnvTests(unittest.TestCase):
                 vehicle_model="E171",
             )
 
-            changed = self.runtime_environment_manager.sync_runtime_environment(
+            changed = runtime_env.sync_runtime_environment(
                 vmc_path,
                 version_info,
                 vehicle_name="XZB600001",
