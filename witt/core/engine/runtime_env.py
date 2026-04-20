@@ -32,12 +32,15 @@ class RuntimeEnvironmentManager:
         if not mdrive_ver or not conf_ver:
             raise RuntimeEnvironmentError("未能从文件中解析出 mdrive 或 mdrive_conf 版本")
         vehicle_model = conf_ver.split(".", 1)[0]
+        model_ver = raw_values.get("mdrive_model", "")
+        map_ver = raw_values.get("mdrive_map", "")
+        localization_ver = raw_values.get("mdrive_map_localization", "")
         return RuntimeVersionInfo(
             mdrive_ver=mdrive_ver,
             conf_ver=conf_ver,
-            model_ver=raw_values.get("mdrive_model", ""),
-            map_ver=raw_values.get("mdrive_map", ""),
-            localization_ver=raw_values.get("mdrive_map_localization", ""),
+            model_ver=model_ver,
+            map_ver=map_ver,
+            localization_ver=localization_ver,
             vehicle_model=vehicle_model,
         )
 

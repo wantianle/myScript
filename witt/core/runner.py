@@ -109,10 +109,7 @@ class RuntimeCoordinator:
             raise self._build_script_execution_error(script_name, script_output)
 
     def _run_script_with_terminal_capture(
-        self,
-        script_name: str,
-        echo_output: bool = True,
-        *args: str
+        self, script_name: str, echo_output: bool = True, *args: str
     ) -> str:
         """按需回显终端输出，并同时捕获辅助脚本输出。"""
         script_path = self._resolve_script_path(script_name)
@@ -172,13 +169,31 @@ class RuntimeCoordinator:
             raise ScriptExecutionError("record_query", str(e)) from e
 
     def restore_runtime_environment(self) -> None:
-        """恢复运行环境版本配置。"""
+        """恢复运行环境版本配置并执行 vmc.sh 安装依赖。"""
+        vmc_path = Path(self.ctx.host.mdrive_root) / "vmc.sh"
         try:
             self.runtime_environment_manager.restore_runtime_environment(
                 version_path=Path(str(self.ctx.logic.version)),
-                vmc_path=Path(self.ctx.host.mdrive_root) / "vmc.sh",
+                vmc_path=vmc_path,
                 vehicle_name=self.ctx.vehicle,
             )
+            # 执行 vmc.sh 脚本来安装依赖
+            env_vars = self.ctx.get_env_vars()
+            cmd = ["bash", str(vmc_path)]
+            completed_process = subprocess.run(
+                cmd,
+                env=env_vars,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            script_output = completed_process.stdout or ""
+            if script_output:
+                sys.stdout.write(script_output)
+                sys.stdout.flush()
+            if completed_process.returncode != 0:
+                raise self._build_script_execution_error("vmc.sh", script_output)
         except RuntimeEnvironmentError as e:
             raise ScriptExecutionError("runtime_environment", str(e)) from e
 
