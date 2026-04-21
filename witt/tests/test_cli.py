@@ -125,7 +125,7 @@ class CliTests(unittest.TestCase):
             raw="history last",
         )
 
-        with patch("interface.cli.replay_workflow.replay_latest_history_entry") as replay_latest_history_entry:
+        with patch("interface.cli.workflow_replay.replay_latest_history_entry") as replay_latest_history_entry:
             handled = cli._handle_history_subcommand(session, command_invocation)
 
         self.assertTrue(handled)
@@ -139,7 +139,7 @@ class CliTests(unittest.TestCase):
             raw="history 3",
         )
 
-        with patch("interface.cli.replay_workflow.replay_history_by_index") as replay_history_by_index:
+        with patch("interface.cli.workflow_replay.replay_history_by_index") as replay_history_by_index:
             handled = cli._handle_history_subcommand(session, command_invocation)
 
         self.assertTrue(handled)

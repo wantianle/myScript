@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 from core.models import ReplayHistoryEntry, ReplayRecord, TaskEntry
 from core.session import AppSession
-from interface import replay_workflow
+from interface import workflow_replay as replay_workflow
 from interface import workflow
 
 
@@ -50,15 +50,15 @@ class FlowIntegrationTests(unittest.TestCase):
         with patch("interface.workflow.prompter_config.get_basic_params") as get_basic_params:
             with patch("interface.workflow.prompter_config.update_dest_root") as update_dest_root:
                 with patch(
-                    "interface.replay_workflow.prompter_replay.select_playback_entry",
+                    "interface.workflow_replay.prompter_replay.select_playback_entry",
                     side_effect=[selected_tag, None],
                 ):
                     with patch(
-                        "interface.replay_workflow.prompter_replay.select_replay_records",
+                        "interface.workflow_replay.prompter_replay.select_replay_records",
                         return_value=target_records,
                     ):
-                        with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
-                            with patch("interface.replay_workflow._replay_records") as replay_records:
+                        with patch("interface.workflow_replay._update_playback_blacklist") as update_blacklist:
+                            with patch("interface.workflow_replay._replay_records") as replay_records:
                                 workflow.auto_replay_progress(session)
 
         get_basic_params.assert_called_once_with(session.ctx)
@@ -96,12 +96,12 @@ class FlowIntegrationTests(unittest.TestCase):
 
         with patch("interface.workflow.prompter_config.get_basic_params") as get_basic_params:
             with patch(
-                "interface.replay_workflow.prompter_replay.get_manual_replay_paths",
+                "interface.workflow_replay.prompter_replay.get_manual_replay_paths",
                 return_value=manual_paths,
             ):
-                with patch("interface.replay_workflow.termios.tcflush"):
-                    with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
-                        with patch("interface.replay_workflow._replay_records") as replay_records:
+                with patch("interface.workflow_replay.termios.tcflush"):
+                    with patch("interface.workflow_replay._update_playback_blacklist") as update_blacklist:
+                        with patch("interface.workflow_replay._replay_records") as replay_records:
                             workflow.manual_replay_progress(session)
 
         get_basic_params.assert_called_once_with(session.ctx)
@@ -139,15 +139,15 @@ class FlowIntegrationTests(unittest.TestCase):
         )
 
         with patch(
-            "interface.replay_workflow.get_sorted_replay_history_entries",
+            "interface.workflow_replay.get_sorted_replay_history_entries",
             return_value=[history_entry],
         ):
-            with patch("interface.replay_workflow.ui.browse_replay_history") as browse_replay_history:
+            with patch("interface.workflow_replay.ui.browse_replay_history") as browse_replay_history:
                 with patch(
-                    "interface.replay_workflow.prompter_replay.select_replay_history_index",
+                    "interface.workflow_replay.prompter_replay.select_replay_history_index",
                     return_value=1,
                 ):
-                    with patch("interface.replay_workflow._replay_records") as replay_records:
+                    with patch("interface.workflow_replay._replay_records") as replay_records:
                         workflow.replay_history_progress(session)
 
         browse_replay_history.assert_called_once_with([history_entry])
@@ -202,18 +202,18 @@ class FlowIntegrationTests(unittest.TestCase):
         manual_paths = [Path("/tmp/demo.record")]
 
         with patch(
-            "interface.replay_workflow.prompter.get_confirm_input",
+            "interface.workflow_replay.prompter.get_confirm_input",
             side_effect=[True, True, True, False],
         ):
-            with patch("interface.replay_workflow.prompter_config.get_json_input", return_value="/tmp/version.json"):
-                with patch("interface.replay_workflow.prompter_replay.get_playback_range", return_value=(0, 0)):
-                    with patch("interface.replay_workflow.prompter_replay.get_playback_rate", return_value=1.0):
+            with patch("interface.workflow_replay.prompter_config.get_json_input", return_value="/tmp/version.json"):
+                with patch("interface.workflow_replay.prompter_replay.get_playback_range", return_value=(0, 0)):
+                    with patch("interface.workflow_replay.prompter_replay.get_playback_rate", return_value=1.0):
                         with patch("interface.workflow.prompter_config.get_basic_params") as get_basic_params:
-                            with patch("interface.replay_workflow.prompter_replay.get_manual_replay_paths", return_value=manual_paths):
-                                with patch("interface.replay_workflow.termios.tcflush"):
-                                    with patch("interface.replay_workflow.prompter_channel.get_paths_channels", return_value=[]):
-                                        with patch("interface.replay_workflow._collect_issue_marker", return_value=None):
-                                            with patch("interface.replay_workflow._post_replay_issue_draft"):
+                            with patch("interface.workflow_replay.prompter_replay.get_manual_replay_paths", return_value=manual_paths):
+                                with patch("interface.workflow_replay.termios.tcflush"):
+                                    with patch("interface.workflow_replay.prompter_channel.get_paths_channels", return_value=[]):
+                                        with patch("interface.workflow_replay._collect_issue_marker", return_value=None):
+                                            with patch("interface.workflow_replay._post_replay_issue_draft"):
                                                 replay_workflow.traffic_light_replay_flow(session)
 
         get_basic_params.assert_called_once_with(session.ctx)

@@ -72,23 +72,6 @@ def _build_page_intro_panel(
     )
 
 
-def _build_info_panel(
-    title: str,
-    lines: Sequence[Text],
-    hint: str = "",
-) -> Panel:
-    """构建上下文信息面板。"""
-    panel_lines = list(lines)
-    if hint:
-        panel_lines.append(Text(hint, style="muted"))
-    return Panel(
-        Group(*panel_lines),
-        title=title,
-        border_style="border",
-        padding=(0, 2),
-    )
-
-
 def show_command_help(command_specs, target_command_name: str = "") -> None:
     """打印命令帮助面板。"""
     summary = "命令驱动 REPL 入口与别名一览"
@@ -591,7 +574,15 @@ def show_playback_info(
     if command:
         lines.append(Text("执行命令:", style="label"))
         lines.append(Text("  {0}".format(command), style="accent"))
-    _CONSOLE.print(_build_info_panel("回播信息", lines, "Ctrl+C 中断当前回播"))
+    lines.append(Text("Ctrl+C 中断当前回播", style="muted"))
+    _CONSOLE.print(
+        Panel(
+            Group(*lines),
+            title="回播信息",
+            border_style="border",
+            padding=(0, 2),
+        )
+    )
 
 
 def _format_playback_selection_label(selection_label: str) -> str:
@@ -630,20 +621,6 @@ def show_filtered_replay_history(
 
 def browse_replay_history(history_entries: List[ReplayHistoryEntry]) -> None:
     """使用 less 浏览回播历史；不可用时退化为直接打印。"""
-    history_text = render_replay_history(history_entries)
-    if which("less") is None:
-        _CONSOLE.print(Text.from_ansi(history_text), end="")
-        return
-    subprocess.run(
-        ["less", "-R", "+G"],
-        input=history_text,
-        text=True,
-        check=False,
-    )
-
-
-def render_replay_history(history_entries: List[ReplayHistoryEntry]) -> str:
-    """渲染回播历史文本，便于直接打印或交给 less。"""
     buffer = StringIO()
     history_console = Console(
         file=buffer,
@@ -654,7 +631,16 @@ def render_replay_history(history_entries: List[ReplayHistoryEntry]) -> str:
         width=140,
     )
     history_console.print(_build_history_table(history_entries))
-    return buffer.getvalue()
+    history_text = buffer.getvalue()
+    if which("less") is None:
+        _CONSOLE.print(Text.from_ansi(history_text), end="")
+        return
+    subprocess.run(
+        ["less", "-R", "+G"],
+        input=history_text,
+        text=True,
+        check=False,
+    )
 
 
 def _build_history_table(history_entries: List[ReplayHistoryEntry]) -> Table:
@@ -783,19 +769,3 @@ def _format_history_status(history_entry: ReplayHistoryEntry) -> Text:
     if missing_paths:
         return Text("路径失效", style="error")
     return Text("可回播", style="ok")
-
-
-def print_status(msg: str, level: str = "INFO") -> None:
-    """打印终端即时状态，不进入日志文件。"""
-    level_style_map = {
-        "INFO": "info",
-        "WARN": "warn",
-        "ERROR": "error",
-    }
-    style_name = level_style_map.get(level, "info")
-    _CONSOLE.print(
-        Text.assemble(
-            ("[{0}] ".format(level), style_name),
-            (msg, style_name),
-        )
-    )

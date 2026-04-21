@@ -47,7 +47,7 @@ class FailedBatch:
 @dataclass
 class DownloadSummary:
     total_files: int = 0
-    completed_batch_count: int = 0
+    completed_batches: List[DownloadBatch] = field(default_factory=list)
     skipped_batches: List[SkippedBatch] = field(default_factory=list)
     failed_batches: List[FailedBatch] = field(default_factory=list)
 
@@ -322,7 +322,7 @@ class RecordDownloader:
                     )
                 )
                 return
-            summary.completed_batch_count += 1
+            summary.completed_batches.append(batch)
         except Exception as e:
             self._cleanup_failed_batch(batch.save_dir)
             failure_reason = self._build_batch_failure_reason(

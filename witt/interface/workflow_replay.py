@@ -183,57 +183,11 @@ def traffic_light_replay_flow(session: AppSession) -> None:
         auto_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
 
 
-def replay_flow(session: AppSession) -> None:
-    """执行标准回放模式的入口编排。"""
-    ui.show_flow_section(
-        "标准回播模式",
-        "选择自动扫描或手动文件进入标准回播",
-        "适合直接从本地目录或手动路径进入回播",
-    )
-    manual = prompter.get_confirm_input("手动选择文件播放？")
-    if manual:
-        prompter_config.get_basic_params(session.ctx)
-        session.ctx.setup_logger()
-        manual_replay_flow(session, REPLAY_MODE_STANDARD)
-    else:
-        prompter_config.get_basic_params(session.ctx)
-        session.ctx.setup_logger()
-        prompter_config.update_dest_root(
-            session.ctx,
-            "输入要扫描的回播路径(限/media下)",
-        )
-        auto_replay_flow(session, REPLAY_MODE_STANDARD)
-
-
-def _resolve_version_from_records(
-    session: AppSession,
-    records: List[ReplayRecord],
-) -> bool:
-    """从当前回放记录中推断版本文件路径。"""
-    version_path = _find_version_path_from_records(records)
-    session.ctx.logic.version = version_path or ""
-    return version_path is not None
-
-
 def _find_version_path_from_records(records: List[ReplayRecord]) -> Optional[Path]:
     """从回放记录中尝试定位版本文件。"""
     if not records:
         return None
     return next(Path(records[0].path).parent.glob("version*"), None)
-
-
-def _prepare_replay(
-    session: AppSession,
-    records: List[ReplayRecord],
-    replay_mode: str,
-) -> bool:
-    """为回放准备环境和工具栈。"""
-    auto_version = _resolve_version_from_records(session, records)
-    return restore_environment_flow(
-        session,
-        auto=auto_version,
-        replay_mode=replay_mode,
-    )
 
 
 def _update_playback_blacklist(
@@ -332,9 +286,8 @@ def _build_version_display_details(
         return raw_version_lines[:5] or ["未提供版本信息"]
 
 
-def _format_playback_range(start_sec: int, end_sec: int) -> str:
+def _format_playback_range(start_sec: int) -> str:
     """格式化回播起始偏移，便于写入 issue 草稿的 start(-s)。"""
-    del end_sec
     return str(max(0, start_sec))
 
 
@@ -349,13 +302,10 @@ def _post_replay_issue_draft(
     issue_marker: Optional[ReplayIssueMarker] = None,
 ) -> None:
     """回播结束后统一处理 issue 草稿生成。"""
-    playback_range_text = _format_playback_range(start_sec, end_sec)
+    playback_range_text = _format_playback_range(start_sec)
     issue_description = DEFAULT_ISSUE_DESCRIPTION
     if issue_marker is not None:
-        playback_range_text = _format_playback_range(
-            issue_marker.playback_start_sec,
-            end_sec,
-        )
+        playback_range_text = _format_playback_range(issue_marker.playback_start_sec)
         issue_description = issue_marker.issue_description
     issue_paths = _try_build_issue_paths(
         [replay_record.path for replay_record in records],
@@ -633,7 +583,13 @@ def _replay_records(
                 )
             continue
         if not runtime_prepared:
-            if not _prepare_replay(session, records, replay_mode):
+            version_path = _find_version_path_from_records(records)
+            session.ctx.logic.version = version_path or ""
+            if not restore_environment_flow(
+                session,
+                auto=version_path is not None,
+                replay_mode=replay_mode,
+            ):
                 return
             runtime_prepared = True
         last_playback_plan = playback_plan

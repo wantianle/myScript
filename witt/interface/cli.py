@@ -5,12 +5,12 @@ import subprocess
 import sys
 from shutil import which
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import List, Optional
 
 from . import prompter
-from . import replay_workflow
 from . import ui
 from . import workflow
+from . import workflow_replay
 from core.session import AppSession
 
 INTENT_ONLY_COMMANDS = {
@@ -30,7 +30,7 @@ def menu() -> None:
     """运行第一阶段命令驱动 REPL 入口。"""
     session = AppSession()
     prompt_session = prompter.create_command_prompt_session()
-    _render_repl_home()
+    ui.print_banner()
 
     while True:
         try:
@@ -46,23 +46,38 @@ def menu() -> None:
         if command_invocation.name == "quit":
             sys.exit(0)
         if command_invocation.name == "help":
-            _handle_help_command(command_invocation)
+            if not command_invocation.args:
+                ui.show_command_help(prompter.COMMAND_SPECS)
+            else:
+                ui.show_command_help(
+                    prompter.COMMAND_SPECS,
+                    target_command_name=prompter.normalize_command(
+                        command_invocation.args[0]
+                    ),
+                )
             continue
         if command_invocation.name == "config":
             session = _handle_config_command(session)
             continue
         if command_invocation.name == "clear":
             _clear_screen()
-            _render_repl_home()
+            ui.print_banner()
             continue
         if command_invocation.name == "history" and _handle_history_subcommand(
             session,
             command_invocation,
         ):
             continue
-
-        command_map = _build_command_map(session)
-        action = command_map.get(command_invocation.name)
+        action_map = {
+            "slice": workflow.slice_progress,
+            "replay": workflow.full_source_progress,
+            "scan": workflow.auto_replay_progress,
+            "manual": workflow.manual_replay_progress,
+            "history": workflow.replay_history_progress,
+            "traffic": workflow_replay.traffic_light_replay_flow,
+            "env": ui.show_environment_summary,
+        }
+        action = action_map.get(command_invocation.name)
         if action is None:
             ui.show_input_feedback(
                 "未知命令: {0}".format(raw_command),
@@ -71,29 +86,11 @@ def menu() -> None:
             continue
 
         try:
-            action()
+            action(session)
         except KeyboardInterrupt:
             ui.show_notice_section("命令执行", "用户终止程序", "WARN")
         except Exception as e:
             logging.error(f"执行命令 {command_invocation.name} 时发生异常: {e}")
-
-
-def _render_repl_home() -> None:
-    """渲染 REPL 启动页。"""
-    ui.print_banner()
-
-
-def _build_command_map(session: AppSession) -> Dict[str, Callable[[], None]]:
-    """构建标准命令到 workflow 动作的映射。"""
-    return {
-        "slice": lambda: workflow.slice_progress(session),
-        "replay": lambda: workflow.full_source_progress(session),
-        "scan": lambda: workflow.auto_replay_progress(session),
-        "manual": lambda: workflow.manual_replay_progress(session),
-        "history": lambda: workflow.replay_history_progress(session),
-        "traffic": lambda: replay_workflow.traffic_light_replay_flow(session),
-        "env": lambda: ui.show_environment_summary(session),
-    }
 
 
 def _validate_command_args(command_invocation: prompter.CommandInvocation) -> bool:
@@ -120,18 +117,6 @@ def _validate_command_args(command_invocation: prompter.CommandInvocation) -> bo
 def _clear_screen() -> None:
     """清空终端显示。"""
     os.system("clear")
-
-
-def _handle_help_command(command_invocation: prompter.CommandInvocation) -> None:
-    """处理 help 命令。"""
-    if not command_invocation.args:
-        ui.show_command_help(prompter.COMMAND_SPECS)
-        return
-    target_command_name = prompter.normalize_command(command_invocation.args[0])
-    ui.show_command_help(
-        prompter.COMMAND_SPECS,
-        target_command_name=target_command_name,
-    )
 
 
 def _handle_config_command(session: AppSession) -> AppSession:
@@ -203,7 +188,10 @@ def _resolve_editor_command() -> Optional[List[str]]:
         editor_text = os.environ.get(env_name, "").strip()
         if not editor_text:
             continue
-        editor_command = _split_command_text(editor_text)
+        try:
+            editor_command = shlex.split(editor_text)
+        except ValueError:
+            editor_command = editor_text.split()
         if editor_command and which(editor_command[0]) is not None:
             return editor_command
     for editor_name in ("nano", "vim", "vi"):
@@ -211,14 +199,6 @@ def _resolve_editor_command() -> Optional[List[str]]:
         if editor_path is not None:
             return [editor_path]
     return None
-
-
-def _split_command_text(command_text: str) -> List[str]:
-    """解析环境变量中的编辑器命令。"""
-    try:
-        return shlex.split(command_text)
-    except ValueError:
-        return command_text.split()
 
 
 def _handle_history_subcommand(
@@ -239,10 +219,10 @@ def _handle_history_subcommand(
         )
         return True
     if subcommand == "last":
-        replay_workflow.replay_latest_history_entry(session)
+        workflow_replay.replay_latest_history_entry(session)
         return True
     if subcommand.isdigit():
-        replay_workflow.replay_history_by_index(session, int(subcommand))
+        workflow_replay.replay_history_by_index(session, int(subcommand))
         return True
     ui.show_result_section(
         "历史命令",

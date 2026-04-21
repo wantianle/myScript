@@ -5,7 +5,7 @@ from . import prompter
 from . import prompter_channel
 from . import prompter_config
 from . import ui
-from . import replay_workflow
+from . import workflow_replay
 from core.engine.downloader import FailedBatch, SkippedBatch
 from core.errors import ScriptExecutionError
 from core.models import TaskEntry
@@ -135,7 +135,8 @@ def slice_progress(session: AppSession) -> None:
     download_summary = session.record_downloader.download_records(valid_tasks)
     _show_skipped_batches(download_summary.skipped_batches)
     _show_failed_batches(download_summary.failed_batches)
-    if download_summary.completed_batch_count <= 0:
+    completed_batch_count = len(download_summary.completed_batches)
+    if completed_batch_count <= 0:
         ui.show_result_section(
             "切片结果",
             "没有成功完成的切片批次",
@@ -147,16 +148,14 @@ def slice_progress(session: AppSession) -> None:
         "切片结果",
         "所有同步任务已完成！",
         details=[
-            "已完成 {0} 个切片批次".format(
-                download_summary.completed_batch_count
-            )
+            "已完成 {0} 个切片批次".format(completed_batch_count)
         ],
         next_step="可立即进入回播，或返回 REPL 继续其他操作",
     )
     if prompter.get_confirm_input("\n切片处理完成，是否立即回播数据?", True):
-        replay_workflow.auto_replay_flow(
+        workflow_replay.auto_replay_flow(
             session,
-            replay_workflow.REPLAY_MODE_STANDARD,
+            workflow_replay.REPLAY_MODE_STANDARD,
         )
 
 
@@ -188,7 +187,7 @@ def full_source_progress(
             next_step="检查查询结果是否包含有效原始路径",
         )
         return
-    replay_workflow.full_source_replay_flow(session, valid_tasks)
+    workflow_replay.full_source_replay_flow(session, valid_tasks)
 
 
 def auto_replay_progress(session: AppSession) -> None:
@@ -204,9 +203,9 @@ def auto_replay_progress(session: AppSession) -> None:
         session.ctx,
         "输入要扫描的回播路径(限/media下)",
     )
-    replay_workflow.auto_replay_flow(
+    workflow_replay.auto_replay_flow(
         session,
-        replay_workflow.REPLAY_MODE_STANDARD,
+        workflow_replay.REPLAY_MODE_STANDARD,
     )
 
 
@@ -219,9 +218,9 @@ def manual_replay_progress(session: AppSession) -> None:
     )
     prompter_config.get_basic_params(session.ctx)
     session.ctx.setup_logger()
-    replay_workflow.manual_replay_flow(
+    workflow_replay.manual_replay_flow(
         session,
-        replay_workflow.REPLAY_MODE_STANDARD,
+        workflow_replay.REPLAY_MODE_STANDARD,
     )
 
 
@@ -235,10 +234,10 @@ def manual_replay_progress_with_paths(session: AppSession, path_texts: List[str]
     prompter_config.get_basic_params(session.ctx)
     session.ctx.setup_logger()
     replay_paths = [Path(path_text) for path_text in path_texts]
-    replay_workflow.manual_replay_paths_flow(
+    workflow_replay.manual_replay_paths_flow(
         session,
         replay_paths,
-        replay_workflow.REPLAY_MODE_STANDARD,
+        workflow_replay.REPLAY_MODE_STANDARD,
     )
 
 
@@ -249,7 +248,7 @@ def replay_history_progress(session: AppSession) -> None:
         "浏览历史记录并按序号回播",
         "支持从列表选择，也支持 history last / history <序号>",
     )
-    replay_workflow.replay_history_flow(session)
+    workflow_replay.replay_history_flow(session)
 
 
 def search_flow(

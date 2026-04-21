@@ -19,7 +19,7 @@ from core.models import (
 )
 from utils import parser
 
-from interface import replay_workflow
+from interface import workflow_replay as replay_workflow
 
 
 class TaskEntryTests(unittest.TestCase):
@@ -225,6 +225,12 @@ class ParserTests(unittest.TestCase):
         parsed_time = parser.str_to_time("2026-04-15T10:16:08")
 
         self.assertEqual(parsed_time, datetime(2026, 4, 15, 10, 16, 8))
+
+    def test_str_to_time_raises_explicit_error_for_invalid_format(self) -> None:
+        with self.assertRaises(ValueError) as raised:
+            parser.str_to_time("invalid-time")
+
+        self.assertEqual(str(raised.exception), "无法识别的时间格式: invalid-time")
 
     def test_replay_history_entry_resolved_selection_label_uses_legacy_value_first(self) -> None:
         history_entry = ReplayHistoryEntry(

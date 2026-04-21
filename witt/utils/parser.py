@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List, Sequence, Tuple, Union
 
 from core.models import ChannelInfo, RecordInfo
-from interface import ui
 
 _RE_TIME = re.compile(
     r"(?:begin|end)_time:\s+(\d{4}[-\s]\d{2}[-\s]\d{2}[-\s]\d{2}:\d{2}:\d{2})"
@@ -19,6 +18,8 @@ def parse_record_info(stdout: str) -> RecordInfo:
     raw_time = _RE_TIME.findall(stdout)
     raw_duration = _RE_DURATION.findall(stdout)
     raw_channels = _RE_CHANNELS.findall(stdout)
+    if len(raw_time) < 2 or not raw_duration:
+        raise ValueError("cyber_recorder info 输出不完整")
     begin_time = str_to_time(raw_time[0])
     end_time = str_to_time(raw_time[1])
     duration = math.floor(float(raw_duration[0]))
@@ -52,9 +53,8 @@ def str_to_time(t_str: str) -> datetime:
         clean_t = "{0} {1}".format(clean_t[:10], clean_t[11:])
     try:
         return datetime.strptime(clean_t, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        ui.print_status(f"无法识别的时间格式: {t_str}", "ERROR")
-        raise
+    except ValueError as e:
+        raise ValueError("无法识别的时间格式: {0}".format(t_str)) from e
 
 
 def time_to_str(dt: Union[datetime, str]) -> str:
@@ -63,18 +63,16 @@ def time_to_str(dt: Union[datetime, str]) -> str:
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return str(dt)
 
+
 def parse_range_logic(range_in: str) -> Tuple[int, int]:
     """解析播放时间范围字符串并返回起止秒数。"""
     if not range_in:
         return 0, 0
-    try:
-        nums = re.findall(r"\d+", range_in)
-        if len(nums) >= 2:
-            return int(nums[0]), int(nums[1])
-        elif len(nums) == 1:
-            return int(nums[0]), 0
-    except (ValueError, TypeError):
-        pass
+    nums = re.findall(r"\d+", range_in)
+    if len(nums) >= 2:
+        return int(nums[0]), int(nums[1])
+    if len(nums) == 1:
+        return int(nums[0]), 0
     return 0, 0
 
 
