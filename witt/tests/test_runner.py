@@ -128,30 +128,39 @@ class RuntimeCoordinatorTests(unittest.TestCase):
 
     def test_restore_runtime_environment_uses_python_runtime_sync(self) -> None:
         runner = self._build_runtime_runner()
+        version_info = Mock()
 
         with patch(
-            "core.runner.runtime_env.restore_runtime_environment",
+            "core.runner.runtime_env.load_version_info",
+            return_value=version_info,
+        ) as load_version_info, patch(
+            "core.runner.runtime_env.sync_runtime_environment",
             return_value=False,
-        ) as restore_runtime_environment, patch(
+        ) as sync_runtime_environment, patch(
             "core.runner.subprocess.run"
         ) as subprocess_run:
             runner.restore_runtime_environment()
 
-        restore_runtime_environment.assert_called_once_with(
-            version_path=Path("/tmp/version.json"),
-            vmc_path=Path("/tmp/mdrive/vmc.sh"),
-            vehicle_name="XZB600001",
+        load_version_info.assert_called_once_with(Path("/tmp/version.json"))
+        sync_runtime_environment.assert_called_once_with(
+            Path("/tmp/mdrive/vmc.sh"),
+            version_info,
+            "XZB600001",
         )
         subprocess_run.assert_not_called()
 
     def test_restore_runtime_environment_executes_vmc_when_runtime_changes(self) -> None:
         runner = self._build_runtime_runner()
         completed_process = Mock(returncode=0, stdout="")
+        version_info = Mock()
 
         with patch(
-            "core.runner.runtime_env.restore_runtime_environment",
+            "core.runner.runtime_env.load_version_info",
+            return_value=version_info,
+        ) as load_version_info, patch(
+            "core.runner.runtime_env.sync_runtime_environment",
             return_value=True,
-        ) as restore_runtime_environment, patch(
+        ) as sync_runtime_environment, patch(
             "core.runner.subprocess.run",
             return_value=completed_process,
         ) as subprocess_run, patch.dict(
@@ -161,10 +170,11 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         ):
             runner.restore_runtime_environment()
 
-        restore_runtime_environment.assert_called_once_with(
-            version_path=Path("/tmp/version.json"),
-            vmc_path=Path("/tmp/mdrive/vmc.sh"),
-            vehicle_name="XZB600001",
+        load_version_info.assert_called_once_with(Path("/tmp/version.json"))
+        sync_runtime_environment.assert_called_once_with(
+            Path("/tmp/mdrive/vmc.sh"),
+            version_info,
+            "XZB600001",
         )
         subprocess_run.assert_called_once_with(
             ["bash", "/tmp/mdrive/vmc.sh"],

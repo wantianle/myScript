@@ -5,6 +5,11 @@ from pathlib import Path
 
 from core.errors import RuntimeEnvironmentError
 
+_QUOTED_VMC_KEYS = (
+    "MDRIVE_VEHICLE_MODEL",
+    "MDRIVE_VEHICLE_NAME",
+)
+
 
 @dataclass
 class RuntimeVersionInfo:
@@ -28,17 +33,13 @@ def load_version_info(version_path: Path) -> RuntimeVersionInfo:
     conf_ver = raw_values.get("mdrive_conf", "")
     if not mdrive_ver or not conf_ver:
         raise RuntimeEnvironmentError("未能从文件中解析出 mdrive 或 mdrive_conf 版本")
-    vehicle_model = conf_ver.split(".", 1)[0]
-    model_ver = raw_values.get("mdrive_model", "")
-    map_ver = raw_values.get("mdrive_map", "")
-    localization_ver = raw_values.get("mdrive_map_localization", "")
     return RuntimeVersionInfo(
-        mdrive_ver=mdrive_ver,
-        conf_ver=conf_ver,
-        model_ver=model_ver,
-        map_ver=map_ver,
-        localization_ver=localization_ver,
-        vehicle_model=vehicle_model,
+        mdrive_ver=str(mdrive_ver),
+        conf_ver=str(conf_ver),
+        model_ver=str(raw_values.get("mdrive_model", "")),
+        map_ver=str(raw_values.get("mdrive_map", "")),
+        localization_ver=str(raw_values.get("mdrive_map_localization", "")),
+        vehicle_model=str(conf_ver).split(".", 1)[0],
     )
 
 
@@ -71,10 +72,7 @@ def sync_runtime_environment(
         return False
     updated_text = vmc_text
     for key_name, value_text in target_values.items():
-        replacement = "{0}={1}".format(
-            key_name,
-            '"{0}"'.format(value_text) if "VEHICLE_" in key_name else value_text,
-        )
+        replacement = _format_vmc_assignment(key_name, value_text)
         updated_text = re.sub(
             r"^{0}=.*$".format(key_name),
             replacement,
@@ -83,17 +81,6 @@ def sync_runtime_environment(
         )
     vmc_path.write_text(updated_text, encoding="utf-8")
     return True
-
-
-def restore_runtime_environment(
-    version_path: Path,
-    vmc_path: Path,
-    vehicle_name: str,
-) -> bool:
-    """解析版本文件并同步 vmc.sh。"""
-    version_info = load_version_info(version_path)
-    return sync_runtime_environment(vmc_path, version_info, vehicle_name)
-
 
 
 def _load_version_json(version_path: Path) -> dict:
@@ -128,3 +115,9 @@ def _extract_vmc_value(vmc_text: str, key_name: str) -> str:
     if matched_value is None:
         raise RuntimeEnvironmentError("vmc.sh 缺少必要字段: {0}".format(key_name))
     return matched_value.group(1).strip().strip('"')
+
+
+def _format_vmc_assignment(key_name: str, value_text: str) -> str:
+    if key_name in _QUOTED_VMC_KEYS:
+        return '{0}="{1}"'.format(key_name, value_text)
+    return "{0}={1}".format(key_name, value_text)

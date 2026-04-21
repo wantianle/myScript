@@ -119,10 +119,13 @@ class RuntimeCoordinator:
         """恢复运行环境版本配置并执行 vmc.sh 安装依赖。"""
         vmc_path = Path(self.ctx.host.mdrive_root) / "vmc.sh"
         try:
-            runtime_changed = runtime_env.restore_runtime_environment(
-                version_path=Path(str(self.ctx.logic.version)),
-                vmc_path=vmc_path,
-                vehicle_name=self.ctx.logic.vehicle,
+            version_info = runtime_env.load_version_info(
+                Path(str(self.ctx.logic.version))
+            )
+            runtime_changed = runtime_env.sync_runtime_environment(
+                vmc_path,
+                version_info,
+                self.ctx.logic.vehicle,
             )
             if not runtime_changed:
                 return
