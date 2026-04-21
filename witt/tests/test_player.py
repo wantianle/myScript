@@ -2,8 +2,10 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import Mock, patch
 
 from core.engine.player import RecordPlayer
+from core.models import LibraryEntry
 from core.models import ReplayRecord
 
 
@@ -13,6 +15,72 @@ class _FakeExecutor:
 
 
 class RecordPlayerTests(unittest.TestCase):
+    def test_load_library_returns_cached_entries_when_fingerprint_hits(self) -> None:
+        cached_library = [cast(Any, object())]
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(
+                get_library_fingerprint=Mock(return_value="fp-1"),
+                work_dir=Path("/tmp/work"),
+            ),
+            executor=_FakeExecutor(),
+        )
+        library_cache = SimpleNamespace(
+            load=Mock(return_value=cached_library),
+            save=Mock(),
+        )
+        player = RecordPlayer(
+            cast(Any, raw_session),
+            cast(Any, library_cache),
+            cast(Any, SimpleNamespace()),
+        )
+
+        library_result = player.load_library()
+
+        self.assertTrue(library_result.cache_hit)
+        self.assertIs(library_result.library, cached_library)
+        library_cache.load.assert_called_once_with("fp-1")
+        library_cache.save.assert_not_called()
+
+    def test_load_library_scans_and_saves_when_cache_misses(self) -> None:
+        raw_session = SimpleNamespace(
+            ctx=SimpleNamespace(
+                get_library_fingerprint=Mock(return_value="fp-1"),
+                work_dir=Path("/tmp/work"),
+            ),
+            executor=_FakeExecutor(),
+        )
+        library_cache = SimpleNamespace(
+            load=Mock(return_value=None),
+            save=Mock(),
+        )
+        metadata_repository = SimpleNamespace(
+            iter_record_meta=Mock(
+                return_value=[
+                    (Path("/tmp/work/tag_b"), cast(Any, object())),
+                    (Path("/tmp/work/tag_a"), cast(Any, object())),
+                ]
+            )
+        )
+        player = RecordPlayer(
+            cast(Any, raw_session),
+            cast(Any, library_cache),
+            cast(Any, metadata_repository),
+        )
+        tag_b = LibraryEntry(tag="tag_b", time="2026-04-15 12:00:01")
+        tag_a = LibraryEntry(tag="tag_a", time="2026-04-15 12:00:00")
+
+        with patch(
+            "core.engine.player.LibraryEntry.from_record_meta",
+            side_effect=[tag_b, tag_a],
+        ) as from_record_meta:
+            library_result = player.load_library()
+
+        self.assertFalse(library_result.cache_hit)
+        self.assertEqual(library_result.library, [tag_a, tag_b])
+        metadata_repository.iter_record_meta.assert_called_once_with(Path("/tmp/work"))
+        self.assertEqual(from_record_meta.call_count, 2)
+        library_cache.save.assert_called_once_with("fp-1", [tag_a, tag_b])
+
     def test_build_playback_plan_appends_blacklist_args(self) -> None:
         raw_session = SimpleNamespace(
             ctx=SimpleNamespace(
