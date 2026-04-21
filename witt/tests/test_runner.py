@@ -175,7 +175,7 @@ class RuntimeCoordinatorTests(unittest.TestCase):
             check=False,
         )
 
-    def test_start_replay_stack_uses_python_replay_stack(self) -> None:
+    def test_start_standard_replay_stack_uses_python_replay_stack(self) -> None:
         runner = RuntimeCoordinator(
             cast(
                 Any,
@@ -191,7 +191,7 @@ class RuntimeCoordinatorTests(unittest.TestCase):
             runner.replay_stack_manager,
             "start_standard_replay_stack",
         ) as start_standard_replay_stack:
-            runner.start_replay_stack()
+            runner.start_standard_replay_stack()
 
         start_standard_replay_stack.assert_called_once_with(runner.ctx)
 
