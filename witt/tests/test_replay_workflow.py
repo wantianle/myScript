@@ -392,12 +392,14 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 )
             ],
         )
-        init_logging = Mock()
+        setup_logger = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
-                init_logging=init_logging,
-                ctx=SimpleNamespace(logic=SimpleNamespace()),
+                ctx=SimpleNamespace(
+                    logic=SimpleNamespace(),
+                    setup_logger=setup_logger,
+                ),
             ),
         )
 
@@ -405,7 +407,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             replayed = replay_workflow.replay_history_entry(session, history_entry)
 
         self.assertTrue(replayed)
-        init_logging.assert_called_once_with()
+        setup_logger.assert_called_once_with()
         replay_records.assert_called_once()
 
     def test_replay_records_prepares_runtime_after_range_and_rate_selection(self) -> None:

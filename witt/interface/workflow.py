@@ -199,7 +199,7 @@ def auto_replay_progress(session: AppSession) -> None:
         "适合已经准备好本地回播目录的场景",
     )
     config_prompter.get_basic_params(session.ctx)
-    session.init_logging()
+    session.ctx.setup_logger()
     config_prompter.update_dest_root(
         session.ctx,
         "输入要扫描的回播路径(限/media下)",
@@ -218,7 +218,7 @@ def manual_replay_progress(session: AppSession) -> None:
         "支持单文件、多文件或目录输入",
     )
     config_prompter.get_basic_params(session.ctx)
-    session.init_logging()
+    session.ctx.setup_logger()
     replay_workflow.manual_replay_flow(
         session,
         replay_workflow.REPLAY_MODE_STANDARD,
@@ -233,7 +233,7 @@ def manual_replay_progress_with_paths(session: AppSession, path_texts: List[str]
         "仍会复用基础参数采集和标准回播流程",
     )
     config_prompter.get_basic_params(session.ctx)
-    session.init_logging()
+    session.ctx.setup_logger()
     replay_paths = [Path(path_text) for path_text in path_texts]
     replay_workflow.manual_replay_paths_flow(
         session,
@@ -261,7 +261,7 @@ def search_flow(
 ) -> Optional[List[TaskEntry]]:
     """采集查询条件并执行 Record 检索。"""
     config_prompter.get_basic_params(session.ctx)
-    session.init_logging()
+    session.ctx.setup_logger()
     config_prompter.get_source_path_params(
         session.ctx,
         allow_remote=allow_remote,

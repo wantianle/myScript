@@ -24,7 +24,7 @@ class FlowIntegrationTests(unittest.TestCase):
                 duration=20,
             )
         ]
-        init_logging = Mock()
+        setup_logger = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
@@ -34,8 +34,8 @@ class FlowIntegrationTests(unittest.TestCase):
                         vehicle="XZB600001",
                         target_date="20260419",
                     ),
+                    setup_logger=setup_logger,
                 ),
-                init_logging=init_logging,
                 player=SimpleNamespace(
                     load_library=Mock(
                         return_value=SimpleNamespace(
@@ -71,12 +71,11 @@ class FlowIntegrationTests(unittest.TestCase):
         replay_records.assert_called_once()
 
     def test_manual_then_replay(self) -> None:
-        init_logging = Mock()
+        setup_logger = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
-                ctx=SimpleNamespace(),
-                init_logging=init_logging,
+                ctx=SimpleNamespace(setup_logger=setup_logger),
                 recorder=SimpleNamespace(
                     get_info=Mock(
                         side_effect=[
@@ -106,7 +105,7 @@ class FlowIntegrationTests(unittest.TestCase):
                             workflow.manual_replay_progress(session)
 
         get_basic_params.assert_called_once_with(session.ctx)
-        init_logging.assert_called_once_with()
+        setup_logger.assert_called_once_with()
         update_blacklist.assert_called_once()
         replay_records.assert_called_once()
 
@@ -128,12 +127,14 @@ class FlowIntegrationTests(unittest.TestCase):
                 )
             ],
         )
-        init_logging = Mock()
+        setup_logger = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
-                init_logging=init_logging,
-                ctx=SimpleNamespace(logic=SimpleNamespace()),
+                ctx=SimpleNamespace(
+                    logic=SimpleNamespace(),
+                    setup_logger=setup_logger,
+                ),
             ),
         )
 
@@ -150,11 +151,11 @@ class FlowIntegrationTests(unittest.TestCase):
                         workflow.replay_history_progress(session)
 
         browse_replay_history.assert_called_once_with([history_entry])
-        init_logging.assert_called_once_with()
+        setup_logger.assert_called_once_with()
         replay_records.assert_called_once()
 
     def test_traffic_then_restore_environment_then_replay(self) -> None:
-        init_logging = Mock()
+        setup_logger = Mock()
         restore_runtime_environment = Mock()
         start_standard_replay_stack = Mock()
         start_traffic_light_stack = Mock()
@@ -162,8 +163,10 @@ class FlowIntegrationTests(unittest.TestCase):
         session = cast(
             AppSession,
             SimpleNamespace(
-                ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
-                init_logging=init_logging,
+                ctx=SimpleNamespace(
+                    logic=SimpleNamespace(version=""),
+                    setup_logger=setup_logger,
+                ),
                 runtime=SimpleNamespace(
                     restore_runtime_environment=restore_runtime_environment,
                     start_standard_replay_stack=start_standard_replay_stack,
@@ -214,7 +217,7 @@ class FlowIntegrationTests(unittest.TestCase):
                                                 replay_workflow.traffic_light_replay_flow(session)
 
         get_basic_params.assert_called_once_with(session.ctx)
-        init_logging.assert_called_once_with()
+        setup_logger.assert_called_once_with()
         restore_runtime_environment.assert_called_once_with()
         start_standard_replay_stack.assert_called_once_with()
         start_traffic_light_stack.assert_called_once_with()

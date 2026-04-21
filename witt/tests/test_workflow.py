@@ -104,7 +104,7 @@ class WorkflowTests(unittest.TestCase):
         show_result_section.assert_called_once()
 
     def test_search_flow_calls_prompt_collectors_and_runner(self) -> None:
-        init_logging = Mock()
+        setup_logger = Mock()
         task_entries = [
             TaskEntry(
                 time="2026-04-19 12:00:00",
@@ -118,8 +118,7 @@ class WorkflowTests(unittest.TestCase):
         session = cast(
             AppSession,
             SimpleNamespace(
-                ctx=SimpleNamespace(),
-                init_logging=init_logging,
+                ctx=SimpleNamespace(setup_logger=setup_logger),
                 runtime=SimpleNamespace(run_find_record=run_find_record),
             ),
         )
@@ -134,17 +133,16 @@ class WorkflowTests(unittest.TestCase):
         get_source_path_params.assert_called_once()
         get_export_path_params.assert_called_once_with(session.ctx)
         get_split_params.assert_called_once_with(session.ctx, "切片窗口")
-        init_logging.assert_called_once_with()
+        setup_logger.assert_called_once_with()
         run_find_record.assert_called_once_with()
         self.assertEqual(returned_tasks, task_entries)
 
     def test_search_flow_shows_result_when_find_record_script_fails(self) -> None:
-        init_logging = Mock()
+        setup_logger = Mock()
         session = cast(
             AppSession,
             SimpleNamespace(
-                ctx=SimpleNamespace(),
-                init_logging=init_logging,
+                ctx=SimpleNamespace(setup_logger=setup_logger),
                 runtime=SimpleNamespace(
                     run_find_record=Mock(
                         side_effect=ScriptExecutionError(

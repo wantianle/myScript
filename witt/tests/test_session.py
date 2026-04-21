@@ -60,7 +60,7 @@ class SessionConfigTests(unittest.TestCase):
                         with patch("core.session.MetadataRepository", return_value=object()):
                             with patch("core.session.LibraryCacheRepository", return_value=object()):
                                 with patch("core.session.ReplayHistoryRepository", return_value=object()):
-                                    with patch("core.engine.downloader.RecordDownloader", return_value=object()):
+                                    with patch("core.session.RecordDownloader", return_value=object()):
                                         with patch("core.session.RecordPlayer", return_value=object()):
                                             session = AppSession()
 

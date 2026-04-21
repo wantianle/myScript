@@ -170,11 +170,11 @@ def traffic_light_replay_flow(session: AppSession) -> None:
     manual = prompter.get_confirm_input("手动选择文件回灌？")
     if manual:
         config_prompter.get_basic_params(session.ctx)
-        session.init_logging()
+        session.ctx.setup_logger()
         manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
     else:
         config_prompter.get_basic_params(session.ctx)
-        session.init_logging()
+        session.ctx.setup_logger()
         config_prompter.update_dest_root(
             session.ctx,
             "输入要扫描的回灌路径(限/media下)",
@@ -192,11 +192,11 @@ def replay_flow(session: AppSession) -> None:
     manual = prompter.get_confirm_input("手动选择文件播放？")
     if manual:
         config_prompter.get_basic_params(session.ctx)
-        session.init_logging()
+        session.ctx.setup_logger()
         manual_replay_flow(session, REPLAY_MODE_STANDARD)
     else:
         config_prompter.get_basic_params(session.ctx)
-        session.init_logging()
+        session.ctx.setup_logger()
         config_prompter.update_dest_root(
             session.ctx,
             "输入要扫描的回播路径(限/media下)",
@@ -779,7 +779,7 @@ def replay_history_entry(
     if validate_only:
         return True
     _restore_replay_history_context(session, history_entry)
-    session.init_logging()
+    session.ctx.setup_logger()
     _replay_records(
         session,
         history_entry.records,
