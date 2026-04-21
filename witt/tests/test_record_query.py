@@ -23,9 +23,14 @@ class RecordQueryServiceTests(unittest.TestCase):
                     data_root="/tmp/local_root",
                     nas_root="/tmp/nas_root",
                 ),
-                logic=SimpleNamespace(mode=1, before=15, after=5, soc="soc1"),
-                target_date="20260419",
-                vehicle="XZB600001",
+                logic=SimpleNamespace(
+                    mode=1,
+                    before=15,
+                    after=5,
+                    soc="soc1",
+                    target_date="20260419",
+                    vehicle="XZB600001",
+                ),
             ),
         )
         record_query_service = RecordQueryService(ctx)
@@ -53,9 +58,14 @@ class RecordQueryServiceTests(unittest.TestCase):
                     data_root="/tmp/local_root",
                     nas_root="/tmp/nas_root",
                 ),
-                logic=SimpleNamespace(mode=2, before=15, after=5, soc=""),
-                target_date="20260419",
-                vehicle="XZB600001",
+                logic=SimpleNamespace(
+                    mode=2,
+                    before=15,
+                    after=5,
+                    soc="",
+                    target_date="20260419",
+                    vehicle="XZB600001",
+                ),
             ),
         )
         record_query_service = RecordQueryService(ctx)
@@ -95,9 +105,14 @@ class RecordQueryServiceTests(unittest.TestCase):
                     data_root="/tmp/local_root",
                     nas_root="/tmp/nas_root",
                 ),
-                logic=SimpleNamespace(mode=3, before=15, after=5, soc=""),
-                target_date="20260419",
-                vehicle="XZB600001",
+                logic=SimpleNamespace(
+                    mode=3,
+                    before=15,
+                    after=5,
+                    soc="",
+                    target_date="20260419",
+                    vehicle="XZB600001",
+                ),
             ),
         )
         record_query_service = RecordQueryService(ctx)

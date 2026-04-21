@@ -82,7 +82,7 @@ class RuntimeCoordinator:
     def _run_script(self, script_name: str, quiet: bool = False, *args: str) -> None:
         """注入环境变量并执行辅助脚本。"""
         script_path = self._resolve_script_path(script_name)
-        env_vars = self.ctx.get_env_vars()
+        env_vars = os.environ.copy()
         bash_cmd = ["bash"]
         # if self.ctx.config["env"]["debug"]:
         #     bash_cmd.append("-x")
@@ -107,7 +107,7 @@ class RuntimeCoordinator:
     ) -> str:
         """按需回显终端输出，并同时捕获辅助脚本输出。"""
         script_path = self._resolve_script_path(script_name)
-        env_vars = self.ctx.get_env_vars()
+        env_vars = os.environ.copy()
         cmd = ["bash", str(script_path), *args]
         master_fd, slave_fd = pty.openpty()
         output_chunks = []
@@ -169,12 +169,12 @@ class RuntimeCoordinator:
             runtime_changed = runtime_env.restore_runtime_environment(
                 version_path=Path(str(self.ctx.logic.version)),
                 vmc_path=vmc_path,
-                vehicle_name=self.ctx.vehicle,
+                vehicle_name=self.ctx.logic.vehicle,
             )
             if not runtime_changed:
                 return
             # 执行 vmc.sh 脚本来安装依赖
-            env_vars = self.ctx.get_env_vars()
+            env_vars = os.environ.copy()
             cmd = ["bash", str(vmc_path)]
             completed_process = subprocess.run(
                 cmd,

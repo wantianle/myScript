@@ -30,8 +30,10 @@ class FlowIntegrationTests(unittest.TestCase):
             SimpleNamespace(
                 ctx=SimpleNamespace(
                     work_dir="/tmp/work",
-                    vehicle="XZB600001",
-                    target_date="20260419",
+                    logic=SimpleNamespace(
+                        vehicle="XZB600001",
+                        target_date="20260419",
+                    ),
                 ),
                 init_logging=init_logging,
                 player=SimpleNamespace(

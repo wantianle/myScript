@@ -123,8 +123,8 @@ class RecordDownloader:
         meta_path = tag_dir / "meta.json"
         record_meta = RecordMeta.from_task_entry(
             task_entry=task_entry,
-            vehicle=self.ctx.vehicle,
-            date=self.ctx.target_date,
+            vehicle=self.ctx.logic.vehicle,
+            date=self.ctx.logic.target_date,
             before=int(self.ctx.logic.before),
             after=int(self.ctx.logic.after),
         )

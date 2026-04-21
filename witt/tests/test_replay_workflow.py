@@ -195,8 +195,10 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 ),
                 ctx=SimpleNamespace(
                     work_dir="/tmp/work",
-                    vehicle="XZB600001",
-                    target_date="20260419",
+                    logic=SimpleNamespace(
+                        vehicle="XZB600001",
+                        target_date="20260419",
+                    ),
                 ),
             ),
         )
@@ -231,8 +233,10 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 ),
                 ctx=SimpleNamespace(
                     work_dir="/tmp/work",
-                    vehicle="XZB600001",
-                    target_date="20260419",
+                    logic=SimpleNamespace(
+                        vehicle="XZB600001",
+                        target_date="20260419",
+                    ),
                 ),
             ),
         )
@@ -317,8 +321,10 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                 ),
                 ctx=SimpleNamespace(
                     work_dir="/tmp/work",
-                    vehicle="XZB600001",
-                    target_date="20260419",
+                    logic=SimpleNamespace(
+                        vehicle="XZB600001",
+                        target_date="20260419",
+                    ),
                 ),
             ),
         )
@@ -547,10 +553,12 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                             SimpleNamespace(
                                 ctx=SimpleNamespace(
                                     work_dir=work_dir,
-                                    target_date="20260419",
-                                    vehicle="XZB600013",
                                     host=SimpleNamespace(mdrive_root=str(mdrive_root)),
-                                    logic=SimpleNamespace(version=str(version_path)),
+                                    logic=SimpleNamespace(
+                                        version=str(version_path),
+                                        target_date="20260419",
+                                        vehicle="XZB600013",
+                                    ),
                                     playback_blacklist=[],
                                 ),
                             ),

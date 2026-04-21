@@ -1,12 +1,12 @@
 import logging
-import os
 import yaml
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 from core.models import AppConfig, DockerConfig, HostConfig, LogicConfig, PathsConfig, RemoteConfig
+
 
 class Formatter(logging.Formatter):
     """处理颜色与格式"""
@@ -27,14 +27,13 @@ class Formatter(logging.Formatter):
 
 @dataclass
 class TaskContext:
-    _logger_ready = False
     config_path: Path
 
     app_config: AppConfig = field(init=False)
     playback_blacklist: List[str] = field(init=False, default_factory=list)
-    active_log_key: str = field(init=False, default="")
+    _active_log_path: str = field(init=False, default="")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """加载配置并初始化当前会话的上下文目录。"""
         raw_config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
         self.app_config = AppConfig.from_dict(raw_config)
@@ -61,17 +60,9 @@ class TaskContext:
         return self.app_config.logic
 
     @property
-    def vehicle(self) -> str:
-        return self.logic.vehicle
-
-    @property
-    def target_date(self) -> str:
-        return self.logic.target_date
-
-    @property
     def work_dir(self) -> Path:
         base = Path(self.host.dest_root)
-        return base / self.target_date[:8] / self.vehicle
+        return base / self.logic.target_date[:8] / self.logic.vehicle
 
     @property
     def log_dir(self) -> Path:
@@ -88,12 +79,13 @@ class TaskContext:
 
     def setup_logger(self) -> None:
         """初始化全局日志器。"""
-        current_log_key = "{0}:{1}".format(self.target_date, self.vehicle)
-        if self._logger_ready and self.active_log_key == current_log_key:
+        log_dir = self.log_dir
+        current_log_path = str(log_dir)
+        if self._active_log_path == current_log_path:
             return
-        self.log_dir.mkdir(parents=True, exist_ok=True)
+        log_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = self.log_dir / f"witt_{timestamp}.log"
+        log_file = log_dir / f"witt_{timestamp}.log"
 
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
@@ -114,8 +106,7 @@ class TaskContext:
         fh.setFormatter(formatter)
         fh.setLevel(logging.DEBUG)
         logger.addHandler(fh)
-        TaskContext._logger_ready = True
-        self.active_log_key = current_log_key
+        self._active_log_path = current_log_path
         logging.info("=" * 50)
         logging.info(
             "Witt Logger Initialized. Data_root: %s", self.host.data_root
@@ -135,7 +126,3 @@ class TaskContext:
         mtimes.append(self.work_dir.stat().st_mtime)
         latest_mtime = max(mtimes)
         return f"{datetime.now().day}_{latest_mtime}"
-
-    def get_env_vars(self) -> Dict[str, str]:
-        """返回当前进程环境变量副本。"""
-        return os.environ.copy()

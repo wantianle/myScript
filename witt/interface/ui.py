@@ -136,12 +136,13 @@ def show_command_help(command_specs, target_command_name: str = "") -> None:
 
 def show_environment_summary(session) -> None:
     """打印当前会话环境摘要。"""
+    logic = session.ctx.logic
     _CONSOLE.print(
         _build_page_intro_panel(
             "当前环境",
             "车号 {0} | 日期 {1}".format(
-                session.ctx.vehicle or "未设置",
-                session.ctx.target_date or "未设置",
+                logic.vehicle or "未设置",
+                logic.target_date or "未设置",
             ),
             "修改 settings.yaml 后执行 config，重建当前会话配置",
         )
@@ -155,9 +156,9 @@ def show_environment_summary(session) -> None:
     )
     env_table.add_column("字段", style="label", width=16)
     env_table.add_column("值", style="accent")
-    env_table.add_row("车号", session.ctx.vehicle or "未设置")
-    env_table.add_row("日期", session.ctx.target_date or "未设置")
-    env_table.add_row("模式", str(getattr(session.ctx.logic, "mode", "")) or "未设置")
+    env_table.add_row("车号", logic.vehicle or "未设置")
+    env_table.add_row("日期", logic.target_date or "未设置")
+    env_table.add_row("模式", str(getattr(logic, "mode", "")) or "未设置")
     env_table.add_row("源路径", str(session.ctx.host.data_root))
     env_table.add_row("扫描/导出路径", str(session.ctx.host.dest_root))
     env_table.add_row("工作目录", str(session.ctx.work_dir))

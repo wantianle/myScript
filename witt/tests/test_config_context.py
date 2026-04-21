@@ -99,15 +99,18 @@ class TaskContextTests(unittest.TestCase):
             self.assertEqual(task_context.remote.ip, "192.168.10.2")
             self.assertEqual(task_context.docker.setup_env, "/env/setup.sh")
             self.assertEqual(task_context.paths.scripts_dir, "./scripts")
-            self.assertEqual(task_context.vehicle, "XZB600013")
+            self.assertEqual(task_context.logic.vehicle, "XZB600013")
             self.assertEqual(task_context.logic.after, 5)
             self.assertEqual(
                 str(task_context.work_dir),
-                "/host/dest/{0}/{1}".format(task_context.target_date[:8], task_context.vehicle),
+                "/host/dest/{0}/{1}".format(
+                    task_context.logic.target_date[:8],
+                    task_context.logic.vehicle,
+                ),
             )
 
             with patch.dict(os.environ, {"WITT_TEST_ENV": "demo"}, clear=False):
-                env_vars = task_context.get_env_vars()
+                env_vars = os.environ.copy()
                 self.assertEqual(env_vars["WITT_TEST_ENV"], "demo")
                 env_vars["WITT_TEST_ENV"] = "changed"
                 self.assertEqual(os.environ["WITT_TEST_ENV"], "demo")

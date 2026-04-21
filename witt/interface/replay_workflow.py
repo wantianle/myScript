@@ -358,8 +358,8 @@ def _post_replay_issue_draft(
         issue_description = issue_marker.issue_description
     issue_paths = _try_build_issue_paths(
         [replay_record.path for replay_record in records],
-        session.ctx.target_date,
-        session.ctx.vehicle,
+        session.ctx.logic.target_date,
+        session.ctx.logic.vehicle,
     )
     playback_command = _build_issue_playback_command(
         session,
@@ -369,8 +369,8 @@ def _post_replay_issue_draft(
     )
     issue_draft = IssueDraft(
         tag_text=display_tag or playback_plan.display_tag,
-        vehicle=session.ctx.vehicle,
-        target_date=session.ctx.target_date,
+        vehicle=session.ctx.logic.vehicle,
+        target_date=session.ctx.logic.target_date,
         playback_command=playback_command,
         version_text=load_version_text(session.ctx.logic.version),
         playback_rate=playback_plan.rate,
@@ -848,8 +848,8 @@ def auto_replay_flow(
             return
         selected_tag = replay_prompter.select_playback_entry(
             library,
-            session.ctx.vehicle,
-            session.ctx.target_date,
+            session.ctx.logic.vehicle,
+            session.ctx.logic.target_date,
         )
         if not selected_tag:
             break

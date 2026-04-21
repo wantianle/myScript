@@ -19,9 +19,10 @@ class RuntimeCoordinatorTests(unittest.TestCase):
                     paths=SimpleNamespace(scripts_dir="scripts"),
                     docker=SimpleNamespace(docker_scripts="/tmp"),
                     host=SimpleNamespace(mdrive_root="/tmp/mdrive"),
-                    logic=SimpleNamespace(version="/tmp/version.json"),
-                    vehicle="XZB600001",
-                    get_env_vars=Mock(return_value={"TEST_ENV": "1"}),
+                    logic=SimpleNamespace(
+                        version="/tmp/version.json",
+                        vehicle="XZB600001",
+                    ),
                 ),
             )
         )
@@ -153,7 +154,11 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         ) as restore_runtime_environment, patch(
             "core.runner.subprocess.run",
             return_value=completed_process,
-        ) as subprocess_run:
+        ) as subprocess_run, patch.dict(
+            "core.runner.os.environ",
+            {"TEST_ENV": "1"},
+            clear=True,
+        ):
             runner.restore_runtime_environment()
 
         restore_runtime_environment.assert_called_once_with(

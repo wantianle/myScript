@@ -20,22 +20,23 @@ class RecordQueryService:
 
     def run_query(self) -> List[TaskEntry]:
         """执行本地、NAS 或远程查询并返回任务列表。"""
+        logic = self.ctx.logic
         if self.ctx.logic.mode == 3:
             return record_finder.find_tasks_from_path_texts(
                 self._run_remote_find_paths(),
                 self._read_remote_text,
-                target_date=self.ctx.target_date,
-                before=int(self.ctx.logic.before),
-                after=int(self.ctx.logic.after),
-                soc_filter=str(getattr(self.ctx.logic, "soc", "")),
+                target_date=logic.target_date,
+                before=int(logic.before),
+                after=int(logic.after),
+                soc_filter=str(getattr(logic, "soc", "")),
                 source_root=str(self.ctx.remote.data_root),
             )
         return record_finder.find_local_tasks(
             self._resolve_find_record_root(),
-            target_date=self.ctx.target_date,
-            before=int(self.ctx.logic.before),
-            after=int(self.ctx.logic.after),
-            soc_filter=str(getattr(self.ctx.logic, "soc", "")),
+            target_date=logic.target_date,
+            before=int(logic.before),
+            after=int(logic.after),
+            soc_filter=str(getattr(logic, "soc", "")),
         )
 
     def _resolve_find_record_root(self) -> Path:
@@ -43,8 +44,8 @@ class RecordQueryService:
         if self.ctx.logic.mode == 2:
             return (
                 Path(self.ctx.host.nas_root)
-                / self.ctx.target_date[:8]
-                / self.ctx.vehicle
+                / self.ctx.logic.target_date[:8]
+                / self.ctx.logic.vehicle
             )
         return Path(str(self.ctx.host.data_root).rstrip("/"))
 
@@ -91,7 +92,7 @@ class RecordQueryService:
     def _run_remote_find_paths(self) -> List[str]:
         """读取远程查询根目录下的候选 record/tag 路径。"""
         remote_root = str(self.ctx.remote.data_root).rstrip("/")
-        target_date = self.ctx.target_date
+        target_date = self.ctx.logic.target_date
         soc_filter = str(getattr(self.ctx.logic, "soc", ""))
         record_filter = "-name '{0}*record*'".format(target_date)
         if soc_filter:
