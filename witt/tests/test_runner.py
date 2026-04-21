@@ -160,10 +160,11 @@ class RuntimeCoordinatorTests(unittest.TestCase):
         ) as load_version_info, patch(
             "core.runner.runtime_env.sync_runtime_environment",
             return_value=True,
-        ) as sync_runtime_environment, patch(
-            "core.runner.subprocess.run",
-            return_value=completed_process,
-        ) as subprocess_run, patch.dict(
+        ) as sync_runtime_environment, patch.object(
+            runner,
+            "_run_command_with_live_output",
+            return_value="",
+        ) as run_command_with_live_output, patch.dict(
             "core.runner.os.environ",
             {"TEST_ENV": "1"},
             clear=True,
@@ -176,13 +177,10 @@ class RuntimeCoordinatorTests(unittest.TestCase):
             version_info,
             "XZB600001",
         )
-        subprocess_run.assert_called_once_with(
+        run_command_with_live_output.assert_called_once_with(
             ["bash", "/tmp/mdrive/vmc.sh"],
-            env={"TEST_ENV": "1"},
-            text=True,
-            stdout=ANY,
-            stderr=ANY,
-            check=False,
+            {"TEST_ENV": "1"},
+            "vmc.sh",
         )
 
     def test_start_standard_replay_stack_uses_python_replay_stack(self) -> None:

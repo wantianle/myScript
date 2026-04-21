@@ -1,4 +1,6 @@
+import errno
 import os
+import pty
 from pathlib import Path
 from typing import List, TYPE_CHECKING
 import re
@@ -87,20 +89,58 @@ class RuntimeCoordinator:
         script_path = self._resolve_script_path(script_name)
         env_vars = os.environ.copy()
         cmd = ["bash", str(script_path), *args]
-        completed_process = subprocess.run(
+        self._run_command_with_live_output(
             cmd,
-            env=env_vars,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
+            env_vars,
+            script_name,
+            echo_output=echo_output,
         )
-        script_output = completed_process.stdout or ""
-        if echo_output and script_output:
-            sys.stdout.write(script_output)
-            sys.stdout.flush()
-        if completed_process.returncode != 0:
-            raise self._build_script_execution_error(script_name, script_output)
+
+    def _run_command_with_live_output(
+        self,
+        cmd: List[str],
+        env_vars: dict,
+        operation_name: str,
+        echo_output: bool = True,
+    ) -> str:
+        """实时回显命令输出，并在失败时保留完整输出构造结构化异常。"""
+        master_fd, slave_fd = pty.openpty()
+        output_chunks = []
+        process = None
+        try:
+            process = subprocess.Popen(
+                cmd,
+                env=env_vars,
+                stdout=slave_fd,
+                stderr=slave_fd,
+            )
+            os.close(slave_fd)
+            slave_fd = -1
+            while True:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError as exc:
+                    if exc.errno == errno.EIO:
+                        break
+                    raise
+                if not chunk:
+                    break
+                text = chunk.decode("utf-8", errors="replace")
+                output_chunks.append(text)
+                if echo_output:
+                    sys.stdout.write(text)
+                    sys.stdout.flush()
+            output_text = "".join(output_chunks)
+            return_code = process.wait()
+            if return_code != 0:
+                raise self._build_script_execution_error(operation_name, output_text)
+            return output_text
+        finally:
+            if slave_fd >= 0:
+                os.close(slave_fd)
+            os.close(master_fd)
+            if process is not None and process.poll() is None:
+                process.wait()
 
     def run_find_record(self) -> List[TaskEntry]:
         """执行 record 查询并返回任务列表。"""
@@ -132,20 +172,11 @@ class RuntimeCoordinator:
             # 执行 vmc.sh 脚本来安装依赖
             env_vars = os.environ.copy()
             cmd = ["bash", str(vmc_path)]
-            completed_process = subprocess.run(
+            self._run_command_with_live_output(
                 cmd,
-                env=env_vars,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                check=False,
+                env_vars,
+                "vmc.sh",
             )
-            script_output = completed_process.stdout or ""
-            if script_output:
-                sys.stdout.write(script_output)
-                sys.stdout.flush()
-            if completed_process.returncode != 0:
-                raise self._build_script_execution_error("vmc.sh", script_output)
         except RuntimeEnvironmentError as e:
             raise ScriptExecutionError("runtime_environment", str(e)) from e
 
