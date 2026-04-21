@@ -230,7 +230,7 @@ def _handle_history_subcommand(
     if subcommand == "clear":
         if not prompter.get_confirm_input("确认清空全部历史记录？"):
             return True
-        session.replay_history_repository.clear()
+        session.replay_history_repository.save([])
         ui.show_notice_section(
             "历史命令",
             "已清空全部回播历史",

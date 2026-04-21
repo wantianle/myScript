@@ -96,13 +96,3 @@ class ReplayHistoryRepository:
             ),
             encoding="utf-8",
         )
-
-    def append(self, history_entry: ReplayHistoryEntry) -> None:
-        """追加一条回播历史。"""
-        history_entries = self.load()
-        history_entries.append(history_entry)
-        self.save(history_entries)
-
-    def clear(self) -> None:
-        """清空全部回播历史。"""
-        self.save([])

@@ -89,8 +89,8 @@ class CliTests(unittest.TestCase):
         show_notice_section.assert_called_once()
 
     def test_handle_history_subcommand_clear_clears_repository(self) -> None:
-        clear_history = Mock()
-        history_repository = SimpleNamespace(clear=clear_history)
+        save_history = Mock()
+        history_repository = SimpleNamespace(save=save_history)
         session = cast(
             AppSession,
             SimpleNamespace(replay_history_repository=history_repository),
@@ -106,7 +106,7 @@ class CliTests(unittest.TestCase):
                 handled = cli._handle_history_subcommand(session, command_invocation)
 
         self.assertTrue(handled)
-        clear_history.assert_called_once_with()
+        save_history.assert_called_once_with([])
         show_notice_section.assert_called_once()
 
     def test_handle_history_subcommand_invalid_shows_result(self) -> None:

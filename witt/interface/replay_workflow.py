@@ -515,7 +515,9 @@ def _save_replay_history(
         source_type,
     )
     try:
-        history_repository.append(history_entry)
+        history_entries = history_repository.load()
+        history_entries.append(history_entry)
+        history_repository.save(history_entries)
     except OSError as e:
         ui.show_result_section(
             "回播历史",
@@ -715,7 +717,7 @@ def replay_history_flow(session: AppSession) -> None:
         if history_index == 0:
             if not prompter.get_confirm_input("确认清空全部历史记录？"):
                 continue
-            session.replay_history_repository.clear()
+            session.replay_history_repository.save([])
             ui.show_notice_section(
                 "历史回播",
                 "已清空全部回播历史",
