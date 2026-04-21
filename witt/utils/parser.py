@@ -22,7 +22,10 @@ def parse_record_info(stdout: str) -> RecordInfo:
     begin_time = str_to_time(raw_time[0])
     end_time = str_to_time(raw_time[1])
     duration = math.floor(float(raw_duration[0]))
-    channels = [ChannelInfo.from_raw(name, count) for name, count in raw_channels]
+    channels = [
+        ChannelInfo(name=name, count=int(count))
+        for name, count in raw_channels
+    ]
     return RecordInfo.from_components(
         begin=begin_time,
         end=end_time,

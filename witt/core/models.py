@@ -4,14 +4,6 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, TypedDict, Union
 
 
-class RawTaskEntry(TypedDict, total=False):
-    time: str
-    name: str
-    soc_paths: Dict[str, List[str]]
-    paths: List[str]
-    id: str
-
-
 class RawLogicConfig(TypedDict, total=False):
     vehicle: str
     target_date: str
@@ -78,30 +70,15 @@ class RawReplayHistoryEntry(TypedDict, total=False):
     channel_filters: List[str]
 
 
-class RawLibraryEntryRequired(TypedDict):
+class RawLibraryEntry(TypedDict, total=False):
     tag: str
     time: str
-
-
-class RawLibraryEntry(RawLibraryEntryRequired, total=False):
     last_update: Dict[str, str]
     socs: Dict[str, List[RawReplayRecord]]
 
 
-class RawTagInfo(TypedDict):
-    name: str
-    time: str
-    offset_bf: int
-    offset_af: int
-    abs_start: str
-    abs_end: str
-
-
-class RawRecordMetaRequired(TypedDict):
-    tag_info: RawTagInfo
-
-
-class RawRecordMeta(RawRecordMetaRequired, total=False):
+class RawRecordMeta(TypedDict, total=False):
+    tag_info: Dict[str, Union[str, int]]
     vehicle: str
     date: str
     last_update: Dict[str, str]
@@ -263,19 +240,6 @@ class ReplayRecord:
     duration: int
 
     @classmethod
-    def from_local_file(
-        cls,
-        file_path: Path,
-        begin: Union[str, datetime],
-        duration: Union[int, float],
-    ) -> "ReplayRecord":
-        return cls(
-            path=str(file_path.absolute()),
-            begin=begin,
-            duration=int(duration),
-        )
-
-    @classmethod
     def from_cache_dict(cls, raw_record: RawReplayRecord) -> "ReplayRecord":
         return cls(
             path=str(raw_record["path"]),
@@ -401,9 +365,13 @@ class LibraryEntry:
 
     @classmethod
     def from_cache_dict(cls, raw_entry: RawLibraryEntry) -> "LibraryEntry":
+        raw_tag = raw_entry.get("tag")
+        raw_time = raw_entry.get("time")
+        if raw_tag is None or raw_time is None:
+            raise ValueError("library cache entry missing tag or time")
         return cls(
-            tag=str(raw_entry["tag"]),
-            time=str(raw_entry["time"]),
+            tag=str(raw_tag),
+            time=str(raw_time),
             last_update=dict(raw_entry.get("last_update") or {}),
             socs={
                 soc_name: [
@@ -435,8 +403,7 @@ class LibraryEntry:
             time=record_meta.tag_info.time,
             last_update=dict(record_meta.last_update),
         )
-        for soc_name, file_names in record_meta.files.items():
-            del file_names
+        for soc_name in record_meta.files:
             replay_records = record_meta.build_soc_replay_records(tag_dir, soc_name)
             if replay_records:
                 entry.socs[soc_name] = replay_records
@@ -447,10 +414,6 @@ class LibraryEntry:
 class ChannelInfo:
     name: str
     count: int
-
-    @classmethod
-    def from_raw(cls, name: str, count: Union[str, int]) -> "ChannelInfo":
-        return cls(name=name, count=int(count))
 
 
 @dataclass
@@ -479,27 +442,6 @@ class TagInfo:
             abs_end=(task_datetime + timedelta(seconds=after)).isoformat(),
         )
 
-    @classmethod
-    def from_dict(cls, raw_tag_info: RawTagInfo) -> "TagInfo":
-        return cls(
-            name=str(raw_tag_info["name"]),
-            time=str(raw_tag_info["time"]),
-            offset_bf=int(raw_tag_info["offset_bf"]),
-            offset_af=int(raw_tag_info["offset_af"]),
-            abs_start=str(raw_tag_info["abs_start"]),
-            abs_end=str(raw_tag_info["abs_end"]),
-        )
-
-    def to_dict(self) -> RawTagInfo:
-        return {
-            "name": self.name,
-            "time": self.time,
-            "offset_bf": self.offset_bf,
-            "offset_af": self.offset_af,
-            "abs_start": self.abs_start,
-            "abs_end": self.abs_end,
-        }
-
 
 @dataclass
 class RecordMeta:
@@ -526,8 +468,16 @@ class RecordMeta:
 
     @classmethod
     def from_dict(cls, raw_meta: RawRecordMeta) -> "RecordMeta":
+        raw_tag_info: Dict[str, Union[str, int]] = raw_meta.get("tag_info") or {}
         return cls(
-            tag_info=TagInfo.from_dict(raw_meta["tag_info"]),
+            tag_info=TagInfo(
+                name=str(raw_tag_info.get("name", "")),
+                time=str(raw_tag_info.get("time", "")),
+                offset_bf=int(raw_tag_info.get("offset_bf", 0)),
+                offset_af=int(raw_tag_info.get("offset_af", 0)),
+                abs_start=str(raw_tag_info.get("abs_start", "")),
+                abs_end=str(raw_tag_info.get("abs_end", "")),
+            ),
             vehicle=str(raw_meta.get("vehicle", "")),
             date=str(raw_meta.get("date", "")),
             last_update={
@@ -566,8 +516,8 @@ class RecordMeta:
 
     def build_replay_record(self, file_path: Path) -> ReplayRecord:
         """基于当前元数据窗口为单个文件构造回放记录。"""
-        return ReplayRecord.from_local_file(
-            file_path=file_path,
+        return ReplayRecord(
+            path=str(file_path.absolute()),
             begin=self.tag_info.abs_start,
             duration=self.replay_duration,
         )
@@ -590,7 +540,14 @@ class RecordMeta:
 
     def to_dict(self) -> RawRecordMeta:
         return {
-            "tag_info": self.tag_info.to_dict(),
+            "tag_info": {
+                "name": self.tag_info.name,
+                "time": self.tag_info.time,
+                "offset_bf": self.tag_info.offset_bf,
+                "offset_af": self.tag_info.offset_af,
+                "abs_start": self.tag_info.abs_start,
+                "abs_end": self.tag_info.abs_end,
+            },
             "vehicle": self.vehicle,
             "date": self.date,
             "last_update": self.last_update,
