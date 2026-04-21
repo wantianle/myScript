@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from core.models import ChannelInfo
 from core.session import AppSession
-from interface import prompter_channel as channel_prompter
+from interface import prompter_channel
 
 
 class ChannelPrompterTests(unittest.TestCase):
@@ -15,7 +15,7 @@ class ChannelPrompterTests(unittest.TestCase):
             ChannelInfo(name="/radar", count=5),
         ]
 
-        filtered_channels = channel_prompter._filter_channels(channels, "camera 10")
+        filtered_channels = prompter_channel._filter_channels(channels, "camera 10")
 
         self.assertEqual([channel.name for channel in filtered_channels], ["/camera/front"])
 
@@ -29,7 +29,7 @@ class ChannelPrompterTests(unittest.TestCase):
             "interface.prompter_channel.prompter.prompt_text",
             side_effect=["/camera", "1"],
         ):
-            selected_channels = channel_prompter.select_channels_wizard(
+            selected_channels = prompter_channel.select_channels_wizard(
                 channels,
                 prompt="选择频道",
             )
@@ -39,7 +39,7 @@ class ChannelPrompterTests(unittest.TestCase):
     def test_get_paths_channels_returns_empty_when_confirm_declined(self) -> None:
         session = cast(AppSession, SimpleNamespace())
 
-        result = channel_prompter.get_paths_channels(
+        result = prompter_channel.get_paths_channels(
             session,
             ["/tmp/soc1/demo.record"],
             lambda prompt, default: False,
@@ -71,7 +71,7 @@ class ChannelPrompterTests(unittest.TestCase):
             "interface.prompter_channel.select_channels_wizard",
             side_effect=lambda channels, prompt: [channel.name for channel in channels],
         ):
-            selected_channels = channel_prompter.get_paths_channels(
+            selected_channels = prompter_channel.get_paths_channels(
                 session,
                 [
                     "/tmp/root/soc1/demo.record",

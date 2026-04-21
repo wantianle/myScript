@@ -33,8 +33,10 @@ def menu() -> None:
     _render_repl_home()
 
     while True:
-        raw_command = prompter.get_command_input(prompt_session)
-        if raw_command is None:
+        try:
+            raw_command = prompt_session.prompt("Witt > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
             sys.exit(0)
         command_invocation = prompter.parse_command(raw_command)
         if command_invocation is None:
@@ -123,11 +125,11 @@ def _clear_screen() -> None:
 def _handle_help_command(command_invocation: prompter.CommandInvocation) -> None:
     """处理 help 命令。"""
     if not command_invocation.args:
-        ui.show_command_help(prompter.get_command_specs())
+        ui.show_command_help(prompter.COMMAND_SPECS)
         return
     target_command_name = prompter.normalize_command(command_invocation.args[0])
     ui.show_command_help(
-        prompter.get_command_specs(),
+        prompter.COMMAND_SPECS,
         target_command_name=target_command_name,
     )
 

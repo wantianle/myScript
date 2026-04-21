@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from core.models import LibraryEntry, ReplayRecord
-from interface import prompter_replay as replay_prompter
+from interface import prompter_replay
 
 
 class ReplayPrompterTests(unittest.TestCase):
@@ -20,7 +20,7 @@ class ReplayPrompterTests(unittest.TestCase):
             ),
         ]
 
-        filtered_entries = replay_prompter._filter_playback_entries(
+        filtered_entries = prompter_replay._filter_playback_entries(
             library,
             "demo soc1",
         )
@@ -36,7 +36,7 @@ class ReplayPrompterTests(unittest.TestCase):
             side_effect=lambda *args, **kwargs: next(user_inputs),
         ):
             with patch("interface.prompter_replay.ui.show_input_feedback") as show_input_feedback:
-                selected_item = replay_prompter._select_filtered_value(
+                selected_item = prompter_replay._select_filtered_value(
                     ["foo", "bar", "baz"],
                     lambda items, keyword, total: render_calls.append(
                         (list(items), keyword, total)
@@ -68,7 +68,7 @@ class ReplayPrompterTests(unittest.TestCase):
             side_effect=lambda *args, **kwargs: next(user_inputs),
         ):
             with patch("interface.prompter_replay.ui.show_input_feedback") as show_input_feedback:
-                selected_value = replay_prompter._select_filtered_value(
+                selected_value = prompter_replay._select_filtered_value(
                     [1],
                     lambda items, keyword, total: render_calls.append(
                         (list(items), keyword, total)

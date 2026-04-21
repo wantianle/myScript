@@ -55,10 +55,11 @@ def create_command_prompt_session() -> PromptSession:
     """创建命令行 REPL 会话。"""
     history_path = Path.home() / ".witt" / "command_history"
     history_path.parent.mkdir(parents=True, exist_ok=True)
-    completer_words = []
-    for command_spec in COMMAND_SPECS:
-        completer_words.append(command_spec.name)
-        completer_words.extend(command_spec.aliases)
+    completer_words = [
+        alias
+        for command_spec in COMMAND_SPECS
+        for alias in [command_spec.name] + command_spec.aliases
+    ]
     command_completer = WordCompleter(
         _sort_completion_words(completer_words),
         ignore_case=True,
@@ -70,16 +71,6 @@ def create_command_prompt_session() -> PromptSession:
         auto_suggest=AutoSuggestFromHistory(),
         bottom_toolbar=_COMMAND_TOOLBAR_TEXT,
     )
-
-
-def get_command_input(prompt_session: PromptSession) -> Optional[str]:
-    """读取一条命令输入。"""
-    try:
-        command_text = prompt_session.prompt("Witt > ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return None
-    return command_text
 
 
 def normalize_command(command_text: str) -> str:
@@ -105,11 +96,6 @@ def parse_command(command_text: str) -> Optional[CommandInvocation]:
         args=command_parts[1:],
         raw=raw_text,
     )
-
-
-def get_command_specs() -> List[CommandSpec]:
-    """返回命令定义列表。"""
-    return list(COMMAND_SPECS)
 
 
 def _sort_completion_words(words: Sequence[object]) -> List[str]:
@@ -395,11 +381,3 @@ def get_confirm_input(prompt: str, default: bool = False) -> bool:
     if not res:
         return default
     return res == "y"
-
-
-def wait_for_continue() -> None:
-    """等待用户确认后继续回到主菜单。"""
-    try:
-        prompt_text("按回车键继续", history_name="continue")
-    except KeyboardInterrupt:
-        print()

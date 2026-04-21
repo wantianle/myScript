@@ -28,7 +28,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             ),
         )
 
-        with patch("interface.replay_workflow.config_prompter.get_json_input", return_value=""):
+        with patch("interface.replay_workflow.prompter_config.get_json_input", return_value=""):
             with patch("interface.replay_workflow.ui.show_notice_section") as show_notice_section:
                 restored = replay_workflow.restore_environment_flow(session, auto=False)
 
@@ -242,11 +242,11 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         )
 
         with patch(
-            "interface.replay_workflow.replay_prompter.select_playback_entry",
+            "interface.replay_workflow.prompter_replay.select_playback_entry",
             side_effect=[selected_tag, None],
         ):
             with patch(
-                "interface.replay_workflow.replay_prompter.select_replay_records",
+                "interface.replay_workflow.prompter_replay.select_replay_records",
                 return_value=target_records,
             ):
                 with patch("interface.replay_workflow.ui.show_progress_section") as show_progress_section:
@@ -282,7 +282,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         session = cast(AppSession, SimpleNamespace())
 
         with patch(
-            "interface.replay_workflow.replay_prompter.select_source_task_entry",
+            "interface.replay_workflow.prompter_replay.select_source_task_entry",
             side_effect=[task_entry, None],
         ):
             with patch(
@@ -330,11 +330,11 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         )
 
         with patch(
-            "interface.replay_workflow.replay_prompter.select_playback_entry",
+            "interface.replay_workflow.prompter_replay.select_playback_entry",
             side_effect=[selected_tag, None],
         ):
             with patch(
-                "interface.replay_workflow.replay_prompter.select_replay_records",
+                "interface.replay_workflow.prompter_replay.select_replay_records",
                 return_value=target_records,
             ):
                 with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
@@ -441,11 +441,11 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         ]
 
         with patch(
-            "interface.replay_workflow.replay_prompter.get_playback_range",
+            "interface.replay_workflow.prompter_replay.get_playback_range",
             side_effect=lambda: event_log.append(("range",)) or (0, 0),
         ):
             with patch(
-                "interface.replay_workflow.replay_prompter.get_playback_rate",
+                "interface.replay_workflow.prompter_replay.get_playback_rate",
                 side_effect=lambda: event_log.append(("rate",)) or 1.0,
             ):
                 with patch(
@@ -501,11 +501,11 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         ]
 
         with patch(
-            "interface.replay_workflow.replay_prompter.get_playback_range",
+            "interface.replay_workflow.prompter_replay.get_playback_range",
             side_effect=[(0, 0), (1, 0)],
         ):
             with patch(
-                "interface.replay_workflow.replay_prompter.get_playback_rate",
+                "interface.replay_workflow.prompter_replay.get_playback_rate",
                 side_effect=[1.0, 1.0],
             ):
                 with patch("interface.replay_workflow._prepare_replay", return_value=True) as prepare_replay:

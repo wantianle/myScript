@@ -12,40 +12,34 @@ from interface import prompter
 class CliTests(unittest.TestCase):
     def test_menu_renders_banner_on_startup(self) -> None:
         session = cast(AppSession, SimpleNamespace())
-        prompt_session = object()
+        prompt_session = SimpleNamespace(prompt=Mock(side_effect=EOFError))
 
         with patch("interface.cli.AppSession", return_value=session):
             with patch(
                 "interface.cli.prompter.create_command_prompt_session",
                 return_value=prompt_session,
             ):
-                with patch(
-                    "interface.cli.prompter.get_command_input",
-                    return_value=None,
-                ):
-                    with patch("interface.cli.ui.print_banner") as print_banner:
-                        with self.assertRaises(SystemExit):
-                            cli.menu()
+                with patch("interface.cli.ui.print_banner") as print_banner:
+                    with self.assertRaises(SystemExit):
+                        cli.menu()
 
         print_banner.assert_called_once_with()
 
     def test_menu_clear_command_redraws_banner(self) -> None:
         session = cast(AppSession, SimpleNamespace())
-        prompt_session = object()
+        prompt_session = SimpleNamespace(
+            prompt=Mock(side_effect=["clear", EOFError])
+        )
 
         with patch("interface.cli.AppSession", return_value=session):
             with patch(
                 "interface.cli.prompter.create_command_prompt_session",
                 return_value=prompt_session,
             ):
-                with patch(
-                    "interface.cli.prompter.get_command_input",
-                    side_effect=["clear", None],
-                ):
-                    with patch("interface.cli.ui.print_banner") as print_banner:
-                        with patch("interface.cli._clear_screen") as clear_screen:
-                            with self.assertRaises(SystemExit):
-                                cli.menu()
+                with patch("interface.cli.ui.print_banner") as print_banner:
+                    with patch("interface.cli._clear_screen") as clear_screen:
+                        with self.assertRaises(SystemExit):
+                            cli.menu()
 
         clear_screen.assert_called_once_with()
         self.assertEqual(print_banner.call_count, 2)

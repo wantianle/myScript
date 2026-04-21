@@ -47,14 +47,14 @@ class FlowIntegrationTests(unittest.TestCase):
             ),
         )
 
-        with patch("interface.workflow.config_prompter.get_basic_params") as get_basic_params:
-            with patch("interface.workflow.config_prompter.update_dest_root") as update_dest_root:
+        with patch("interface.workflow.prompter_config.get_basic_params") as get_basic_params:
+            with patch("interface.workflow.prompter_config.update_dest_root") as update_dest_root:
                 with patch(
-                    "interface.replay_workflow.replay_prompter.select_playback_entry",
+                    "interface.replay_workflow.prompter_replay.select_playback_entry",
                     side_effect=[selected_tag, None],
                 ):
                     with patch(
-                        "interface.replay_workflow.replay_prompter.select_replay_records",
+                        "interface.replay_workflow.prompter_replay.select_replay_records",
                         return_value=target_records,
                     ):
                         with patch("interface.replay_workflow._update_playback_blacklist") as update_blacklist:
@@ -94,9 +94,9 @@ class FlowIntegrationTests(unittest.TestCase):
         )
         manual_paths = [Path("/tmp/demo.record")]
 
-        with patch("interface.workflow.config_prompter.get_basic_params") as get_basic_params:
+        with patch("interface.workflow.prompter_config.get_basic_params") as get_basic_params:
             with patch(
-                "interface.replay_workflow.replay_prompter.get_manual_replay_paths",
+                "interface.replay_workflow.prompter_replay.get_manual_replay_paths",
                 return_value=manual_paths,
             ):
                 with patch("interface.replay_workflow.termios.tcflush"):
@@ -144,7 +144,7 @@ class FlowIntegrationTests(unittest.TestCase):
         ):
             with patch("interface.replay_workflow.ui.browse_replay_history") as browse_replay_history:
                 with patch(
-                    "interface.replay_workflow.replay_prompter.select_replay_history_index",
+                    "interface.replay_workflow.prompter_replay.select_replay_history_index",
                     return_value=1,
                 ):
                     with patch("interface.replay_workflow._replay_records") as replay_records:
@@ -205,13 +205,13 @@ class FlowIntegrationTests(unittest.TestCase):
             "interface.replay_workflow.prompter.get_confirm_input",
             side_effect=[True, True, True, False],
         ):
-            with patch("interface.replay_workflow.config_prompter.get_json_input", return_value="/tmp/version.json"):
-                with patch("interface.replay_workflow.replay_prompter.get_playback_range", return_value=(0, 0)):
-                    with patch("interface.replay_workflow.replay_prompter.get_playback_rate", return_value=1.0):
-                        with patch("interface.workflow.config_prompter.get_basic_params") as get_basic_params:
-                            with patch("interface.replay_workflow.replay_prompter.get_manual_replay_paths", return_value=manual_paths):
+            with patch("interface.replay_workflow.prompter_config.get_json_input", return_value="/tmp/version.json"):
+                with patch("interface.replay_workflow.prompter_replay.get_playback_range", return_value=(0, 0)):
+                    with patch("interface.replay_workflow.prompter_replay.get_playback_rate", return_value=1.0):
+                        with patch("interface.workflow.prompter_config.get_basic_params") as get_basic_params:
+                            with patch("interface.replay_workflow.prompter_replay.get_manual_replay_paths", return_value=manual_paths):
                                 with patch("interface.replay_workflow.termios.tcflush"):
-                                    with patch("interface.replay_workflow.channel_prompter.get_paths_channels", return_value=[]):
+                                    with patch("interface.replay_workflow.prompter_channel.get_paths_channels", return_value=[]):
                                         with patch("interface.replay_workflow._collect_issue_marker", return_value=None):
                                             with patch("interface.replay_workflow._post_replay_issue_draft"):
                                                 replay_workflow.traffic_light_replay_flow(session)

@@ -2,8 +2,8 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 from . import prompter
-from . import prompter_channel as channel_prompter
-from . import prompter_config as config_prompter
+from . import prompter_channel
+from . import prompter_config
 from . import ui
 from . import replay_workflow
 from core.engine.downloader import FailedBatch, SkippedBatch
@@ -105,9 +105,9 @@ def slice_progress(session: AppSession) -> None:
         )
         return
     session.ctx.logic.blacklist = (
-        channel_prompter.get_tasks_channels(
+        prompter_channel.get_paths_channels(
             session,
-            valid_tasks,
+            [path_text for task_entry in valid_tasks for path_text in task_entry.paths],
             prompter.get_confirm_input,
         )
         or []
@@ -198,9 +198,9 @@ def auto_replay_progress(session: AppSession) -> None:
         "扫描本地目录并从回播库中选择条目",
         "适合已经准备好本地回播目录的场景",
     )
-    config_prompter.get_basic_params(session.ctx)
+    prompter_config.get_basic_params(session.ctx)
     session.ctx.setup_logger()
-    config_prompter.update_dest_root(
+    prompter_config.update_dest_root(
         session.ctx,
         "输入要扫描的回播路径(限/media下)",
     )
@@ -217,7 +217,7 @@ def manual_replay_progress(session: AppSession) -> None:
         "直接粘贴或拖拽 record 文件/目录后回播",
         "支持单文件、多文件或目录输入",
     )
-    config_prompter.get_basic_params(session.ctx)
+    prompter_config.get_basic_params(session.ctx)
     session.ctx.setup_logger()
     replay_workflow.manual_replay_flow(
         session,
@@ -232,7 +232,7 @@ def manual_replay_progress_with_paths(session: AppSession, path_texts: List[str]
         "直接使用命令提供的 record 路径进入回播",
         "仍会复用基础参数采集和标准回播流程",
     )
-    config_prompter.get_basic_params(session.ctx)
+    prompter_config.get_basic_params(session.ctx)
     session.ctx.setup_logger()
     replay_paths = [Path(path_text) for path_text in path_texts]
     replay_workflow.manual_replay_paths_flow(
@@ -260,16 +260,16 @@ def search_flow(
     split_window_name: str = "切片窗口",
 ) -> Optional[List[TaskEntry]]:
     """采集查询条件并执行 Record 检索。"""
-    config_prompter.get_basic_params(session.ctx)
+    prompter_config.get_basic_params(session.ctx)
     session.ctx.setup_logger()
-    config_prompter.get_source_path_params(
+    prompter_config.get_source_path_params(
         session.ctx,
         allow_remote=allow_remote,
         preset_mode=preset_mode,
     )
     if need_export_path:
-        config_prompter.get_export_path_params(session.ctx)
-    config_prompter.get_split_params(session.ctx, split_window_name)
+        prompter_config.get_export_path_params(session.ctx)
+    prompter_config.get_split_params(session.ctx, split_window_name)
     try:
         return session.runtime.run_find_record()
     except ScriptExecutionError as e:

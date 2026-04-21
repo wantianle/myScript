@@ -130,15 +130,3 @@ def get_paths_channels(
     unique_channels = _get_paths_channels(session, path_texts)
     return select_channels_wizard(unique_channels, prompt="请【选中】要删除的频道:")
 
-
-def get_tasks_channels(
-    session: AppSession,
-    tasks: List[TaskEntry],
-    confirm_prompt: Callable[[str, bool], bool],
-) -> List[str]:
-    """交互式选择要过滤掉的频道。"""
-    return get_paths_channels(
-        session,
-        [path_text for task_entry in tasks for path_text in task_entry.paths],
-        confirm_prompt,
-    )

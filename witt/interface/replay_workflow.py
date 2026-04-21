@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from . import prompter
-from . import prompter_channel as channel_prompter
-from . import prompter_config as config_prompter
-from . import prompter_replay as replay_prompter
+from . import prompter_channel
+from . import prompter_config
+from . import prompter_replay
 from . import ui
 from core.engine import runtime_env
 from core.engine.player import PlaybackPlan
@@ -109,7 +109,7 @@ def restore_environment_flow(
 ) -> bool:
     """恢复运行环境并按模式启动回放相关栈。"""
     if not auto:
-        session.ctx.logic.version = config_prompter.get_json_input()
+        session.ctx.logic.version = prompter_config.get_json_input()
         if not session.ctx.logic.version:
             ui.show_notice_section(
                 "环境恢复",
@@ -170,13 +170,13 @@ def traffic_light_replay_flow(session: AppSession) -> None:
     )
     manual = prompter.get_confirm_input("手动选择文件回灌？")
     if manual:
-        config_prompter.get_basic_params(session.ctx)
+        prompter_config.get_basic_params(session.ctx)
         session.ctx.setup_logger()
         manual_replay_flow(session, REPLAY_MODE_TRAFFIC_LIGHT)
     else:
-        config_prompter.get_basic_params(session.ctx)
+        prompter_config.get_basic_params(session.ctx)
         session.ctx.setup_logger()
-        config_prompter.update_dest_root(
+        prompter_config.update_dest_root(
             session.ctx,
             "输入要扫描的回灌路径(限/media下)",
         )
@@ -192,13 +192,13 @@ def replay_flow(session: AppSession) -> None:
     )
     manual = prompter.get_confirm_input("手动选择文件播放？")
     if manual:
-        config_prompter.get_basic_params(session.ctx)
+        prompter_config.get_basic_params(session.ctx)
         session.ctx.setup_logger()
         manual_replay_flow(session, REPLAY_MODE_STANDARD)
     else:
-        config_prompter.get_basic_params(session.ctx)
+        prompter_config.get_basic_params(session.ctx)
         session.ctx.setup_logger()
-        config_prompter.update_dest_root(
+        prompter_config.update_dest_root(
             session.ctx,
             "输入要扫描的回播路径(限/media下)",
         )
@@ -246,7 +246,7 @@ def _update_playback_blacklist(
         session.ctx.playback_blacklist = []
         return
     session.ctx.playback_blacklist = (
-        channel_prompter.get_paths_channels(
+        prompter_channel.get_paths_channels(
             session,
             [replay_record.path for replay_record in records],
             prompter.get_confirm_input,
@@ -565,7 +565,7 @@ def _validate_history_records(records: List[ReplayRecord]) -> bool:
 def _collect_issue_marker() -> Optional[ReplayIssueMarker]:
     """在回播结束后采集问题时间点标记。"""
     try:
-        return replay_prompter.get_issue_marker()
+        return prompter_replay.get_issue_marker()
     except KeyboardInterrupt:
         ui.show_result_section(
             "问题标记",
@@ -616,8 +616,8 @@ def _replay_records(
             playback_rate = replay_history_entry.playback_rate
             should_use_history_params = False
         else:
-            start, end = replay_prompter.get_playback_range()
-            playback_rate = replay_prompter.get_playback_rate()
+            start, end = prompter_replay.get_playback_range()
+            playback_rate = prompter_replay.get_playback_rate()
         try:
             playback_plan = session.player.build_playback_plan(
                 records,
@@ -712,7 +712,7 @@ def replay_history_flow(session: AppSession) -> None:
         return
     ui.browse_replay_history(history_entries)
     while True:
-        history_index = replay_prompter.select_replay_history_index(history_entries)
+        history_index = prompter_replay.select_replay_history_index(history_entries)
         if history_index is None:
             return
         if history_index == 0:
@@ -849,14 +849,14 @@ def auto_replay_flow(
                 next_step="检查扫描目录，或先完成切片/同步",
             )
             return
-        selected_tag = replay_prompter.select_playback_entry(
+        selected_tag = prompter_replay.select_playback_entry(
             library,
             session.ctx.logic.vehicle,
             session.ctx.logic.target_date,
         )
         if not selected_tag:
             break
-        target_records = replay_prompter.select_replay_records(selected_tag)
+        target_records = prompter_replay.select_replay_records(selected_tag)
         if not target_records:
             continue
         _update_playback_blacklist(session, target_records, replay_mode)
@@ -891,7 +891,7 @@ def full_source_replay_flow(
         )
         return
     while True:
-        task_entry = replay_prompter.select_source_task_entry(task_entries)
+        task_entry = prompter_replay.select_source_task_entry(task_entries)
         if task_entry is None:
             return
         source_records = _build_source_replay_records(session, task_entry)
@@ -929,7 +929,7 @@ def manual_replay_flow(
     replay_mode: str = REPLAY_MODE_STANDARD,
 ) -> None:
     """手动选择文件后执行回放。"""
-    paths = replay_prompter.get_manual_replay_paths()
+    paths = prompter_replay.get_manual_replay_paths()
     if not paths:
         return
     manual_replay_paths_flow(session, paths, replay_mode)

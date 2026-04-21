@@ -161,8 +161,7 @@ def select_playback_entry(
     target_date: str,
 ) -> Optional[LibraryEntry]:
     """从过滤后的回放库中选择一个回放条目。"""
-    filtered_library = list(library)
-    if not filtered_library:
+    if not library:
         ui.show_result_section(
             "回播库",
             "当前目录下没有符合条件的回播数据",
@@ -171,7 +170,7 @@ def select_playback_entry(
         )
         return None
     return _select_filtered_value(
-        filtered_library,
+        library,
         lambda current_library, search_keyword, total_count: ui.show_playback_library(
             current_library,
             vehicle,
