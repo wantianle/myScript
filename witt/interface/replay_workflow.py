@@ -21,6 +21,7 @@ from core.models import (
     build_history_selection_label,
 )
 from core.issue_draft import (
+    DEFAULT_ISSUE_DESCRIPTION,
     IssueDraft,
     ReplayIssueMarker,
     build_issue_title_from_vmc,
@@ -349,7 +350,7 @@ def _post_replay_issue_draft(
 ) -> None:
     """回播结束后统一处理 issue 草稿生成。"""
     playback_range_text = _format_playback_range(start_sec, end_sec)
-    issue_description = IssueDraft.issue_description
+    issue_description = DEFAULT_ISSUE_DESCRIPTION
     if issue_marker is not None:
         playback_range_text = _format_playback_range(
             issue_marker.playback_start_sec,

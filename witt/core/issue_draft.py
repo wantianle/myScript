@@ -2,9 +2,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 import re
-from typing import List, Optional, Union
+from typing import List, Union
 
 SUGGESTED_TITLE_TEMPLATE = "[车型-模块-车号]问题简述"
+DEFAULT_ISSUE_DESCRIPTION = "填写补充描述"
 DEFAULT_LOCAL_RAW_PREFIX = Path("/media/mini/data/data")
 
 
@@ -25,20 +26,7 @@ class IssueDraft:
     playback_range_text: str = "全播"
     playback_channels: List[str] = field(default_factory=list)
     suggested_title: str = SUGGESTED_TITLE_TEMPLATE
-    issue_description: str = "填写补充描述"
-
-
-def build_issue_filename(issue_timestamp: str) -> str:
-    """根据时间戳生成 issue 文件名。"""
-    return "issue_{0}.md".format(issue_timestamp)
-
-
-def build_issue_path(
-    work_dir: Path,
-    issue_timestamp: str,
-) -> Path:
-    """构造 issue 草稿文件路径。"""
-    return work_dir / "issues" / build_issue_filename(issue_timestamp)
+    issue_description: str = DEFAULT_ISSUE_DESCRIPTION
 
 
 def render_issue_markdown(issue_draft: IssueDraft) -> str:
@@ -76,7 +64,7 @@ def save_issue_draft(
     timestamp_text = _normalize_issue_timestamp(issue_timestamp)
     if not timestamp_text:
         timestamp_text = datetime.now().strftime("%Y%m%d_%H%M%S")
-    issue_path = build_issue_path(work_dir, timestamp_text)
+    issue_path = work_dir / "issues" / "issue_{0}.md".format(timestamp_text)
     issue_path.parent.mkdir(parents=True, exist_ok=True)
     issue_path.write_text(render_issue_markdown(issue_draft), encoding="utf-8")
     return issue_path
@@ -174,54 +162,23 @@ def _build_issue_relative_parts(
     vehicle: str,
 ) -> List[str]:
     """从原始路径中提取挂到日期/车号后的相对路径。"""
-    path_parts = _normalize_issue_path_parts(path_obj)
-    suffix_start = _find_issue_suffix_start(path_parts, target_date, vehicle)
-    if suffix_start >= 0:
-        suffix_parts = list(path_parts[suffix_start:])
-        if suffix_parts:
-            return suffix_parts
-    local_suffix_parts = _extract_local_raw_suffix_parts(path_obj)
-    if local_suffix_parts is not None:
-        return local_suffix_parts
-    return []
-
-
-def _normalize_issue_path_parts(path_obj: Path) -> tuple:
-    """移除根锚点，便于统一处理路径段。"""
-    anchor = path_obj.anchor
-    return tuple(
+    path_parts = [
         part
         for part in path_obj.parts
-        if part and part != anchor
-    )
-
-
-def _find_issue_suffix_start(
-    path_parts: tuple,
-    target_date: str,
-    vehicle: str,
-) -> int:
-    """寻找日期/车号之后的相对路径起点。"""
-    date_index = _find_path_part(path_parts, target_date)
-    vehicle_index = _find_path_part(path_parts, vehicle)
-    if date_index >= 0 and vehicle_index >= 0:
-        return max(date_index, vehicle_index) + 1
-    return -1
-
-
-def _find_path_part(path_parts: tuple, expected: str) -> int:
-    """返回指定路径段首次出现的位置。"""
-    for index, path_part in enumerate(path_parts):
-        if path_part == expected:
-            return index
-    return -1
-
-
-def _extract_local_raw_suffix_parts(path_obj: Path) -> Optional[List[str]]:
-    """识别默认本地原始数据目录并保留其后缀路径。"""
+        if part and part != path_obj.anchor
+    ]
+    if target_date in path_parts and vehicle in path_parts:
+        suffix_parts = path_parts[
+            max(path_parts.index(target_date), path_parts.index(vehicle)) + 1 :
+        ]
+        if suffix_parts:
+            return suffix_parts
     try:
         relative_path = path_obj.relative_to(DEFAULT_LOCAL_RAW_PREFIX)
     except ValueError:
-        return None
-    suffix_parts = list(_normalize_issue_path_parts(relative_path))
-    return suffix_parts or None
+        return []
+    return [
+        part
+        for part in relative_path.parts
+        if part and part != relative_path.anchor
+    ]

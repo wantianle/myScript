@@ -3,23 +3,17 @@ import unittest
 from pathlib import Path
 
 from core.issue_draft import (
+    DEFAULT_ISSUE_DESCRIPTION,
     IssueDraft,
-    build_issue_title_from_vmc,
-    build_issue_filename,
-    format_issue_data_path,
-    load_version_text,
     render_issue_markdown,
     save_issue_draft,
+    build_issue_title_from_vmc,
+    format_issue_data_path,
+    load_version_text,
 )
 
 
 class IssueDraftTests(unittest.TestCase):
-    def test_build_issue_filename_defaults_to_timestamp(self) -> None:
-        self.assertEqual(
-            build_issue_filename("20260416_120000"),
-            "issue_20260416_120000.md",
-        )
-
     def test_render_issue_markdown_includes_replay_fields(self) -> None:
         issue_draft = IssueDraft(
             tag_text="demo_tag",
@@ -143,6 +137,16 @@ class IssueDraftTests(unittest.TestCase):
             "/media/nas/00.raw/20260415/XZB600007/01.20260415_101203/"
             "soc2/20260415101058.record.00001.101159.split",
         )
+
+    def test_issue_draft_uses_explicit_default_issue_description(self) -> None:
+        issue_draft = IssueDraft(
+            tag_text="demo_tag",
+            vehicle="XZB600013",
+            target_date="20260416",
+            playback_command="cyber_recorder play -r 1",
+        )
+
+        self.assertEqual(issue_draft.issue_description, DEFAULT_ISSUE_DESCRIPTION)
 
 
 if __name__ == "__main__":
