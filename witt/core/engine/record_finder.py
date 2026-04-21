@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Sequence, Tuple
 
-from core.errors import FindRecordError, TagFileMissingError
+from core.errors import FindRecordError
 from core.models import TaskEntry
 from utils import parser
 
@@ -160,7 +160,7 @@ def find_tasks_from_path_texts(
             "{0} 目录下找不到相关的文件！".format(source_label)
         )
     if not tag_paths:
-        raise TagFileMissingError(
+        raise FindRecordError(
             "{0} 找不到对应的 tag 文件！".format(source_label)
         )
     records_by_minute = build_record_index(record_paths)

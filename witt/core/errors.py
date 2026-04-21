@@ -1,19 +1,15 @@
 from typing import List, Optional
 
 
-class WittCoreError(Exception):
-    """Core-layer base exception for structured error propagation."""
-
-
-class PathMappingError(WittCoreError):
+class PathMappingError(Exception):
     """Raised when a host path cannot be mapped into the execution environment."""
 
 
-class CommandExecutionError(WittCoreError):
+class CommandExecutionError(Exception):
     """Raised when a command fails in docker/ssh execution."""
 
 
-class ScriptExecutionError(WittCoreError):
+class ScriptExecutionError(Exception):
     """Raised when a managed runtime operation fails with structured output."""
 
     def __init__(
@@ -28,33 +24,25 @@ class ScriptExecutionError(WittCoreError):
         self.details = list(details or [])
 
 
-class RecordInfoError(WittCoreError):
+class RecordInfoError(Exception):
     """Raised when record metadata cannot be read or parsed."""
 
 
-class RecordSplitError(WittCoreError):
+class RecordSplitError(Exception):
     """Raised when record splitting fails."""
 
 
-class TaskBatchPlanningError(WittCoreError):
+class TaskBatchPlanningError(Exception):
     """Raised when a downloader batch cannot be planned."""
 
 
-class VersionFileMissingError(TaskBatchPlanningError):
-    """Raised when a task batch cannot proceed because version files are missing."""
-
-
-class FindRecordError(WittCoreError):
+class FindRecordError(Exception):
     """Raised when record discovery cannot produce query candidates."""
 
 
-class TagFileMissingError(FindRecordError):
-    """Raised when a query root has candidate records but no tag files."""
-
-
-class RuntimeEnvironmentError(WittCoreError):
+class RuntimeEnvironmentError(Exception):
     """Raised when runtime environment sync cannot be completed."""
 
 
-class ReplayStackError(WittCoreError):
+class ReplayStackError(Exception):
     """Raised when replay stack startup cannot be completed."""

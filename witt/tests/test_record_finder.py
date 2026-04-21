@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from core.errors import FindRecordError, TagFileMissingError
+from core.errors import FindRecordError
 from core.engine import record_finder
 
 
@@ -146,7 +146,7 @@ class RecordFinderTests(unittest.TestCase):
             record_path.parent.mkdir(parents=True, exist_ok=True)
             record_path.write_text("record", encoding="utf-8")
 
-            with self.assertRaises(TagFileMissingError):
+            with self.assertRaises(FindRecordError):
                 record_finder.find_local_tasks(
                     data_root,
                     target_date="20260419",

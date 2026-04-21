@@ -7,7 +7,7 @@ from pathlib import Path
 from shlex import quote
 from typing import List, Optional, TYPE_CHECKING
 
-from core.errors import RecordSplitError, TaskBatchPlanningError, VersionFileMissingError
+from core.errors import RecordSplitError, TaskBatchPlanningError
 from core.models import RecordMeta, TaskEntry
 from core.repository import MetadataRepository
 from utils import parser
@@ -101,7 +101,9 @@ class RecordDownloader:
     def _ensure_version_files(self, src_dir: Path) -> List[Path]:
         version_files = self._get_version_files(src_dir)
         if not version_files:
-            raise VersionFileMissingError(f"{src_dir} 未找到 version 文件，已跳过当前任务")
+            raise TaskBatchPlanningError(
+                f"{src_dir} 未找到 version 文件，已跳过当前任务"
+            )
         return version_files
 
     def _sync_version_files(self, src_dir: Path, save_dir: Path) -> None:
