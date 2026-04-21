@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock, patch
 
-from core.engine.downloader import DownloadBatch, DownloadSummary, RecordDownloader
+from core.engine.downloader import DownloadBatch, DownloadItem, DownloadSummary, RecordDownloader
 from core.errors import RecordSplitError
 from core.models import TaskEntry
 
@@ -36,6 +36,7 @@ def _build_downloader(
                 vehicle="XZB600001",
                 target_date="20260419",
             ),
+            get_task_dir=Mock(return_value=Path("/tmp/output")),
         ),
         recorder=recorder or SimpleNamespace(split=Mock()),
         executor=executor or SimpleNamespace(fetch_file=Mock(), remove=Mock()),
@@ -96,17 +97,22 @@ class RecordDownloaderTests(unittest.TestCase):
     def test_post_process_task_returns_version_sync_failure_reason(self) -> None:
         task_entry = _build_task_entry()
         downloader = _build_downloader()
-        file_infos = [
-            (
-                "/tmp/source/soc1/demo.record",
-                "/tmp/output/soc1/demo.record.split",
-                "soc1",
-            )
-        ]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             save_dir = Path(tmpdir) / "01.20260419_120000" / "soc1"
             save_dir.mkdir(parents=True, exist_ok=True)
+            batch = DownloadBatch(
+                task=task_entry,
+                soc_name="soc1",
+                save_dir=save_dir,
+                items=[],
+            )
+            processed_items = [
+                DownloadItem(
+                    src=Path("/tmp/source/soc1/demo.record"),
+                    dest=Path("/tmp/output/soc1/demo.record.split"),
+                )
+            ]
 
             with patch.object(
                 downloader,
@@ -114,9 +120,8 @@ class RecordDownloaderTests(unittest.TestCase):
                 side_effect=OSError("copy failed"),
             ):
                 failure_reason = downloader._post_process_task(
-                    task_entry,
-                    save_dir,
-                    file_infos,
+                    batch,
+                    processed_items,
                 )
 
         self.assertEqual(
@@ -131,17 +136,22 @@ class RecordDownloaderTests(unittest.TestCase):
             save=Mock(side_effect=OSError("write failed")),
         )
         downloader = _build_downloader(metadata_repository=metadata_repository)
-        file_infos = [
-            (
-                "/tmp/source/soc1/demo.record",
-                "/tmp/output/soc1/demo.record.split",
-                "soc1",
-            )
-        ]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             save_dir = Path(tmpdir) / "01.20260419_120000" / "soc1"
             save_dir.mkdir(parents=True, exist_ok=True)
+            batch = DownloadBatch(
+                task=task_entry,
+                soc_name="soc1",
+                save_dir=save_dir,
+                items=[],
+            )
+            processed_items = [
+                DownloadItem(
+                    src=Path("/tmp/source/soc1/demo.record"),
+                    dest=Path("/tmp/output/soc1/demo.record.split"),
+                )
+            ]
 
             with patch.object(
                 downloader,
@@ -149,9 +159,8 @@ class RecordDownloaderTests(unittest.TestCase):
                 return_value=[],
             ):
                 failure_reason = downloader._post_process_task(
-                    task_entry,
-                    save_dir,
-                    file_infos,
+                    batch,
+                    processed_items,
                 )
 
             expected_meta_path = save_dir.parent / "meta.json"
@@ -189,6 +198,21 @@ class RecordDownloaderTests(unittest.TestCase):
             summary.failed_batches[0].reason,
             "切片失败: /tmp/source/soc1/demo.record，已清理当前批次",
         )
+
+    def test_plan_download_does_not_prepare_output_dir(self) -> None:
+        task_entry = _build_task_entry()
+        downloader = _build_downloader()
+
+        with patch.object(
+            downloader,
+            "_ensure_version_files",
+            return_value=[Path("/tmp/version.txt")],
+        ):
+            with patch.object(downloader, "_prepare_dir") as prepare_dir:
+                summary = downloader.plan_download([task_entry])
+
+        prepare_dir.assert_not_called()
+        self.assertEqual(summary.total_files, 1)
 
 
 if __name__ == "__main__":

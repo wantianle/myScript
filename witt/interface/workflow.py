@@ -135,7 +135,7 @@ def slice_progress(session: AppSession) -> None:
     download_summary = session.record_downloader.download_records(valid_tasks)
     _show_skipped_batches(download_summary.skipped_batches)
     _show_failed_batches(download_summary.failed_batches)
-    if not download_summary.completed_batches:
+    if download_summary.completed_batch_count <= 0:
         ui.show_result_section(
             "切片结果",
             "没有成功完成的切片批次",
@@ -148,7 +148,7 @@ def slice_progress(session: AppSession) -> None:
         "所有同步任务已完成！",
         details=[
             "已完成 {0} 个切片批次".format(
-                len(download_summary.completed_batches)
+                download_summary.completed_batch_count
             )
         ],
         next_step="可立即进入回播，或返回 REPL 继续其他操作",

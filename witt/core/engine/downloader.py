@@ -45,17 +45,9 @@ class FailedBatch:
 
 
 @dataclass
-class CompletedBatch:
-    task_name: str
-    soc_name: str
-    save_dir: Path
-    file_count: int
-
-
-@dataclass
 class DownloadSummary:
     total_files: int = 0
-    completed_batches: List[CompletedBatch] = field(default_factory=list)
+    completed_batch_count: int = 0
     skipped_batches: List[SkippedBatch] = field(default_factory=list)
     failed_batches: List[FailedBatch] = field(default_factory=list)
 
@@ -80,7 +72,7 @@ class RecordDownloader:
         """统一构造切片批次失败原因，保留失败分类和关键路径。"""
         return "{0}: {1}，已清理当前批次".format(failure_type, target_path)
 
-    def _cleanup_failed_batch(self, save_dir: Path):
+    def _cleanup_failed_batch(self, save_dir: Path) -> None:
         """清理失败批次的残留数据，避免留下半成品目录"""
         if save_dir.exists():
             shutil.rmtree(save_dir)
@@ -119,7 +111,13 @@ class RecordDownloader:
                 v_dest = save_dir / v_src.name
                 shutil.copy2(v_src, v_dest)
 
-    def _save_contract(self, task_entry: TaskEntry, save_dir, file_infos):
+    def _save_contract(
+        self,
+        task_entry: TaskEntry,
+        save_dir: Path,
+        soc_name: str,
+        processed_items: List[DownloadItem],
+    ) -> None:
         """保存元数据，实现数据信息缓存，减少底层重复计算，并为回播提供必要的上下文信息"""
         tag_dir = save_dir.parent
         meta_path = tag_dir / "meta.json"
@@ -136,22 +134,22 @@ class RecordDownloader:
                 record_meta.merge_existing(existing_meta)
             except Exception:
                 logging.warning("元数据文件损坏，执行全量重写")
-        current_soc = file_infos[0][2]
         record_meta.update_soc_files(
-            soc_name=current_soc,
-            file_names=[Path(file_info[1]).name for file_info in file_infos],
+            soc_name=soc_name,
+            file_names=[item.dest.name for item in processed_items],
             updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
         self.metadata_repository.save(meta_path, record_meta)
 
     def _post_process_task(
         self,
-        task_entry: TaskEntry,
-        save_dir: Path,
-        file_infos,
+        batch: DownloadBatch,
+        processed_items: List[DownloadItem],
     ) -> Optional[str]:
         """生成元数据并同步版本文件，失败时返回具体原因。"""
-        src_dir = Path(file_infos[0][0]).parent
+        task_entry = batch.task
+        save_dir = batch.save_dir
+        src_dir = processed_items[0].src.parent
         try:
             self._sync_version_files(src_dir, save_dir)
         except Exception as e:
@@ -163,7 +161,12 @@ class RecordDownloader:
             )
             return self._build_batch_failure_reason("version 同步失败", src_dir)
         try:
-            self._save_contract(task_entry, save_dir, file_infos)
+            self._save_contract(
+                task_entry,
+                save_dir,
+                batch.soc_name,
+                processed_items,
+            )
         except Exception as e:
             meta_path = save_dir.parent / "meta.json"
             logging.warning(
@@ -174,7 +177,7 @@ class RecordDownloader:
             )
             return self._build_batch_failure_reason("metadata 写入失败", meta_path)
         logging.info(f"[TASK_COMPLETE] Tag: {task_entry.name} | Saved to: {save_dir}")
-        logging.info(f"  Files: {[Path(f[1]).name for f in file_infos]}")
+        logging.info(f"  Files: {[item.dest.name for item in processed_items]}")
         return None
 
     def _sync_file(
@@ -233,7 +236,6 @@ class RecordDownloader:
         src_dir = Path(paths[0]).parent
         self._ensure_version_files(src_dir)
         save_dir = self.ctx.get_task_dir(task_entry.id, task_entry.time, soc_name)
-        self._prepare_dir(save_dir)
         return DownloadBatch(
             task=task_entry,
             soc_name=soc_name,
@@ -279,13 +281,13 @@ class RecordDownloader:
 
     def _finalize_batch(
         self,
-        batch,
-        processed_files,
+        batch: DownloadBatch,
+        processed_items: List[DownloadItem],
         batch_failure_reason: str,
         summary: DownloadSummary,
     ) -> None:
         task_entry = batch.task
-        if batch_failure_reason or not processed_files:
+        if batch_failure_reason or not processed_items:
             self._cleanup_failed_batch(batch.save_dir)
             failure_reason = (
                 batch_failure_reason
@@ -307,9 +309,8 @@ class RecordDownloader:
             return
         try:
             post_process_failure_reason = self._post_process_task(
-                task_entry,
-                batch.save_dir,
-                processed_files,
+                batch,
+                processed_items,
             )
             if post_process_failure_reason is not None:
                 self._cleanup_failed_batch(batch.save_dir)
@@ -321,14 +322,7 @@ class RecordDownloader:
                     )
                 )
                 return
-            summary.completed_batches.append(
-                CompletedBatch(
-                    task_name=task_entry.name,
-                    soc_name=batch.soc_name,
-                    save_dir=batch.save_dir,
-                    file_count=len(processed_files),
-                )
-            )
+            summary.completed_batch_count += 1
         except Exception as e:
             self._cleanup_failed_batch(batch.save_dir)
             failure_reason = self._build_batch_failure_reason(
@@ -346,24 +340,23 @@ class RecordDownloader:
                 f"[TASK_POST_PROCESS_FAIL] Tag: {task_entry.name} | Soc: {batch.soc_name} | {e}"
             )
 
-    def _run_task_batch(self, batch, bar, summary: DownloadSummary):
+    def _run_task_batch(self, batch: DownloadBatch, bar, summary: DownloadSummary) -> None:
         task_entry = batch.task
-        processed_files = []
+        self._prepare_dir(batch.save_dir)
+        processed_items = []
         batch_failure_reason = ""
         for item in batch.items:
             bar.text = f"-> [Tag: {task_entry.name[:15]}]"
             if not batch_failure_reason:
                 item_failure_reason = self._sync_file(item.src, item.dest, task_entry)
                 if item_failure_reason is None:
-                    processed_files.append(
-                        (str(item.src), str(item.dest), batch.soc_name)
-                    )
+                    processed_items.append(item)
                 else:
                     batch_failure_reason = item_failure_reason
             bar()
         self._finalize_batch(
             batch,
-            processed_files,
+            processed_items,
             batch_failure_reason,
             summary,
         )
