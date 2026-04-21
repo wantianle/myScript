@@ -103,20 +103,17 @@ def get_source_path_params(
     preset_mode: Optional[int] = None,
 ) -> None:
     """采集数据源路径参数。"""
-    mode_hint = "本地 / NAS"
+    options = ["本地", "NAS"]
     if allow_remote:
-        mode_hint = "本地 / NAS / 车端"
+        options.append("车端")
     ui.show_config_section(
         "数据源配置",
         "选择输入模式并在需要时补充源路径",
-        "可选模式: {0}".format(mode_hint),
+        "可选模式: {0}".format(" / ".join(options)),
     )
     if preset_mode is not None:
         ctx.logic.mode = int(preset_mode)
     else:
-        options = ["本地", "NAS"]
-        if allow_remote:
-            options.append("车端")
         ctx.logic.mode = int(
             prompter.choose_option("\n数据输入模式", options, True)
         )
@@ -142,13 +139,6 @@ def get_export_path_params(ctx) -> None:
         history_name="dest_root",
         path_completion=True,
     )
-
-
-def get_path_params(ctx) -> None:
-    """采集数据源路径和导出路径等与路径相关的配置。"""
-    get_source_path_params(ctx)
-    get_export_path_params(ctx)
-    get_split_params(ctx)
 
 
 def get_json_input() -> str:

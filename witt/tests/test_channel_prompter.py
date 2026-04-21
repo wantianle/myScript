@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from core.models import ChannelInfo
 from core.session import AppSession
-from interface import channel_prompter
+from interface import prompter_channel as channel_prompter
 
 
 class ChannelPrompterTests(unittest.TestCase):
@@ -26,7 +26,7 @@ class ChannelPrompterTests(unittest.TestCase):
         ]
 
         with patch(
-            "interface.channel_prompter.prompter.prompt_text",
+            "interface.prompter_channel.prompter.prompt_text",
             side_effect=["/camera", "1"],
         ):
             selected_channels = channel_prompter.select_channels_wizard(
@@ -68,7 +68,7 @@ class ChannelPrompterTests(unittest.TestCase):
         session = cast(AppSession, SimpleNamespace(recorder=recorder))
 
         with patch(
-            "interface.channel_prompter.select_channels_wizard",
+            "interface.prompter_channel.select_channels_wizard",
             side_effect=lambda channels, prompt: [channel.name for channel in channels],
         ):
             selected_channels = channel_prompter.get_paths_channels(

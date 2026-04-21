@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Optional, Tuple, TypeVar
 
 from core.issue_draft import ReplayIssueMarker
 from core.models import LibraryEntry, ReplayHistoryEntry, ReplayRecord, TaskEntry
-from interface import prompter, ui
+from . import prompter, ui
 from utils import parser
 
 SelectableItem = TypeVar("SelectableItem")
@@ -366,13 +366,6 @@ def _get_issue_description() -> str:
 def get_manual_replay_paths() -> List[Path]:
     """获取手动回放模式下用户提供的文件路径列表。"""
     ui.show_manual_play_header()
-    return get_dragged_input()
-
-
-def get_dragged_input() -> List[Path]:
-    """
-    读取拖拽进终端的 record 文件或目录并返回排序后的文件列表。
-    """
     raw_input = prompter.prompt_text(
         "拖拽或粘贴 record 文件/目录 (q 返回)",
         history_name="manual_paths",

@@ -13,7 +13,8 @@ from interface import ui
 
 TaskLike = TypeVar("TaskLike")
 _PROMPT_SESSION_CACHE = {}
-_PROMPT_TOOLBAR_TEXT = " Enter 确认  Tab 补全  Ctrl+R 历史 "
+_COMMAND_TOOLBAR_TEXT = " help  config  slice  replay  scan  manual  history  traffic  env  clear  quit "
+_INPUT_TOOLBAR_TEXT = " Enter 确认  Tab 补全  Ctrl+R 历史 "
 
 
 @dataclass(frozen=True)
@@ -43,16 +44,11 @@ COMMAND_SPECS = [
     CommandSpec("clear", ["cls"], "清空当前终端显示", "clear"),
     CommandSpec("quit", ["q", "exit"], "退出工具", "quit"),
 ]
-
-
-def build_command_alias_map() -> dict:
-    """构建命令名与别名到标准命令的映射。"""
-    alias_map = {}
-    for command_spec in COMMAND_SPECS:
-        alias_map[command_spec.name] = command_spec.name
-        for alias in command_spec.aliases:
-            alias_map[alias] = command_spec.name
-    return alias_map
+_COMMAND_ALIAS_MAP = {
+    alias: command_spec.name
+    for command_spec in COMMAND_SPECS
+    for alias in [command_spec.name] + command_spec.aliases
+}
 
 
 def create_command_prompt_session() -> PromptSession:
@@ -72,7 +68,7 @@ def create_command_prompt_session() -> PromptSession:
         history=FileHistory(str(history_path)),
         completer=command_completer,
         auto_suggest=AutoSuggestFromHistory(),
-        bottom_toolbar=_build_command_toolbar,
+        bottom_toolbar=_COMMAND_TOOLBAR_TEXT,
     )
 
 
@@ -91,8 +87,8 @@ def normalize_command(command_text: str) -> str:
     command_parts = command_text.strip().split()
     if not command_parts:
         return ""
-    alias_map = build_command_alias_map()
-    return alias_map.get(command_parts[0].lower(), command_parts[0].lower())
+    command_name = command_parts[0].lower()
+    return _COMMAND_ALIAS_MAP.get(command_name, command_name)
 
 
 def parse_command(command_text: str) -> Optional[CommandInvocation]:
@@ -114,11 +110,6 @@ def parse_command(command_text: str) -> Optional[CommandInvocation]:
 def get_command_specs() -> List[CommandSpec]:
     """返回命令定义列表。"""
     return list(COMMAND_SPECS)
-
-
-def _build_command_toolbar() -> str:
-    """构建 REPL 底部快捷提示。"""
-    return " help  config  slice  replay  scan  manual  history  traffic  env  clear  quit "
 
 
 def _sort_completion_words(words: Sequence[object]) -> List[str]:
@@ -183,7 +174,7 @@ def prompt_text(
             default=default_value,
             completer=completer,
             complete_while_typing=False,
-            bottom_toolbar=_PROMPT_TOOLBAR_TEXT,
+            bottom_toolbar=_INPUT_TOOLBAR_TEXT,
         ).strip()
     except (EOFError, KeyboardInterrupt):
         print()

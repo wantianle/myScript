@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import List, Optional, Sequence
 
-from . import channel_prompter
-from . import config_prompter
 from . import prompter
+from . import prompter_channel as channel_prompter
+from . import prompter_config as config_prompter
 from . import ui
 from . import replay_workflow
 from core.engine.downloader import FailedBatch, SkippedBatch

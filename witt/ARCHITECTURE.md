@@ -36,7 +36,7 @@
   - 通用 prompt 基础层
   - 负责通用文本输入、确认输入、菜单选择、公共输入辅助函数
 
-- [config_prompter.py](/home/mini/dev/myScript/witt/interface/config_prompter.py)
+- [prompter_config.py](/home/mini/dev/myScript/witt/interface/prompter_config.py)
   - 配置输入层
   - 负责采集：
     - 车辆
@@ -46,7 +46,7 @@
     - 导出路径
     - 版本文件路径
 
-- [replay_prompter.py](/home/mini/dev/myScript/witt/interface/replay_prompter.py)
+- [prompter_replay.py](/home/mini/dev/myScript/witt/interface/prompter_replay.py)
   - 回播专用输入层
   - 负责：
     - 回播条目选择
@@ -54,7 +54,7 @@
     - 回播时间范围输入
     - 手动回播路径输入
 
-- [channel_prompter.py](/home/mini/dev/myScript/witt/interface/channel_prompter.py)
+- [prompter_channel.py](/home/mini/dev/myScript/witt/interface/prompter_channel.py)
   - Channel 过滤专用输入层
   - 负责：
     - 聚合可选频道

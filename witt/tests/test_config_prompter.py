@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from interface import config_prompter
+from interface import prompter_config as config_prompter
 
 
 class ConfigPrompterTests(unittest.TestCase):
@@ -13,10 +13,10 @@ class ConfigPrompterTests(unittest.TestCase):
 
     def test_get_vehicle_name_retries_until_input_is_valid(self) -> None:
         with patch(
-            "interface.config_prompter.prompter.prompt_text",
+            "interface.prompter_config.prompter.prompt_text",
             side_effect=["bad", "xzb600001"],
         ):
-            with patch("interface.config_prompter.ui.show_input_feedback") as show_input_feedback:
+            with patch("interface.prompter_config.ui.show_input_feedback") as show_input_feedback:
                 vehicle_name = config_prompter.get_vehicle_name("")
 
         self.assertEqual(vehicle_name, "XZB600001")
@@ -28,10 +28,10 @@ class ConfigPrompterTests(unittest.TestCase):
         )
 
         with patch(
-            "interface.config_prompter.prompter.get_int_input",
+            "interface.prompter_config.prompter.get_int_input",
             side_effect=[-1, 5, 5, 5],
         ):
-            with patch("interface.config_prompter.ui.show_input_feedback") as show_input_feedback:
+            with patch("interface.prompter_config.ui.show_input_feedback") as show_input_feedback:
                 config_prompter.get_split_params(ctx)
 
         self.assertEqual(ctx.logic.before, 5)
@@ -44,10 +44,10 @@ class ConfigPrompterTests(unittest.TestCase):
         )
 
         with patch(
-            "interface.config_prompter.prompter.get_int_input",
+            "interface.prompter_config.prompter.get_int_input",
             side_effect=[5, 6],
         ) as get_int_input:
-            with patch("interface.config_prompter.ui.show_config_section") as show_config_section:
+            with patch("interface.prompter_config.ui.show_config_section") as show_config_section:
                 config_prompter.get_split_params(ctx, "回播窗口")
 
         self.assertEqual(ctx.logic.before, 5)
@@ -59,10 +59,10 @@ class ConfigPrompterTests(unittest.TestCase):
     def test_get_json_input_retries_after_empty_input(self) -> None:
         with tempfile.NamedTemporaryFile() as temp_file:
             with patch(
-                "interface.config_prompter.prompter.prompt_text",
+                "interface.prompter_config.prompter.prompt_text",
                 side_effect=["", temp_file.name],
             ):
-                with patch("interface.config_prompter.ui.show_input_feedback") as show_input_feedback:
+                with patch("interface.prompter_config.ui.show_input_feedback") as show_input_feedback:
                     result = config_prompter.get_json_input()
 
         self.assertEqual(result, temp_file.name)
@@ -71,10 +71,10 @@ class ConfigPrompterTests(unittest.TestCase):
     def test_get_json_input_retries_after_invalid_path(self) -> None:
         with tempfile.NamedTemporaryFile() as temp_file:
             with patch(
-                "interface.config_prompter.prompter.prompt_text",
+                "interface.prompter_config.prompter.prompt_text",
                 side_effect=["/tmp/not-found-version.json", temp_file.name],
             ):
-                with patch("interface.config_prompter.ui.show_input_feedback") as show_input_feedback:
+                with patch("interface.prompter_config.ui.show_input_feedback") as show_input_feedback:
                     result = config_prompter.get_json_input()
 
         self.assertEqual(result, temp_file.name)
@@ -85,10 +85,10 @@ class ConfigPrompterTests(unittest.TestCase):
 
     def test_get_json_input_returns_empty_on_keyboard_interrupt(self) -> None:
         with patch(
-            "interface.config_prompter.prompter.prompt_text",
+            "interface.prompter_config.prompter.prompt_text",
             side_effect=KeyboardInterrupt,
         ):
-            with patch("interface.config_prompter.ui.show_notice_section") as show_notice_section:
+            with patch("interface.prompter_config.ui.show_notice_section") as show_notice_section:
                 result = config_prompter.get_json_input()
 
         self.assertEqual(result, "")

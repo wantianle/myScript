@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Union
 
-from . import channel_prompter
-from . import config_prompter
 from . import prompter
-from . import replay_prompter
+from . import prompter_channel as channel_prompter
+from . import prompter_config as config_prompter
+from . import prompter_replay as replay_prompter
 from . import ui
 from core.engine import runtime_env
 from core.engine.player import PlaybackPlan

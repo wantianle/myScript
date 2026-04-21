@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Set
 from core.errors import RecordInfoError
 from core.models import ChannelInfo, TaskEntry
 from core.session import AppSession
-from interface import prompter, ui
+from . import prompter, ui
 
 
 def select_channels_wizard(channels: List[ChannelInfo], prompt: str) -> List[str]:

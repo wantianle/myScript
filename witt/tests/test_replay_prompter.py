@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from core.models import LibraryEntry, ReplayRecord
-from interface import replay_prompter
+from interface import prompter_replay as replay_prompter
 
 
 class ReplayPrompterTests(unittest.TestCase):
@@ -32,10 +32,10 @@ class ReplayPrompterTests(unittest.TestCase):
         user_inputs = iter(["/bar", "1"])
 
         with patch(
-            "interface.replay_prompter.prompter.prompt_text",
+            "interface.prompter_replay.prompter.prompt_text",
             side_effect=lambda *args, **kwargs: next(user_inputs),
         ):
-            with patch("interface.replay_prompter.ui.show_input_feedback") as show_input_feedback:
+            with patch("interface.prompter_replay.ui.show_input_feedback") as show_input_feedback:
                 selected_item = replay_prompter._select_filtered_value(
                     ["foo", "bar", "baz"],
                     lambda items, keyword, total: render_calls.append(
@@ -64,10 +64,10 @@ class ReplayPrompterTests(unittest.TestCase):
         user_inputs = iter(["/missing", "1", "/", "0"])
 
         with patch(
-            "interface.replay_prompter.prompter.prompt_text",
+            "interface.prompter_replay.prompter.prompt_text",
             side_effect=lambda *args, **kwargs: next(user_inputs),
         ):
-            with patch("interface.replay_prompter.ui.show_input_feedback") as show_input_feedback:
+            with patch("interface.prompter_replay.ui.show_input_feedback") as show_input_feedback:
                 selected_value = replay_prompter._select_filtered_value(
                     [1],
                     lambda items, keyword, total: render_calls.append(
