@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
 from core.adapter.docker import DockerAdapter
 from core.adapter.ssh import SSHAdapter
@@ -160,46 +160,6 @@ class SSHAdapterTests(unittest.TestCase):
             adapter.remove("/tmp/a b.record")
 
         execute.assert_called_once_with("rm -f '/tmp/a b.record'")
-
-    def test_execute_interactive_uses_tty_ssh(self) -> None:
-        adapter = self._build_adapter()
-
-        with patch(
-            "core.adapter.ssh.subprocess.run",
-            return_value=SimpleNamespace(returncode=0),
-        ) as subprocess_run:
-            adapter.execute_interactive("echo hello")
-
-        subprocess_run.assert_called_once_with(
-            [
-                "ssh",
-                "-t",
-                "-o",
-                "ConnectTimeout=5",
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-o",
-                "LogLevel=ERROR",
-                "-o",
-                "ControlMaster=auto",
-                "-o",
-                "ControlPath=/tmp/ssh_mux_%r@%h:%p",
-                "-o",
-                "ControlPersist=5m",
-                "nvidia@192.168.10.2",
-                (
-                    "LC_ALL=C export LANG=C.UTF-8 && export LC_ALL=C.UTF-8 && "
-                    "export GLOG_log_dir=/tmp && export MDRIVE_ROOT_DIR='/mdrive' "
-                    "&& export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && "
-                    "source /env/setup.sh && echo hello"
-                ),
-            ],
-            env=ANY,
-            check=False,
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

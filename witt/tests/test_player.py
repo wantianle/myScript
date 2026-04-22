@@ -22,7 +22,7 @@ class RecordPlayerTests(unittest.TestCase):
                 get_library_fingerprint=Mock(return_value="fp-1"),
                 work_dir=Path("/tmp/work"),
             ),
-            executor=_FakeExecutor(),
+            playback_executor=_FakeExecutor(),
         )
         library_cache = SimpleNamespace(
             load=Mock(return_value=cached_library),
@@ -47,7 +47,7 @@ class RecordPlayerTests(unittest.TestCase):
                 get_library_fingerprint=Mock(return_value="fp-1"),
                 work_dir=Path("/tmp/work"),
             ),
-            executor=_FakeExecutor(),
+            playback_executor=_FakeExecutor(),
         )
         library_cache = SimpleNamespace(
             load=Mock(return_value=None),
@@ -86,7 +86,7 @@ class RecordPlayerTests(unittest.TestCase):
             ctx=SimpleNamespace(
                 playback_blacklist=["/apollo/foo", "/apollo/bar"],
             ),
-            executor=_FakeExecutor(),
+            playback_executor=_FakeExecutor(),
         )
         player = RecordPlayer(
             cast(Any, raw_session),
@@ -114,7 +114,7 @@ class RecordPlayerTests(unittest.TestCase):
     def test_build_playback_plan_rejects_out_of_range_speed(self) -> None:
         raw_session = SimpleNamespace(
             ctx=SimpleNamespace(playback_blacklist=[]),
-            executor=_FakeExecutor(),
+            playback_executor=_FakeExecutor(),
         )
         player = RecordPlayer(
             cast(Any, raw_session),

@@ -78,6 +78,7 @@ def _filter_channels(
 def _get_paths_channels(
     session: AppSession,
     path_texts: List[str],
+    executor=None,
 ) -> List[ChannelInfo]:
     """从多个 record 路径中提取频道并集，支持双 SOC 路径检查。"""
     channels_map: Dict[str, ChannelInfo] = {}
@@ -87,7 +88,7 @@ def _get_paths_channels(
             soc = Path(path_text).parent.name[-4:]
             if soc in seen_socs:
                 continue
-            info = session.recorder.get_info(path_text)
+            info = session.recorder.get_info(path_text, executor=executor)
             for channel in info.channels:
                 channel_name = channel.name
                 if channel_name not in channels_map:
@@ -123,10 +124,10 @@ def get_paths_channels(
     session: AppSession,
     path_texts: List[str],
     confirm_prompt: Callable[[str, bool], bool],
+    executor=None,
 ) -> List[str]:
     """交互式选择指定 record 路径中要过滤掉的频道。"""
     if not confirm_prompt("是否过滤 Channel?", False):
         return []
-    unique_channels = _get_paths_channels(session, path_texts)
+    unique_channels = _get_paths_channels(session, path_texts, executor=executor)
     return select_channels_wizard(unique_channels, prompt="请【选中】要删除的频道:")
-

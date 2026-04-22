@@ -90,6 +90,7 @@ class FlowIntegrationTests(unittest.TestCase):
                         ]
                     )
                 ),
+                playback_executor=SimpleNamespace(),
             ),
         )
         manual_paths = [Path("/tmp/demo.record")]
@@ -196,7 +197,9 @@ class FlowIntegrationTests(unittest.TestCase):
                         )
                     )
                 ),
-                executor=SimpleNamespace(execute_interactive=execute_interactive),
+                playback_executor=SimpleNamespace(
+                    execute_interactive=execute_interactive
+                ),
             ),
         )
         manual_paths = [Path("/tmp/demo.record")]

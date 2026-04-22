@@ -204,6 +204,7 @@ def _update_playback_blacklist(
             session,
             [replay_record.path for replay_record in records],
             prompter.get_confirm_input,
+            executor=session.playback_executor,
         )
         or []
     )
@@ -402,7 +403,7 @@ def _build_issue_playback_command(
         return playback_command
     issue_command = playback_command
     for replay_record, issue_path in zip(records, issue_paths):
-        runtime_path = session.executor.map_path(replay_record.path)
+        runtime_path = session.playback_executor.map_path(replay_record.path)
         issue_command = issue_command.replace(runtime_path, issue_path)
     return issue_command
 
@@ -625,7 +626,7 @@ def _replay_records(
             source_type,
         )
         try:
-            session.executor.execute_interactive(playback_plan.command)
+            session.playback_executor.execute_interactive(playback_plan.command)
         except KeyboardInterrupt:
             ui.show_notice_section(
                 "回播执行",
@@ -902,8 +903,14 @@ def manual_replay_paths_flow(
     if os.name == "posix":
         termios.tcflush(sys.stdin, termios.TCIFLUSH)
     try:
-        info_start = session.recorder.get_info(str(paths[0]))
-        info_end = session.recorder.get_info(str(paths[-1]))
+        info_start = session.recorder.get_info(
+            str(paths[0]),
+            executor=session.playback_executor,
+        )
+        info_end = session.recorder.get_info(
+            str(paths[-1]),
+            executor=session.playback_executor,
+        )
     except RecordInfoError as e:
         ui.show_result_section(
             "手动回播模式",

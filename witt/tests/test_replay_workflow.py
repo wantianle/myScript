@@ -362,6 +362,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
                         ]
                     )
                 ),
+                playback_executor=SimpleNamespace(),
             ),
         )
         paths = [Path("/tmp/demo.record")]
@@ -429,7 +430,9 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             SimpleNamespace(
                 ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
                 player=SimpleNamespace(build_playback_plan=build_playback_plan),
-                executor=SimpleNamespace(execute_interactive=execute_interactive),
+                playback_executor=SimpleNamespace(
+                    execute_interactive=execute_interactive
+                ),
             ),
         )
         replay_records = [
@@ -493,7 +496,9 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             SimpleNamespace(
                 ctx=SimpleNamespace(logic=SimpleNamespace(version="")),
                 player=SimpleNamespace(build_playback_plan=build_playback_plan),
-                executor=SimpleNamespace(execute_interactive=execute_interactive),
+                playback_executor=SimpleNamespace(
+                    execute_interactive=execute_interactive
+                ),
             ),
         )
         replay_records = [

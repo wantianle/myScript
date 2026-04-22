@@ -79,7 +79,7 @@ class RecordPlayer:
         if not 0.1 <= playback_rate <= 10:
             raise ValueError("播放倍速需在 0.1 到 10 之间")
         mapped_paths = [
-            self.session.executor.map_path(replay_record.path)
+            self.session.playback_executor.map_path(replay_record.path)
             for replay_record in records
         ]
         cmd_parts = ["cyber_recorder play", "-l", "-f", " ".join(mapped_paths)]

@@ -96,14 +96,3 @@ class SSHAdapter:
     def execute(self, cmd: str) -> str:
         """在远程执行 Shell 命令"""
         return self._call(self._build_ssh_cmd(cmd), "SSH 执行失败")
-
-    def execute_interactive(self, cmd: str) -> None:
-        env_c = os.environ.copy()
-        env_c["LC_ALL"] = "C"
-        completed_process = subprocess.run(
-            self._build_ssh_cmd(cmd, interactive=True),
-            env=env_c,
-            check=False,
-        )
-        if completed_process.returncode != 0:
-            raise CommandExecutionError("SSH 执行失败")

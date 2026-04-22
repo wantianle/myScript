@@ -11,10 +11,11 @@ class Recorder:
     def __init__(self, session):
         self.session = session
 
-    def get_info(self, docker_path: str) -> RecordInfo:
+    def get_info(self, docker_path: str, executor=None) -> RecordInfo:
         """获取 record 的时间、时长、排序后的频道列表"""
+        target_executor = executor or self.session.executor
         try:
-            stdout = self.session.executor.execute(f"cyber_recorder info {docker_path}")
+            stdout = target_executor.execute(f"cyber_recorder info {docker_path}")
             return parser.parse_record_info(stdout)
         except Exception as e:
             raise RecordInfoError(f"{docker_path} 损坏，解析元数据失败！") from e
