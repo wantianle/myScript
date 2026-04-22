@@ -96,6 +96,7 @@ def build_issue_title_from_vmc(
     vehicle_name = _extract_vmc_value(vmc_text, "MDRIVE_VEHICLE_NAME")
     if not vehicle_model or not vehicle_name or not tag_text:
         return SUGGESTED_TITLE_TEMPLATE
+    vehicle_model = vehicle_model.split("_", 1)[0]
     return "[{0}-模块-{1}]{2}".format(vehicle_model, vehicle_name, tag_text)
 
 

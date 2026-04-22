@@ -56,6 +56,23 @@ class IssueDraftTests(unittest.TestCase):
 
         self.assertEqual(suggested_title, "[E171-模块-XZB600013]demo_tag")
 
+    def test_build_issue_title_from_vmc_trims_vehicle_model_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vmc_path = Path(tmpdir) / "vmc.sh"
+            vmc_path.write_text(
+                "\n".join(
+                    [
+                        'MDRIVE_VEHICLE_MODEL="AB6_HW3"',
+                        'MDRIVE_VEHICLE_NAME="XZB600013"',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            suggested_title = build_issue_title_from_vmc(vmc_path, "demo_tag")
+
+        self.assertEqual(suggested_title, "[AB6-模块-XZB600013]demo_tag")
+
     def test_build_issue_title_from_vmc_falls_back_when_fields_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             vmc_path = Path(tmpdir) / "vmc.sh"
