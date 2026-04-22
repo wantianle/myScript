@@ -136,6 +136,9 @@ class SSHAdapterTests(unittest.TestCase):
         ssh_cmd = call.call_args[0][0]
         self.assertEqual(ssh_cmd[0], "ssh")
         self.assertEqual(ssh_cmd[-2], "nvidia@192.168.10.2")
+        self.assertIn("export GLOG_log_dir=/tmp", ssh_cmd[-1])
+        self.assertIn("export MDRIVE_ROOT_DIR='/mdrive'", ssh_cmd[-1])
+        self.assertIn("export MDRIVE_DEP_DIR='/mdrive/mdrive_dep'", ssh_cmd[-1])
         self.assertIn("source /env/setup.sh && echo hello", ssh_cmd[-1])
         self.assertEqual(call.call_args[0][1], "SSH 执行失败")
 
@@ -186,7 +189,12 @@ class SSHAdapterTests(unittest.TestCase):
                 "-o",
                 "ControlPersist=5m",
                 "nvidia@192.168.10.2",
-                "LC_ALL=C export LANG=C.UTF-8 && export LC_ALL=C.UTF-8 && source /env/setup.sh && echo hello",
+                (
+                    "LC_ALL=C export LANG=C.UTF-8 && export LC_ALL=C.UTF-8 && "
+                    "export GLOG_log_dir=/tmp && export MDRIVE_ROOT_DIR='/mdrive' "
+                    "&& export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && "
+                    "source /env/setup.sh && echo hello"
+                ),
             ],
             env=ANY,
             check=False,

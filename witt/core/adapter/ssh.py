@@ -15,7 +15,11 @@ class SSHAdapter:
         self.ip = ctx.remote.ip
         self.setup_env = ctx.docker.setup_env
         self.remote_addr = f"{self.user}@{self.ip}"
-        self.base_env_cmd = "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8"
+        self.base_env_cmd = (
+            "export LANG=C.UTF-8 && export LC_ALL=C.UTF-8 && "
+            "export GLOG_log_dir=/tmp && export MDRIVE_ROOT_DIR='/mdrive' && "
+            "export MDRIVE_DEP_DIR='/mdrive/mdrive_dep'"
+        )
 
     def _get_common_opts(self) -> List[str]:
         """统一 SSH/SCP 的安全与连接参数"""
