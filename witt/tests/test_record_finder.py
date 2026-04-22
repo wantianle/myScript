@@ -20,6 +20,14 @@ class RecordFinderTests(unittest.TestCase):
         self.assertEqual(am_pm_tag, "demo_tag")
         self.assertEqual(am_pm_time, datetime(2026, 4, 19, 12, 0, 5))
 
+    def test_parse_tag_message_preserves_original_text_before_time(self) -> None:
+        message = '16车ori_z":改0.0001掉头测试 : 2026/4/22 17:11:46'
+
+        tag_name, tag_time = record_finder.parse_tag_message(message)
+
+        self.assertEqual(tag_name, '16车ori_z":改0.0001掉头测试')
+        self.assertEqual(tag_time, datetime(2026, 4, 22, 17, 11, 46))
+
     def test_find_local_tasks_keeps_last_file_before_window_for_each_soc(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             data_root = Path(tmpdir)
@@ -107,6 +115,30 @@ class RecordFinderTests(unittest.TestCase):
 
         self.assertEqual([task_entry.name for task_entry in task_entries], ["tag_a", "tag_b"])
         self.assertEqual([task_entry.id for task_entry in task_entries], ["01", "02"])
+
+    def test_find_tasks_from_path_texts_preserves_raw_tag_name_with_escaped_quote(self) -> None:
+        path_texts = [
+            "/remote/root/soc1/20260422.record.00000.171140",
+            "/remote/root/soc1/20260422.record.00001.171145",
+            "/remote/root/demo_tag_20260422.pb.txt",
+        ]
+        tag_contents = {
+            "/remote/root/demo_tag_20260422.pb.txt": (
+                'msg: "16车ori_z\\":改0.0001掉头测试 : 2026/4/22 17:11:46"\n'
+            )
+        }
+
+        task_entries = record_finder.find_tasks_from_path_texts(
+            path_texts,
+            lambda path_text: tag_contents[path_text],
+            target_date="20260422",
+            before=10,
+            after=5,
+        )
+
+        self.assertEqual(len(task_entries), 1)
+        self.assertEqual(task_entries[0].name, '16车ori_z":改0.0001掉头测试')
+        self.assertEqual(task_entries[0].time, "2026-04-22 17:11:46")
 
     def test_find_tasks_from_path_texts_supports_callback_based_loading(self) -> None:
         path_texts = [

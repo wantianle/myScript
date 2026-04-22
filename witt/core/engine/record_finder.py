@@ -5,26 +5,27 @@ from typing import Callable, Dict, List, Sequence, Tuple
 
 from core.errors import FindRecordError
 from core.models import TaskEntry
-from utils import parser
 
 PathTextReader = Callable[[str], str]
 RecordIndex = Dict[int, List[Tuple[int, Path]]]
-_TAG_LINE_RE = re.compile(r'msg:\ "([^"]+)"')
+_TAG_LINE_RE = re.compile(r'msg:\s*"((?:\\.|[^"])*)"')
 _TAG_TIME_RE = re.compile(
-    r"([0-9]{4})/([0-9]{1,2})/([0-9]{1,2}) ([0-9]{1,2}):([0-9]{2}):([0-9]{2})"
+    r"([0-9]{4})/([0-9]{1,2})/([0-9]{1,2}) "
+    r"([0-9]{1,2}):([0-9]{2}):([0-9]{2})\s*$"
 )
 _TAG_TIME_AM_PM_RE = re.compile(
-    r"([0-9]{1,2})/([0-9]{1,2})/([0-9]{4}), ([0-9]{1,2}):([0-9]{2}):([0-9]{2}) (AM|PM)"
+    r"([0-9]{1,2})/([0-9]{1,2})/([0-9]{4}), "
+    r"([0-9]{1,2}):([0-9]{2}):([0-9]{2}) (AM|PM)\s*$"
 )
+_TAG_ESCAPE_RE = re.compile(r'\\([\\nrt"])')
 
 
 def parse_tag_message(message: str) -> Tuple[str, datetime]:
     """解析 tag 文本中的名称和时间，兼容 shell 里的两种时间格式。"""
-    tag_name = message.split(" :", 1)[0].strip()
     matched_direct = _TAG_TIME_RE.search(message)
     if matched_direct is not None:
         year, month, day, hour, minute, second = matched_direct.groups()
-        return tag_name, datetime(
+        return _extract_tag_name(message, matched_direct.start()), datetime(
             int(year),
             int(month),
             int(day),
@@ -41,7 +42,7 @@ def parse_tag_message(message: str) -> Tuple[str, datetime]:
         hour_value += 12
     elif am_pm == "AM" and hour_value == 12:
         hour_value = 0
-    return tag_name, datetime(
+    return _extract_tag_name(message, matched_am_pm.start()), datetime(
         int(year),
         int(month),
         int(day),
@@ -49,6 +50,14 @@ def parse_tag_message(message: str) -> Tuple[str, datetime]:
         int(minute),
         int(second),
     )
+
+
+def _extract_tag_name(message: str, time_start: int) -> str:
+    """按末尾时间反向截取 tag 名称，仅移除分隔符本身。"""
+    tag_name = message[:time_start].rstrip()
+    if tag_name.endswith(":"):
+        return tag_name[:-1].rstrip()
+    return tag_name
 
 
 def build_record_index(record_paths: Sequence[Path]) -> RecordIndex:
@@ -178,7 +187,7 @@ def find_tasks_from_path_texts(
             task_entries.append(
                 TaskEntry.from_record_paths(
                     time=tag_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    name=parser.sanitize_name(tag_name),
+                    name=tag_name,
                     paths=[str(path_obj) for path_obj in matched_paths],
                 )
             )
@@ -211,8 +220,24 @@ def _load_tag_messages_from_text(tag_content: str) -> List[str]:
         matched_line = _TAG_LINE_RE.search(line)
         if matched_line is None:
             continue
-        tag_messages.append(matched_line.group(1).replace("\\n", ""))
+        tag_messages.append(_restore_tag_message(matched_line.group(1)))
     return tag_messages
+
+
+def _restore_tag_message(raw_message: str) -> str:
+    """还原 pb 文本中的常见转义，尽量保留用户原始输入。"""
+    return _TAG_ESCAPE_RE.sub(_replace_tag_escape, raw_message)
+
+
+def _replace_tag_escape(matched_escape: re.Match) -> str:
+    escape_char = matched_escape.group(1)
+    if escape_char == "n":
+        return "\n"
+    if escape_char == "r":
+        return "\r"
+    if escape_char == "t":
+        return "\t"
+    return escape_char
 
 
 def _read_local_text(path_text: str) -> str:
