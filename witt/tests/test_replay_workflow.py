@@ -674,6 +674,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
 
         issue_draft = save_issue_draft.call_args.args[1]
         self.assertEqual(issue_draft.suggested_title, "[E171-模块-XZB600013]demo_tag")
+        self.assertEqual(issue_draft.tag_time_text, "20260419_120000")
         self.assertEqual(issue_draft.playback_range_text, "5")
 
 

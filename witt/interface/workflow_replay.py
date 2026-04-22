@@ -323,6 +323,7 @@ def _post_replay_issue_draft(
         tag_text=display_tag or playback_plan.display_tag,
         vehicle=session.ctx.logic.vehicle,
         target_date=session.ctx.logic.target_date,
+        tag_time_text=issue_timestamp,
         playback_command=playback_command,
         version_text=load_version_text(session.ctx.logic.version),
         playback_rate=playback_plan.rate,

@@ -19,6 +19,7 @@ class IssueDraftTests(unittest.TestCase):
             tag_text="demo_tag",
             vehicle="XZB600013",
             target_date="20260416",
+            tag_time_text="2026-04-16 12:00:00",
             playback_command="cyber_recorder play -r 2",
             version_text='{"version":"demo"}',
             playback_rate=2.0,
@@ -31,13 +32,38 @@ class IssueDraftTests(unittest.TestCase):
 
         self.assertIn("demo_tag", markdown_text)
         self.assertIn("[E171-模块-XZB600013]demo_tag", markdown_text)
-        self.assertIn("XZB600013 | 20260416", markdown_text)
+        self.assertIn("XZB600013 | 2026-04-16 12:00:00", markdown_text)
         self.assertIn("cyber_recorder play -r 2", markdown_text)
         self.assertIn("start(-s): 5", markdown_text)
         self.assertNotIn("range(-s):", markdown_text)
         self.assertIn("rate(-r): x2", markdown_text)
         self.assertIn("channels(-k): /apollo/foo", markdown_text)
         self.assertNotIn("数据路径", markdown_text)
+
+    def test_render_issue_markdown_falls_back_to_target_date_when_tag_time_missing(self) -> None:
+        issue_draft = IssueDraft(
+            tag_text="demo_tag",
+            vehicle="XZB600013",
+            target_date="20260416",
+            playback_command="cyber_recorder play -r 1",
+        )
+
+        markdown_text = render_issue_markdown(issue_draft)
+
+        self.assertIn("XZB600013 | 20260416", markdown_text)
+
+    def test_render_issue_markdown_formats_compact_tag_timestamp(self) -> None:
+        issue_draft = IssueDraft(
+            tag_text="demo_tag",
+            vehicle="XZB600013",
+            target_date="20260416",
+            tag_time_text="20260416_120000",
+            playback_command="cyber_recorder play -r 1",
+        )
+
+        markdown_text = render_issue_markdown(issue_draft)
+
+        self.assertIn("XZB600013 | 2026-04-16 12:00:00", markdown_text)
 
     def test_build_issue_title_from_vmc_uses_vehicle_fields_and_tag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

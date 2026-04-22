@@ -21,6 +21,7 @@ class IssueDraft:
     vehicle: str
     target_date: str
     playback_command: str
+    tag_time_text: str = ""
     version_text: str = ""
     playback_rate: float = 1.0
     playback_range_text: str = "全播"
@@ -33,9 +34,13 @@ def render_issue_markdown(issue_draft: IssueDraft) -> str:
     """渲染 issue 草稿 Markdown 内容。"""
     version_block = issue_draft.version_text or "未提供版本文件"
     channels_text = ", ".join(issue_draft.playback_channels) if issue_draft.playback_channels else "无"
+    tag_time_text = _format_issue_timestamp_for_display(
+        issue_draft.tag_time_text,
+        issue_draft.target_date,
+    )
     return f"""- **建议标题：** {issue_draft.suggested_title}
 - **tag：** {issue_draft.tag_text}
-- **车辆/日期：** {issue_draft.vehicle} | {issue_draft.target_date}
+- **车辆/日期：** {issue_draft.vehicle} | {tag_time_text}
 - **问题和预期描述：**
 > {issue_draft.issue_description}
 - **车辆软硬件信息：**
@@ -115,6 +120,31 @@ def _normalize_issue_timestamp(issue_timestamp: Union[str, datetime]) -> str:
     ):
         try:
             return datetime.strptime(timestamp_text, time_format).strftime("%Y%m%d_%H%M%S")
+        except ValueError:
+            continue
+    return timestamp_text
+
+
+def _format_issue_timestamp_for_display(
+    issue_timestamp: Union[str, datetime],
+    fallback_text: str = "",
+) -> str:
+    """将原始时间文本格式化为完整日期时间，失败时回退原值或默认文本。"""
+    if isinstance(issue_timestamp, datetime):
+        return issue_timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp_text = str(issue_timestamp).strip()
+    if not timestamp_text:
+        return fallback_text
+    for time_format in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y%m%d_%H%M%S",
+        "%Y%m%d%H%M%S",
+    ):
+        try:
+            return datetime.strptime(timestamp_text, time_format).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         except ValueError:
             continue
     return timestamp_text
