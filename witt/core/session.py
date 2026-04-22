@@ -74,8 +74,3 @@ class AppSession:
     def playback_executor(self) -> DockerAdapter:
         """回播相关命令始终在本地 Docker 环境执行。"""
         return DockerAdapter(self.ctx)
-
-    @property
-    def executor(self) -> Union[DockerAdapter, SSHAdapter]:
-        """兼容旧调用，默认返回查询/切片阶段的数据源执行器。"""
-        return self.source_executor

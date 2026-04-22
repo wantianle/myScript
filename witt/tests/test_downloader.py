@@ -23,7 +23,7 @@ def _build_task_entry() -> TaskEntry:
 def _build_downloader(
     mode: int = 1,
     recorder=None,
-    executor=None,
+    source_executor=None,
     metadata_repository=None,
 ) -> RecordDownloader:
     raw_session = SimpleNamespace(
@@ -39,7 +39,8 @@ def _build_downloader(
             get_task_dir=Mock(return_value=Path("/tmp/output")),
         ),
         recorder=recorder or SimpleNamespace(split=Mock()),
-        executor=executor or SimpleNamespace(fetch_file=Mock(), remove=Mock()),
+        source_executor=source_executor
+        or SimpleNamespace(fetch_file=Mock(), remove=Mock(), execute=Mock()),
     )
     return RecordDownloader(
         cast(Any, raw_session),
@@ -73,14 +74,14 @@ class RecordDownloaderTests(unittest.TestCase):
 
     def test_sync_file_returns_remote_fetch_failure_reason(self) -> None:
         task_entry = _build_task_entry()
-        executor = SimpleNamespace(
+        source_executor = SimpleNamespace(
             fetch_file=Mock(side_effect=RuntimeError("fetch failed")),
             remove=Mock(),
         )
         downloader = _build_downloader(
             mode=3,
             recorder=SimpleNamespace(split=Mock()),
-            executor=executor,
+            source_executor=source_executor,
         )
 
         failure_reason = downloader._sync_file(

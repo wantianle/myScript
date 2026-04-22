@@ -13,7 +13,7 @@ class Recorder:
 
     def get_info(self, docker_path: str, executor=None) -> RecordInfo:
         """获取 record 的时间、时长、排序后的频道列表"""
-        target_executor = executor or self.session.executor
+        target_executor = executor or self.session.source_executor
         try:
             stdout = target_executor.execute(f"cyber_recorder info {docker_path}")
             return parser.parse_record_info(stdout)
@@ -44,7 +44,7 @@ class Recorder:
         split_cmd = " ".join(cmd_parts)
 
         try:
-            self.session.executor.execute(split_cmd)
+            self.session.source_executor.execute(split_cmd)
         except Exception as e:
             logging.debug(f"{host_in} 切片异常: {e}")
             raise RecordSplitError(

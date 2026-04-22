@@ -86,7 +86,7 @@ class RecordDownloader:
                 f"find {quote(str(src_dir))} -maxdepth 1 -type f "
                 f"-name 'version*' 2>/dev/null"
             )
-            result_str = self.session.executor.execute(find_cmd).strip()
+            result_str = self.session.source_executor.execute(find_cmd).strip()
             return [Path(line.strip()) for line in result_str.splitlines() if line.strip()]
         return sorted(src_dir.glob("version*"))
 
@@ -104,7 +104,7 @@ class RecordDownloader:
             for remote_v_path in version_files:
                 v_name = remote_v_path.name
                 v_dest = save_dir / v_name
-                self.session.executor.fetch_file(str(remote_v_path), v_dest)
+                self.session.source_executor.fetch_file(str(remote_v_path), v_dest)
                 logging.info(f"[SYNC_VERSION] 成功同步远程文件: {v_name}")
         else:
             for v_src in version_files:
@@ -210,7 +210,7 @@ class RecordDownloader:
             self._cleanup_remote_temp_file(remote_out, "after_split_error")
             return self._build_batch_failure_reason("切片失败", Path(src))
         try:
-            self.session.executor.fetch_file(remote_out, dest)
+            self.session.source_executor.fetch_file(remote_out, dest)
             return None
         except Exception as e:
             logging.debug(f"{src} 拉取异常: {e}")
@@ -223,7 +223,7 @@ class RecordDownloader:
     def _cleanup_remote_temp_file(self, remote_path: str, stage: str) -> None:
         """清理远端临时文件，失败时保留调试信息。"""
         try:
-            self.session.executor.remove(remote_path)
+            self.session.source_executor.remove(remote_path)
         except Exception as e:
             logging.debug(
                 "[REMOTE_SPLIT_CLEANUP_FAIL] File: %s | Stage: %s | %s",
