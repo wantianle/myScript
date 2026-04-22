@@ -298,13 +298,13 @@ svc::recorder(){
         log_warn "数据盘剩余空间不足 200GB (当前: ${avail}GB)！"
     fi
     if [[ $1 == "on" || $1 == "" ]]; then
-        supervisorctl start Recorder
-        supervisorctl start TestTool
-        ssh $SSH_OPTS "$SOC2_IP" "supervisorctl start Recorder"
+        sudo supervisorctl start Recorder
+        sudo supervisorctl start TestTool
+        ssh $SSH_OPTS "$SOC2_IP" "sudo supervisorctl start Recorder"
     elif [[ $1 == "off" ]]; then
-        supervisorctl stop Recorder
-        supervisorctl stop TestTool
-        ssh $SSH_OPTS "$SOC2_IP" "supervisorctl stop Recorder"
+        sudo supervisorctl stop Recorder
+        sudo supervisorctl stop TestTool
+        ssh $SSH_OPTS "$SOC2_IP" "sudo supervisorctl stop Recorder"
     else
         usage
     fi
@@ -484,13 +484,22 @@ disk::_get_mnt_dev() {
 
 # 检查硬盘是否正确挂载双端
 disk::check(){
-    local dev mnt
-    dev=$(disk::_get_dev)
-    mnt=$(disk::_get_mnt_dev)
-    if [[ -n "$dev" && "$mnt" == "$dev" ]]; then
-        echo -e "[soc1]硬盘: ${GREEN}Mounted${NC}"
+    if [[ $MDRIVE_VEHICLE_MODEL == "ECAR_HW4" ]]; then
+        # 适配物流车逻辑
+        if mountpoint -q $MOUNT_ROOT; then
+            echo -e "[soc1]硬盘: ${GREEN}Mounted${NC}"
+        else
+            echo -e "[soc1]硬盘: ${RED}Umounted${NC}"
+        fi
     else
-        echo -e "[soc1]硬盘: ${RED}Umounted${NC}"
+        local dev mnt
+        dev=$(disk::_get_dev)
+        mnt=$(disk::_get_mnt_dev)
+        if [[ -n "$dev" && "$mnt" == "$dev" ]]; then
+            echo -e "[soc1]硬盘: ${GREEN}Mounted${NC}"
+        else
+            echo -e "[soc1]硬盘: ${RED}Umounted${NC}"
+        fi
     fi
     if ssh $SSH_OPTS "$SOC2_IP" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
         echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
