@@ -2,6 +2,7 @@ import os
 import sys
 import termios
 import json
+import shlex
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Union
@@ -304,9 +305,11 @@ def _post_replay_issue_draft(
 ) -> None:
     """回播结束后统一处理 issue 草稿生成。"""
     playback_range_text = _format_playback_range(start_sec)
+    issue_start_sec = 0
     issue_description = DEFAULT_ISSUE_DESCRIPTION
     if issue_marker is not None:
         playback_range_text = _format_playback_range(issue_marker.playback_start_sec)
+        issue_start_sec = max(0, issue_marker.playback_start_sec)
         issue_description = issue_marker.issue_description
     issue_paths = _try_build_issue_paths(
         [replay_record.path for replay_record in records],
@@ -318,6 +321,7 @@ def _post_replay_issue_draft(
         playback_plan.command,
         records,
         issue_paths,
+        issue_start_sec,
     )
     issue_draft = IssueDraft(
         tag_text=display_tag or playback_plan.display_tag,
@@ -398,15 +402,74 @@ def _build_issue_playback_command(
     playback_command: str,
     records: List[ReplayRecord],
     issue_paths: List[str],
+    issue_start_sec: int,
 ) -> str:
     """将运行时回播命令中的实际路径替换为 issue 展示用 NAS 路径。"""
-    if not issue_paths or len(issue_paths) != len(records):
-        return playback_command
     issue_command = playback_command
-    for replay_record, issue_path in zip(records, issue_paths):
-        runtime_path = session.playback_executor.map_path(replay_record.path)
-        issue_command = issue_command.replace(runtime_path, issue_path)
-    return issue_command
+    if issue_paths and len(issue_paths) == len(records):
+        for replay_record, issue_path in zip(records, issue_paths):
+            runtime_path = session.playback_executor.map_path(replay_record.path)
+            issue_command = issue_command.replace(runtime_path, issue_path)
+    return _format_issue_playback_command(issue_command, issue_start_sec)
+
+
+def _format_issue_playback_command(
+    playback_command: str,
+    issue_start_sec: int,
+) -> str:
+    """将单行回播命令重排为 issue 草稿更易读的多行格式。"""
+    try:
+        command_parts = shlex.split(playback_command)
+    except ValueError:
+        return playback_command
+    if not command_parts:
+        return playback_command
+    header_parts = []
+    record_paths = []
+    playback_rate = ""
+    begin_time = ""
+    end_time = ""
+    index = 0
+    while index < len(command_parts):
+        part = command_parts[index]
+        if part == "-f":
+            index += 1
+            while index < len(command_parts) and not command_parts[index].startswith("-"):
+                record_paths.append(command_parts[index])
+                index += 1
+            continue
+        if part == "-r" and index + 1 < len(command_parts):
+            playback_rate = command_parts[index + 1]
+            index += 2
+            continue
+        if part == "-b" and index + 1 < len(command_parts):
+            begin_time = command_parts[index + 1]
+            index += 2
+            continue
+        if part == "-e" and index + 1 < len(command_parts):
+            end_time = command_parts[index + 1]
+            index += 2
+            continue
+        if part == "-k" and index + 1 < len(command_parts):
+            index += 2
+            continue
+        header_parts.append(part)
+        index += 1
+    formatted_lines = [" ".join(header_parts)]
+    formatted_lines.append("  -s {0} \\".format(max(0, issue_start_sec)))
+    if playback_rate:
+        formatted_lines.append("  -r {0} \\".format(playback_rate))
+    if begin_time:
+        formatted_lines.append('  -b "{0}" \\'.format(begin_time))
+    if end_time:
+        formatted_lines.append('  -e "{0}" \\'.format(end_time))
+    if not record_paths:
+        return "\n".join(formatted_lines)
+    for index, record_path in enumerate(record_paths):
+        path_prefix = "  -f " if index == 0 else "  "
+        suffix = " \\" if index < len(record_paths) - 1 else ""
+        formatted_lines.append("{0}{1}{2}".format(path_prefix, record_path, suffix))
+    return "\n".join(formatted_lines)
 
 
 def _build_replay_history_entry(

@@ -20,7 +20,14 @@ class IssueDraftTests(unittest.TestCase):
             vehicle="XZB600013",
             target_date="20260416",
             tag_time_text="2026-04-16 12:00:00",
-            playback_command="cyber_recorder play -r 2",
+            playback_command=(
+                "cyber_recorder play -l\n"
+                "  -s 5 \\\n"
+                "  -r 2 \\\n"
+                '  -b "2026-04-16 12:00:00" \\\n'
+                '  -e "2026-04-16 12:00:10" \\\n'
+                "  -f /tmp/a.record"
+            ),
             version_text='{"version":"demo"}',
             playback_rate=2.0,
             playback_range_text="5",
@@ -33,11 +40,11 @@ class IssueDraftTests(unittest.TestCase):
         self.assertIn("demo_tag", markdown_text)
         self.assertIn("[E171-模块-XZB600013]demo_tag", markdown_text)
         self.assertIn("XZB600013 | 2026-04-16 12:00:00", markdown_text)
-        self.assertIn("cyber_recorder play -r 2", markdown_text)
-        self.assertIn("start(-s): 5", markdown_text)
-        self.assertNotIn("range(-s):", markdown_text)
-        self.assertIn("rate(-r): x2", markdown_text)
-        self.assertIn("channels(-k): /apollo/foo", markdown_text)
+        self.assertIn("cyber_recorder play -l", markdown_text)
+        self.assertIn("  -s 5 \\", markdown_text)
+        self.assertIn("  -r 2 \\", markdown_text)
+        self.assertNotIn("回播参数", markdown_text)
+        self.assertNotIn("channels(-k):", markdown_text)
         self.assertNotIn("数据路径", markdown_text)
 
     def test_render_issue_markdown_falls_back_to_target_date_when_tag_time_missing(self) -> None:

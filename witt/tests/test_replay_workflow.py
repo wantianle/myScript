@@ -14,6 +14,32 @@ from interface import workflow_replay as replay_workflow
 
 
 class ReplayWorkflowInterfaceTests(unittest.TestCase):
+    def test_format_issue_playback_command_splits_multiple_paths(self) -> None:
+        formatted_command = replay_workflow._format_issue_playback_command(
+            (
+                'cyber_recorder play -l -f /tmp/a.record /tmp/b.record '
+                '-r 1 -k /apollo/foo '
+                '-b "2026-04-22 13:43:28" '
+                '-e "2026-04-22 13:43:58"'
+            ),
+            0,
+        )
+
+        self.assertEqual(
+            formatted_command,
+            "\n".join(
+                [
+                    "cyber_recorder play -l",
+                    "  -s 0 \\",
+                    "  -r 1 \\",
+                    '  -b "2026-04-22 13:43:28" \\',
+                    '  -e "2026-04-22 13:43:58" \\',
+                    "  -f /tmp/a.record \\",
+                    "  /tmp/b.record",
+                ]
+            ),
+        )
+
     def test_restore_environment_flow_returns_false_when_version_is_missing(self) -> None:
         restore_runtime_environment = Mock()
         session = cast(
@@ -608,74 +634,158 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
 
     def test_post_replay_issue_draft_uses_vmc_title_and_start_seconds(self) -> None:
         with patch("interface.workflow_replay._try_build_issue_paths", return_value=[]):
-            with patch(
-                "interface.workflow_replay._build_issue_playback_command",
-                return_value="cyber_recorder play -r 1",
-            ):
-                with patch("interface.workflow_replay.ui.show_result_section"):
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        work_dir = Path(tmpdir)
-                        mdrive_root = work_dir / "mdrive_root"
-                        mdrive_root.mkdir()
-                        (mdrive_root / "vmc.sh").write_text(
-                            "\n".join(
-                                [
-                                    'MDRIVE_VEHICLE_MODEL="E171"',
-                                    'MDRIVE_VEHICLE_NAME="XZB600013"',
-                                ]
-                            ),
-                            encoding="utf-8",
-                        )
-                        version_path = work_dir / "version.txt"
-                        version_path.write_text("demo-version", encoding="utf-8")
-                        session = cast(
-                            AppSession,
-                            SimpleNamespace(
-                                ctx=SimpleNamespace(
-                                    work_dir=work_dir,
-                                    host=SimpleNamespace(mdrive_root=str(mdrive_root)),
-                                    logic=SimpleNamespace(
-                                        version=str(version_path),
-                                        target_date="20260419",
-                                        vehicle="XZB600013",
-                                    ),
-                                    playback_blacklist=[],
+            with patch("interface.workflow_replay.ui.show_result_section"):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    work_dir = Path(tmpdir)
+                    mdrive_root = work_dir / "mdrive_root"
+                    mdrive_root.mkdir()
+                    (mdrive_root / "vmc.sh").write_text(
+                        "\n".join(
+                            [
+                                'MDRIVE_VEHICLE_MODEL="E171"',
+                                'MDRIVE_VEHICLE_NAME="XZB600013"',
+                            ]
+                        ),
+                        encoding="utf-8",
+                    )
+                    version_path = work_dir / "version.txt"
+                    version_path.write_text("demo-version", encoding="utf-8")
+                    session = cast(
+                        AppSession,
+                        SimpleNamespace(
+                            ctx=SimpleNamespace(
+                                work_dir=work_dir,
+                                host=SimpleNamespace(mdrive_root=str(mdrive_root)),
+                                logic=SimpleNamespace(
+                                    version=str(version_path),
+                                    target_date="20260419",
+                                    vehicle="XZB600013",
                                 ),
+                                playback_blacklist=[],
                             ),
+                            playback_executor=SimpleNamespace(map_path=lambda path: path),
+                        ),
+                    )
+                    records = [
+                        ReplayRecord(
+                            path="/tmp/demo.record",
+                            begin="2026-04-19 12:00:00",
+                            duration=10,
                         )
-                        records = [
-                            ReplayRecord(
-                                path="/tmp/demo.record",
-                                begin="2026-04-19 12:00:00",
-                                duration=10,
-                            )
-                        ]
-                        playback_plan = cast(
-                            PlaybackPlan,
-                            SimpleNamespace(
-                                display_tag="plan_tag",
-                                rate=1.0,
-                                command="cyber_recorder play -r 1",
+                    ]
+                    playback_plan = cast(
+                        PlaybackPlan,
+                        SimpleNamespace(
+                            display_tag="plan_tag",
+                            rate=1.0,
+                            command=(
+                                'cyber_recorder play -l -f /tmp/demo.record '
+                                '-r 1 -k /apollo/foo '
+                                '-b "2026-04-19 12:00:00" '
+                                '-e "2026-04-19 12:00:10"'
                             ),
-                        )
+                        ),
+                    )
 
-                        with patch(
-                            "interface.workflow_replay.save_issue_draft"
-                        ) as save_issue_draft:
-                            replay_workflow._post_replay_issue_draft(
-                                session,
-                                records,
-                                playback_plan,
-                                "demo_tag",
-                                "20260419_120000",
-                                5,
-                                0,
-                            )
+                    with patch(
+                        "interface.workflow_replay.save_issue_draft"
+                    ) as save_issue_draft:
+                        replay_workflow._post_replay_issue_draft(
+                            session,
+                            records,
+                            playback_plan,
+                            "demo_tag",
+                            "20260419_120000",
+                            5,
+                            0,
+                            replay_workflow.ReplayIssueMarker(
+                                playback_start_sec=5,
+                                issue_description="demo",
+                            ),
+                        )
 
         issue_draft = save_issue_draft.call_args.args[1]
         self.assertEqual(issue_draft.suggested_title, "[E171-模块-XZB600013]demo_tag")
         self.assertEqual(issue_draft.tag_time_text, "20260419_120000")
         self.assertEqual(issue_draft.playback_range_text, "5")
+        self.assertIn("cyber_recorder play -l", issue_draft.playback_command)
+        self.assertIn("  -s 5 \\", issue_draft.playback_command)
+        self.assertIn("  -r 1 \\", issue_draft.playback_command)
+        self.assertIn('  -b "2026-04-19 12:00:00" \\', issue_draft.playback_command)
+        self.assertIn('  -e "2026-04-19 12:00:10" \\', issue_draft.playback_command)
+        self.assertIn("  -f /tmp/demo.record", issue_draft.playback_command)
+        self.assertNotIn("-k /apollo/foo", issue_draft.playback_command)
+
+    def test_post_replay_issue_draft_defaults_issue_start_seconds_to_zero(self) -> None:
+        with patch("interface.workflow_replay._try_build_issue_paths", return_value=[]):
+            with patch("interface.workflow_replay.ui.show_result_section"):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    work_dir = Path(tmpdir)
+                    mdrive_root = work_dir / "mdrive_root"
+                    mdrive_root.mkdir()
+                    (mdrive_root / "vmc.sh").write_text(
+                        "\n".join(
+                            [
+                                'MDRIVE_VEHICLE_MODEL="E171"',
+                                'MDRIVE_VEHICLE_NAME="XZB600013"',
+                            ]
+                        ),
+                        encoding="utf-8",
+                    )
+                    version_path = work_dir / "version.txt"
+                    version_path.write_text("demo-version", encoding="utf-8")
+                    session = cast(
+                        AppSession,
+                        SimpleNamespace(
+                            ctx=SimpleNamespace(
+                                work_dir=work_dir,
+                                host=SimpleNamespace(mdrive_root=str(mdrive_root)),
+                                logic=SimpleNamespace(
+                                    version=str(version_path),
+                                    target_date="20260419",
+                                    vehicle="XZB600013",
+                                ),
+                                playback_blacklist=[],
+                            ),
+                            playback_executor=SimpleNamespace(map_path=lambda path: path),
+                        ),
+                    )
+                    records = [
+                        ReplayRecord(
+                            path="/tmp/demo.record",
+                            begin="2026-04-19 12:00:00",
+                            duration=10,
+                        )
+                    ]
+                    playback_plan = cast(
+                        PlaybackPlan,
+                        SimpleNamespace(
+                            display_tag="plan_tag",
+                            rate=1.0,
+                            command=(
+                                'cyber_recorder play -l -f /tmp/demo.record '
+                                '-r 1 '
+                                '-b "2026-04-19 12:00:00" '
+                                '-e "2026-04-19 12:00:10"'
+                            ),
+                        ),
+                    )
+
+                    with patch(
+                        "interface.workflow_replay.save_issue_draft"
+                    ) as save_issue_draft:
+                        replay_workflow._post_replay_issue_draft(
+                            session,
+                            records,
+                            playback_plan,
+                            "demo_tag",
+                            "20260419_120000",
+                            5,
+                            0,
+                        )
+
+        issue_draft = save_issue_draft.call_args.args[1]
+        self.assertIn("  -s 0 \\", issue_draft.playback_command)
 
 
 if __name__ == "__main__":

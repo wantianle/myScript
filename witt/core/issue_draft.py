@@ -33,7 +33,6 @@ class IssueDraft:
 def render_issue_markdown(issue_draft: IssueDraft) -> str:
     """渲染 issue 草稿 Markdown 内容。"""
     version_block = issue_draft.version_text or "未提供版本文件"
-    channels_text = ", ".join(issue_draft.playback_channels) if issue_draft.playback_channels else "无"
     tag_time_text = _format_issue_timestamp_for_display(
         issue_draft.tag_time_text,
         issue_draft.target_date,
@@ -50,12 +49,6 @@ def render_issue_markdown(issue_draft: IssueDraft) -> str:
 - **回播命令：**
 ```bash
 {issue_draft.playback_command}
-```
-- **回播参数：**
-```text
-start(-s): {issue_draft.playback_range_text}
-rate(-r): x{issue_draft.playback_rate:g}
-channels(-k): {channels_text}
 ```
 """
 
