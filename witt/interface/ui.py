@@ -40,7 +40,7 @@ def print_banner() -> None:
     """打印程序主标题。"""
     banner_text = Text(justify="center")
     banner_text.append("witt\n", style="title")
-    banner_text.append("What Is That Tag? v2.0.0", style="subtitle")
+    banner_text.append("What Is That Tag? v2.1.3", style="subtitle")
     _CONSOLE.print(
         Panel.fit(
             Align.center(banner_text),
