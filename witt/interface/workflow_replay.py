@@ -455,7 +455,7 @@ def _format_issue_playback_command(
             continue
         header_parts.append(part)
         index += 1
-    formatted_lines = [" ".join(header_parts)]
+    formatted_lines = ["{0} \\".format(" ".join(header_parts))]
     formatted_lines.append("  -s {0} \\".format(max(0, issue_start_sec)))
     if playback_rate:
         formatted_lines.append("  -r {0} \\".format(playback_rate))

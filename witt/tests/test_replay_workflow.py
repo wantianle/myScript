@@ -29,7 +29,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
             formatted_command,
             "\n".join(
                 [
-                    "cyber_recorder play -l",
+                    "cyber_recorder play -l \\",
                     "  -s 0 \\",
                     "  -r 1 \\",
                     '  -b "2026-04-22 13:43:28" \\',
@@ -708,7 +708,7 @@ class ReplayWorkflowInterfaceTests(unittest.TestCase):
         self.assertEqual(issue_draft.suggested_title, "[E171-模块-XZB600013]demo_tag")
         self.assertEqual(issue_draft.tag_time_text, "20260419_120000")
         self.assertEqual(issue_draft.playback_range_text, "5")
-        self.assertIn("cyber_recorder play -l", issue_draft.playback_command)
+        self.assertIn("cyber_recorder play -l \\", issue_draft.playback_command)
         self.assertIn("  -s 5 \\", issue_draft.playback_command)
         self.assertIn("  -r 1 \\", issue_draft.playback_command)
         self.assertIn('  -b "2026-04-19 12:00:00" \\', issue_draft.playback_command)

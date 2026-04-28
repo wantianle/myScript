@@ -21,7 +21,7 @@ class IssueDraftTests(unittest.TestCase):
             target_date="20260416",
             tag_time_text="2026-04-16 12:00:00",
             playback_command=(
-                "cyber_recorder play -l\n"
+                "cyber_recorder play -l \\\n"
                 "  -s 5 \\\n"
                 "  -r 2 \\\n"
                 '  -b "2026-04-16 12:00:00" \\\n'
@@ -40,7 +40,7 @@ class IssueDraftTests(unittest.TestCase):
         self.assertIn("demo_tag", markdown_text)
         self.assertIn("[E171-模块-XZB600013]demo_tag", markdown_text)
         self.assertIn("XZB600013 | 2026-04-16 12:00:00", markdown_text)
-        self.assertIn("cyber_recorder play -l", markdown_text)
+        self.assertIn("cyber_recorder play -l \\", markdown_text)
         self.assertIn("  -s 5 \\", markdown_text)
         self.assertIn("  -r 2 \\", markdown_text)
         self.assertNotIn("回播参数", markdown_text)
