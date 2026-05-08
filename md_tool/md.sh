@@ -200,10 +200,10 @@ sys::export() {
     fi
 
     # 2. 文件扫描与交互选择
-    log_info "正在扫描 $MDRIVE_DATA_ROOT/{bag,log,core,crash_log,perf} 目录..."
+    log_info "正在扫描 $MDRIVE_DATA_ROOT/{bag,log,core,pcap,crash_log,perf} 目录..."
 
     local selections
-    selections=$(cd "$MDRIVE_DATA_ROOT" && find -L bag log core crash_log perf -maxdepth 2 -not -path '*/.*' 2>/dev/null | sort | fzf \
+    selections=$(cd -L "$MDRIVE_DATA_ROOT" && find -L -maxdepth 3 -not -path '*/.*' 2>/dev/null | sort | fzf \
         --multi \
         --ansi \
         --layout=reverse \
