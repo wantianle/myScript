@@ -42,6 +42,8 @@ class FailedBatch:
     task_name: str
     soc_name: str
     reason: str
+    task_id: str = ""
+    task_time: str = ""
 
 
 @dataclass
@@ -68,17 +70,24 @@ class RecordDownloader:
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
 
-    def _build_batch_failure_reason(self, failure_type: str, target_path: Path) -> str:
-        """统一构造切片批次失败原因，保留失败分类和关键路径。"""
-        return "{0}: {1}，已清理当前批次".format(failure_type, target_path)
+    def _build_batch_failure_reason(
+        self,
+        task_entry: TaskEntry,
+        failure_type: str,
+        target_path: Path,
+    ) -> str:
+        """统一构造切片批次失败原因，保留 tag、失败分类和关键路径。"""
+        return "Tag: {0} | {1}: {2}，已清理当前 Tag".format(
+            task_entry.name,
+            failure_type,
+            target_path,
+        )
 
-    def _cleanup_failed_batch(self, save_dir: Path) -> None:
-        """清理失败批次的残留数据，避免留下半成品目录"""
-        if save_dir.exists():
-            shutil.rmtree(save_dir)
-        tag_dir = save_dir.parent
-        if tag_dir.exists() and not any(tag_dir.iterdir()):
-            tag_dir.rmdir()
+    def _cleanup_failed_batch(self, batch: DownloadBatch) -> None:
+        """清理失败 tag 的残留数据，避免留下半成品目录。"""
+        tag_dir = batch.save_dir.parent
+        if tag_dir.exists():
+            shutil.rmtree(tag_dir)
 
     def _get_version_files(self, src_dir: Path) -> List[Path]:
         if self.ctx.logic.mode == 3:
@@ -159,7 +168,11 @@ class RecordDownloader:
                 save_dir,
                 e,
             )
-            return self._build_batch_failure_reason("version 同步失败", src_dir)
+            return self._build_batch_failure_reason(
+                task_entry,
+                "version 同步失败",
+                src_dir,
+            )
         try:
             self._save_contract(
                 task_entry,
@@ -175,7 +188,11 @@ class RecordDownloader:
                 meta_path,
                 e,
             )
-            return self._build_batch_failure_reason("metadata 写入失败", meta_path)
+            return self._build_batch_failure_reason(
+                task_entry,
+                "metadata 写入失败",
+                meta_path,
+            )
         logging.info(f"[TASK_COMPLETE] Tag: {task_entry.name} | Saved to: {save_dir}")
         logging.info(f"  Files: {[item.dest.name for item in processed_items]}")
         return None
@@ -201,14 +218,22 @@ class RecordDownloader:
             except RecordSplitError:
                 if Path(dest).exists():
                     Path(dest).unlink()
-                return self._build_batch_failure_reason("切片失败", Path(src))
+                return self._build_batch_failure_reason(
+                    task_entry,
+                    "切片失败",
+                    Path(src),
+                )
         remote_out = f"{src}.split"
         self._cleanup_remote_temp_file(remote_out, "before_split")
         try:
             self.session.recorder.split(src, remote_out, t_start, t_end, blacklist)
         except RecordSplitError:
             self._cleanup_remote_temp_file(remote_out, "after_split_error")
-            return self._build_batch_failure_reason("切片失败", Path(src))
+            return self._build_batch_failure_reason(
+                task_entry,
+                "切片失败",
+                Path(src),
+            )
         try:
             self.session.source_executor.fetch_file(remote_out, dest)
             return None
@@ -216,7 +241,11 @@ class RecordDownloader:
             logging.debug(f"{src} 拉取异常: {e}")
             if Path(dest).exists():
                 Path(dest).unlink()
-            return self._build_batch_failure_reason("远端拉取失败", Path(src))
+            return self._build_batch_failure_reason(
+                task_entry,
+                "远端拉取失败",
+                Path(src),
+            )
         finally:
             self._cleanup_remote_temp_file(remote_out, "after_fetch")
 
@@ -288,10 +317,12 @@ class RecordDownloader:
     ) -> None:
         task_entry = batch.task
         if batch_failure_reason or not processed_items:
-            self._cleanup_failed_batch(batch.save_dir)
+            self._cleanup_failed_batch(batch)
+            self._remove_completed_batches_for_task(summary, task_entry)
             failure_reason = (
                 batch_failure_reason
                 or self._build_batch_failure_reason(
+                    task_entry,
                     "批次存在异常",
                     batch.save_dir,
                 )
@@ -301,6 +332,8 @@ class RecordDownloader:
                     task_name=task_entry.name,
                     soc_name=batch.soc_name,
                     reason=failure_reason,
+                    task_id=task_entry.id,
+                    task_time=task_entry.time,
                 )
             )
             logging.warning(
@@ -313,19 +346,24 @@ class RecordDownloader:
                 processed_items,
             )
             if post_process_failure_reason is not None:
-                self._cleanup_failed_batch(batch.save_dir)
+                self._cleanup_failed_batch(batch)
+                self._remove_completed_batches_for_task(summary, task_entry)
                 summary.failed_batches.append(
                     FailedBatch(
                         task_name=task_entry.name,
                         soc_name=batch.soc_name,
                         reason=post_process_failure_reason,
+                        task_id=task_entry.id,
+                        task_time=task_entry.time,
                     )
                 )
                 return
             summary.completed_batches.append(batch)
         except Exception as e:
-            self._cleanup_failed_batch(batch.save_dir)
+            self._cleanup_failed_batch(batch)
+            self._remove_completed_batches_for_task(summary, task_entry)
             failure_reason = self._build_batch_failure_reason(
+                task_entry,
                 "后处理失败",
                 batch.save_dir,
             )
@@ -334,14 +372,47 @@ class RecordDownloader:
                     task_name=task_entry.name,
                     soc_name=batch.soc_name,
                     reason=failure_reason,
+                    task_id=task_entry.id,
+                    task_time=task_entry.time,
                 )
             )
             logging.warning(
                 f"[TASK_POST_PROCESS_FAIL] Tag: {task_entry.name} | Soc: {batch.soc_name} | {e}"
             )
 
+    def _remove_completed_batches_for_task(
+        self,
+        summary: DownloadSummary,
+        task_entry: TaskEntry,
+    ) -> None:
+        """失败清理会删除整个 tag 目录，已完成的同 tag 批次不应继续计为成功。"""
+        summary.completed_batches = [
+            completed_batch
+            for completed_batch in summary.completed_batches
+            if not (
+                completed_batch.task.id == task_entry.id
+                and completed_batch.task.time == task_entry.time
+            )
+        ]
+
+    def _has_failed_task(
+        self,
+        summary: DownloadSummary,
+        task_entry: TaskEntry,
+    ) -> bool:
+        """判断当前 tag 是否已经失败，避免后续 SOC 重新生成已清理目录。"""
+        return any(
+            failed_batch.task_id == task_entry.id
+            and failed_batch.task_time == task_entry.time
+            for failed_batch in summary.failed_batches
+        )
+
     def _run_task_batch(self, batch: DownloadBatch, bar, summary: DownloadSummary) -> None:
         task_entry = batch.task
+        if self._has_failed_task(summary, task_entry):
+            for _ in batch.items:
+                bar()
+            return
         self._prepare_dir(batch.save_dir)
         processed_items = []
         batch_failure_reason = ""

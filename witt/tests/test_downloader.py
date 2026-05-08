@@ -5,7 +5,13 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock, patch
 
-from core.engine.downloader import DownloadBatch, DownloadItem, DownloadSummary, RecordDownloader
+from core.engine.downloader import (
+    DownloadBatch,
+    DownloadItem,
+    DownloadSummary,
+    FailedBatch,
+    RecordDownloader,
+)
 from core.errors import RecordSplitError
 from core.models import TaskEntry
 
@@ -69,7 +75,7 @@ class RecordDownloaderTests(unittest.TestCase):
 
         self.assertEqual(
             failure_reason,
-            "切片失败: /tmp/source/soc1/demo.record，已清理当前批次",
+            "Tag: demo_tag | 切片失败: /tmp/source/soc1/demo.record，已清理当前 Tag",
         )
 
     def test_sync_file_returns_remote_fetch_failure_reason(self) -> None:
@@ -92,7 +98,7 @@ class RecordDownloaderTests(unittest.TestCase):
 
         self.assertEqual(
             failure_reason,
-            "远端拉取失败: /tmp/source/soc1/demo.record，已清理当前批次",
+            "Tag: demo_tag | 远端拉取失败: /tmp/source/soc1/demo.record，已清理当前 Tag",
         )
 
     def test_post_process_task_returns_version_sync_failure_reason(self) -> None:
@@ -127,7 +133,7 @@ class RecordDownloaderTests(unittest.TestCase):
 
         self.assertEqual(
             failure_reason,
-            "version 同步失败: /tmp/source/soc1，已清理当前批次",
+            "Tag: demo_tag | version 同步失败: /tmp/source/soc1，已清理当前 Tag",
         )
 
     def test_post_process_task_returns_metadata_write_failure_reason(self) -> None:
@@ -168,7 +174,9 @@ class RecordDownloaderTests(unittest.TestCase):
 
         self.assertEqual(
             failure_reason,
-            "metadata 写入失败: {0}，已清理当前批次".format(expected_meta_path),
+            "Tag: demo_tag | metadata 写入失败: {0}，已清理当前 Tag".format(
+                expected_meta_path
+            ),
         )
 
     def test_finalize_batch_preserves_specific_failure_reason(self) -> None:
@@ -189,16 +197,78 @@ class RecordDownloaderTests(unittest.TestCase):
                 downloader._finalize_batch(
                     batch,
                     [],
-                    "切片失败: /tmp/source/soc1/demo.record，已清理当前批次",
+                    "Tag: demo_tag | 切片失败: /tmp/source/soc1/demo.record，已清理当前 Tag",
                     summary,
                 )
 
-        cleanup_failed_batch.assert_called_once_with(save_dir)
+        cleanup_failed_batch.assert_called_once_with(batch)
         self.assertEqual(len(summary.failed_batches), 1)
         self.assertEqual(
             summary.failed_batches[0].reason,
-            "切片失败: /tmp/source/soc1/demo.record，已清理当前批次",
+            "Tag: demo_tag | 切片失败: /tmp/source/soc1/demo.record，已清理当前 Tag",
         )
+        self.assertEqual(summary.failed_batches[0].task_id, "01")
+        self.assertEqual(summary.failed_batches[0].task_time, "2026-04-19 12:00:00")
+
+    def test_cleanup_failed_batch_removes_only_failed_tag_dir(self) -> None:
+        task_entry = _build_task_entry()
+        downloader = _build_downloader()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root_dir = Path(tmpdir)
+            failed_tag_dir = root_dir / "01.20260419_120000"
+            failed_soc_dir = failed_tag_dir / "soc2"
+            other_tag_dir = root_dir / "02.20260419_120005"
+            failed_soc_dir.mkdir(parents=True)
+            other_tag_dir.mkdir()
+            (failed_soc_dir / "bad.record.split").write_text("", encoding="utf-8")
+            (other_tag_dir / "good.record.split").write_text("", encoding="utf-8")
+            batch = DownloadBatch(
+                task=task_entry,
+                soc_name="soc2",
+                save_dir=failed_soc_dir,
+                items=[],
+            )
+
+            downloader._cleanup_failed_batch(batch)
+
+            self.assertFalse(failed_tag_dir.exists())
+            self.assertTrue(other_tag_dir.exists())
+
+    def test_run_task_batch_skips_remaining_soc_after_tag_failure(self) -> None:
+        task_entry = _build_task_entry()
+        task_entry.soc_paths["soc2"] = ["/tmp/source/soc2/demo.record"]
+        downloader = _build_downloader()
+        summary = DownloadSummary(
+            failed_batches=[
+                FailedBatch(
+                    task_name="demo_tag",
+                    soc_name="soc1",
+                    reason="failed",
+                    task_id="01",
+                    task_time="2026-04-19 12:00:00",
+                )
+            ]
+        )
+        batch = DownloadBatch(
+            task=task_entry,
+            soc_name="soc2",
+            save_dir=Path("/tmp/output/soc2"),
+            items=[
+                DownloadItem(
+                    src=Path("/tmp/source/soc2/demo.record"),
+                    dest=Path("/tmp/output/soc2/demo.record.split"),
+                )
+            ],
+        )
+        bar = Mock()
+
+        with patch.object(downloader, "_prepare_dir") as prepare_dir:
+            downloader._run_task_batch(batch, bar, summary)
+
+        prepare_dir.assert_not_called()
+        downloader.session.recorder.split.assert_not_called()
+        bar.assert_called_once_with()
 
     def test_plan_download_does_not_prepare_output_dir(self) -> None:
         task_entry = _build_task_entry()
