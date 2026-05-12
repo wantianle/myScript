@@ -156,6 +156,7 @@ echo "🛡️ 路由守卫已激活，正在监控链路状态..."
 while kill -0 $SDWAN_PID 2>/dev/null; do
     if ip link show iwan1 2>/dev/null | grep -q "DOWN"; then
         echo "⚠️ 网卡启动失败，请尝试手动重启：sudo ip link set iwan1"
+        sleep 5
         continue
     fi
     add_sdwan_route
@@ -245,4 +246,4 @@ echo "   sudo systemctl start sdwan          # 启动服务"
 echo "   sudo systemctl stop sdwan           # 停止服务"
 echo "   sudo systemctl restart sdwan        # 重启服务"
 echo
-echo -e "${Y}❗ 彻底卸载: 请运行 uninstall_sdwan.sh${NC}"
+echo -e "${Y}❗ 彻底卸载: 请运行 uninstall_all.sh${NC}"
