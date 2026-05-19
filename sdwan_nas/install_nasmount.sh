@@ -56,8 +56,10 @@ fi
 echo "请选择需要挂载的 NAS:"
 echo "  1) 数据服务器 //hfs.minieye.tech/ad-data -> /media/nas"
 echo "  2) 文档服务器 //hfs.minieye.tech/ad-doc  -> /media/doc"
-echo "  3) 全部挂载"
-read -p "请输入选项 (1/2/3，直接回车默认 1): " nas_choice
+echo "  3) WWW 服务器 //hfs.minieye.tech/ad-www -> /media/www"
+echo "  4) PNC 规划服务器 //hfs.minieye.tech/department-pnc_team-planning_algo-driving -> /media/pnc_team-planning_algo-driving"
+echo "  5) 全部挂载"
+read -p "请输入选项 (1/2/3/4/5，直接回车默认 1): " nas_choice
 
 case "$nas_choice" in
     2)
@@ -65,8 +67,16 @@ case "$nas_choice" in
         MOUNT_POINTS="/media/doc"
         ;;
     3)
-        MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas" "doc|//hfs.minieye.tech/ad-doc|/media/doc"'
-        MOUNT_POINTS="/media/nas /media/doc"
+        MOUNT_ITEMS='"www|//hfs.minieye.tech/ad-www|/media/www"'
+        MOUNT_POINTS="/media/www"
+        ;;
+    4)
+        MOUNT_ITEMS='"pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc_team-planning_algo-driving"'
+        MOUNT_POINTS="/media/pnc_team-planning_algo-driving"
+        ;;
+    5)
+        MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas" "doc|//hfs.minieye.tech/ad-doc|/media/doc" "www|//hfs.minieye.tech/ad-www|/media/www" "pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc_team-planning_algo-driving"'
+        MOUNT_POINTS="/media/nas /media/doc /media/www /media/pnc_team-planning_algo-driving"
         ;;
     *)
         MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas"'

@@ -10,7 +10,9 @@ remove_nas() {
     systemctl disable nasmount 2>/dev/null
     rm -f /etc/systemd/system/nasmount.service
     rm -f /usr/local/bin/nasmount_helper.sh
-    umount -l /media/nas
+    for mount_point in /media/nas /media/doc /media/www /media/pnc_team-planning_algo-driving; do
+        umount -l "$mount_point"
+    done
     read -p "是否删除 nas 的凭证文件 /etc/creds/nas.cred? (y/n): " del_conf
     [[ "$del_conf" == "y" ]] && rm -rf /etc/creds
 }
