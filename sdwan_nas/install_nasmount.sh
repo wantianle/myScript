@@ -24,7 +24,8 @@ fi
 echo "----------- ⚡ 开始部署 NAS 自动挂载服务 -----------"
 if [[ -f "$CRED_FILE" ]]; then
     while [[ ! "$reconfig" =~ ^[yYnN]$ ]]; do
-        read -p "发现已存在配置文件 $CRED_FILE，是否重新配置? (y/n/v查看): " choice
+        read -p "发现已存在配置文件 $CRED_FILE，是否重新配置? (y/n/v查看，直接回车默认 n): " choice
+        choice=${choice:-n}
         if [[ "$choice" == "v" ]]; then
             echo -e "${B}🔐 当前凭证:${NC}"
             cat "$CRED_FILE"
@@ -57,7 +58,7 @@ echo "请选择需要挂载的 NAS:"
 echo "  1) 数据服务器 //hfs.minieye.tech/ad-data -> /media/nas"
 echo "  2) 文档服务器 //hfs.minieye.tech/ad-doc  -> /media/doc"
 echo "  3) WWW 服务器 //hfs.minieye.tech/ad-www -> /media/www"
-echo "  4) PNC 规划服务器 //hfs.minieye.tech/department-pnc_team-planning_algo-driving -> /media/pnc_team-planning_algo-driving"
+echo "  4) PNC 规划服务器 //hfs.minieye.tech/department-pnc_team-planning_algo-driving -> /media/pnc"
 echo "  5) 全部挂载"
 read -p "请输入选项 (1/2/3/4/5，直接回车默认 1): " nas_choice
 
@@ -71,12 +72,12 @@ case "$nas_choice" in
         MOUNT_POINTS="/media/www"
         ;;
     4)
-        MOUNT_ITEMS='"pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc_team-planning_algo-driving"'
-        MOUNT_POINTS="/media/pnc_team-planning_algo-driving"
+        MOUNT_ITEMS='"pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc"'
+        MOUNT_POINTS="/media/pnc"
         ;;
     5)
-        MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas" "doc|//hfs.minieye.tech/ad-doc|/media/doc" "www|//hfs.minieye.tech/ad-www|/media/www" "pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc_team-planning_algo-driving"'
-        MOUNT_POINTS="/media/nas /media/doc /media/www /media/pnc_team-planning_algo-driving"
+        MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas" "doc|//hfs.minieye.tech/ad-doc|/media/doc" "www|//hfs.minieye.tech/ad-www|/media/www" "pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc"'
+        MOUNT_POINTS="/media/nas /media/doc /media/www /media/pnc"
         ;;
     *)
         MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas"'

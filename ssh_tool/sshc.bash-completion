@@ -1,0 +1,47 @@
+_sshc_completion() {
+  local current previous command
+  COMPREPLY=()
+  current="${COMP_WORDS[COMP_CWORD]}"
+  previous="${COMP_WORDS[COMP_CWORD-1]}"
+  command="${COMP_WORDS[1]}"
+
+  if [[ "${command}" == "config" || "${command}" == "cfg" ]]; then
+    if [[ "${previous}" == "-k" || "${previous}" == "--keyfile" ]]; then
+      COMPREPLY=($(compgen -f -- "${current}"))
+      return 0
+    fi
+    if [[ "${previous}" == "-u" || "${previous}" == "--username" || "${previous}" == "-p" || "${previous}" == "--password" || "${previous}" == "--prod-username" || "${previous}" == "--prod-password" || "${previous}" == "--test-username" || "${previous}" == "--test-password" ]]; then
+      return 0
+    fi
+    COMPREPLY=($(compgen -W "-u --username -p --password --prod-username --prod-password --test-username --test-password -k --keyfile -h --help" -- "${current}"))
+    return 0
+  fi
+
+  if [[ "${current}" == -* ]]; then
+    COMPREPLY=($(compgen -W "-v --versions -h --help" -- "${current}"))
+    return 0
+  fi
+
+  if [[ "${COMP_CWORD}" -eq 1 ]]; then
+    local -a vehicles
+    local message_file message
+    message_file="$(mktemp)"
+    mapfile -t vehicles < <(sshc --complete-vehicles "${current}" 2>"${message_file}")
+    COMPREPLY=("${vehicles[@]}")
+    if [[ "${#COMPREPLY[@]}" -eq 0 ]]; then
+      message="$(<"${message_file}")"
+      if [[ -n "${message}" ]]; then
+        printf "\n%s\n" "${message}" > /dev/tty
+      fi
+    fi
+    rm -f "${message_file}"
+    compopt -o nosort 2>/dev/null || true
+    return 0
+  fi
+
+  if [[ "${previous}" == "-v" || "${previous}" == "--versions" ]]; then
+    return 0
+  fi
+}
+
+complete -F _sshc_completion sshc

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 USER_NAME="nvidia"
 SOC1_IP="192.168.10.2"
@@ -34,12 +34,14 @@ Host soc1
     User $USER_NAME
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
+    LogLevel ERROR
 
 Host soc2
     HostName $SOC2_IP
     User $USER_NAME
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
+    LogLevel ERROR
 EOF
     fi
     TARGET_IPS="$SOC1_IP $SOC2_IP"
@@ -55,6 +57,7 @@ Host soc$PORT
     User $USER_NAME
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
+    LogLevel ERROR
 EOF
         fi
     done
@@ -69,7 +72,7 @@ if [ "$MODE" == "1" ]; then
     # 局域网分发
     for IP in $TARGET_IPS; do
         ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$IP" 2>/dev/null
-        ssh-copy-id -o StrictHostKeyChecking=no -i "${KEY_PATH}.pub" "$USER_NAME@$IP"
+        ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i "${KEY_PATH}.pub" "$USER_NAME@$IP"
     done
     echo "配置完成！现在可以使用 ssh soc1 / ssh soc2 登录"
 else
@@ -77,7 +80,7 @@ else
     for PORT in $TARGET_WAN; do
         echo "正在处理端口: $PORT ..."
         ssh-keygen -f "$HOME/.ssh/known_hosts" -R "[$WAN_DOMAIN]:$PORT" 2>/dev/null
-        ssh-copy-id -o StrictHostKeyChecking=no -p "$PORT" -i "${KEY_PATH}.pub" "$USER_NAME@$WAN_DOMAIN"
+        ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -p "$PORT" -i "${KEY_PATH}.pub" "$USER_NAME@$WAN_DOMAIN"
     done
     echo "配置完成！现在可以使用 ssh soc端口号 (例如: ssh soc6171) 登录"
 fi

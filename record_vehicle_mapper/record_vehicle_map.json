@@ -1,0 +1,515 @@
+{
+  "NotFound": [],
+  "case_root": "/media/pnc_team-planning_algo-driving/L4_cases",
+  "exclude_dirs": [
+    "odom数据包"
+  ],
+  "generated_at": "2026-05-19T10:56:59+08:00",
+  "raw_root": "/media/nas/00.raw",
+  "record_regex": "\\d{14}\\.record\\.\\d{5}\\.\\d{6}(?:\\.split)?",
+  "road_test_root": "/media/nas/04.mdrive3/01.road_test",
+  "soc": "soc2",
+  "summary": {
+    "ambiguous_count": 0,
+    "case_record_count": 43,
+    "matched_count": 43,
+    "raw_not_found_count": 0,
+    "raw_search_date_count": 19,
+    "scan_error_count": 0,
+    "undated_record_count": 0,
+    "vehicle_count": 13
+  },
+  "vehicles": {
+    "XZT500009": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/死车绕行/soc2/20260508150536.record.00019.152315",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/20260508150536.record.00019.152315",
+        "version_info": {
+          "branch": "master_T5_30e1c650",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_30e1c650"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/死车绕行/soc2/20260508150536.record.00022.152601",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/20260508150536.record.00022.152601",
+        "version_info": {
+          "branch": "master_T5_30e1c650",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_30e1c650"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/死车绕行/soc2/20260508150536.record.00023.152657",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/20260508150536.record.00023.152657",
+        "version_info": {
+          "branch": "master_T5_30e1c650",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_30e1c650"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直道巡航/soc2/20260508110217.record.00002.110408",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/20260508110217.record.00002.110408",
+        "version_info": {
+          "branch": "master_T5_conf_classify_model",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_conf_classify_model_c11c0f14"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/红绿灯停车 + 红绿灯起步/soc2/20260508110217.record.00008.110942",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/20260508110217.record.00008.110942",
+        "version_info": {
+          "branch": "master_T5_conf_classify_model",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_conf_classify_model_c11c0f14"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/跟停前车/soc2/20260508150536.record.00013.151740",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/20260508150536.record.00013.151740",
+        "version_info": {
+          "branch": "master_T5_30e1c650",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_30e1c650"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/跟随前车起步/soc2/20260508150536.record.00015.151932",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/20260508150536.record.00015.151932",
+        "version_info": {
+          "branch": "master_T5_30e1c650",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_30e1c650"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/跟随前车起步/soc2/20260508150536.record.00029.153231",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/20260508150536.record.00029.153231",
+        "version_info": {
+          "branch": "master_T5_30e1c650",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_30e1c650"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-150536_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口左转/soc2/20260508110217.record.00004.110559",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/20260508110217.record.00004.110559",
+        "version_info": {
+          "branch": "master_T5_conf_classify_model",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_conf_classify_model_c11c0f14"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口左转/soc2/20260508110217.record.00012.111326",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/20260508110217.record.00012.111326",
+        "version_info": {
+          "branch": "master_T5_conf_classify_model",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_conf_classify_model_c11c0f14"
+        },
+        "version_path": "/media/nas/00.raw/20260508/XZT500009/bag/20260508-110217_soc2/version.txt"
+      }
+    ],
+    "XZT500019": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/cut in/soc2/20260421102616.record.00032.105530",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260421/XZT500019/bag/20260421-102616_soc2/20260421102616.record.00032.105530",
+        "version_info": {
+          "branch": "master_T5_260421",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260421_3a2e8d8c"
+        },
+        "version_path": "/media/nas/00.raw/20260421/XZT500019/bag/20260421-102616_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/前车刹停/soc2/20251124104226.record.00016.105826",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/04.mdrive3/01.road_test/XZT500019/2025/20251124/bag/20251124-104226_soc2/20251124104226.record.00016.105826",
+        "version_info": {
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.1.3.18.meilin_1122_conf"
+        },
+        "version_path": "/media/nas/04.mdrive3/01.road_test/XZT500019/2025/20251124/bag/20251124-104226_soc2/version.json"
+      }
+    ],
+    "XZT500020": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直道巡航/soc2/20260228140727.record.00001.140828",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00001.140828",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/红绿灯停车 + 红绿灯起步/soc2/20260228140727.record.00003.141028",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00003.141028",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/红绿灯停车 + 红绿灯起步/soc2/20260228140727.record.00009.141628",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00009.141628",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/红绿灯停车 + 红绿灯起步/soc2/20260228140727.record.00010.141728",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00010.141728",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/跟随前车起步/soc2/20260228140727.record.00003.141028",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00003.141028",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口右转/soc2/20260228140727.record.00011.141828",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00011.141828",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口右转/soc2/20260228140727.record.00012.141928",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00012.141928",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口左转/soc2/20260228140727.record.00003.141028",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/20260228140727.record.00003.141028",
+        "version_info": {
+          "branch": "MeiLin",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.0.19.MeiLin_d6198189_260227_1940"
+        },
+        "version_path": "/media/nas/00.raw/20260228/XZT500020/bag/20260228-140727_soc2/version.txt"
+      }
+    ],
+    "XZT500022": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/前车刹停/soc2/20251230152732.record.00020.154732",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/04.mdrive3/01.road_test/XZT500022/2025/20251230/bag/20251230-152732_soc2/20251230152732.record.00020.154732",
+        "version_info": {
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.1.4.2.xinzhou_1230"
+        },
+        "version_path": "/media/nas/04.mdrive3/01.road_test/XZT500022/2025/20251230/bag/20251230-152732_soc2/version.json"
+      }
+    ],
+    "XZT500030": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/u转/soc2/20260510231039.record.00015.232438",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260511/XZT500030/bag/20260510-231039_soc2/20260510231039.record.00015.232438",
+        "version_info": {
+          "branch": "master_T5_260509",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260509_cd0ff517"
+        },
+        "version_path": "/media/nas/00.raw/20260511/XZT500030/bag/20260510-231039_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行被汇入/soc2/20260510231039.record.00041.234847",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260511/XZT500030/bag/20260510-231039_soc2/20260510231039.record.00041.234847",
+        "version_info": {
+          "branch": "master_T5_260509",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260509_cd0ff517"
+        },
+        "version_path": "/media/nas/00.raw/20260511/XZT500030/bag/20260510-231039_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口右转/soc2/20260507024616.record.00002.024808",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260507/XZT500030/bag/20260507-024616_soc2/20260507024616.record.00002.024808",
+        "version_info": {
+          "branch": "master_T5_260501",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260501_30c72ba9"
+        },
+        "version_path": "/media/nas/00.raw/20260507/XZT500030/bag/20260507-024616_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口直行/soc2/20260510231039.record.00010.231956",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260511/XZT500030/bag/20260510-231039_soc2/20260510231039.record.00010.231956",
+        "version_info": {
+          "branch": "master_T5_260509",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260509_cd0ff517"
+        },
+        "version_path": "/media/nas/00.raw/20260511/XZT500030/bag/20260510-231039_soc2/version.txt"
+      }
+    ],
+    "XZT500039": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行被汇入/soc2/20260310132632.record.00003.132933",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260310/XZT500039/bag/20260310-132632_soc2/20260310132632.record.00003.132933",
+        "version_info": {
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.release_260310_cca98d38"
+        },
+        "version_path": "/media/nas/00.raw/20260310/XZT500039/bag/20260310-132632_soc2/version.json"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行被汇入/soc2/20260310132632.record.00044.141033",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260310/XZT500039/bag/20260310-132632_soc2/20260310132632.record.00044.141033",
+        "version_info": {
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.release_260310_cca98d38"
+        },
+        "version_path": "/media/nas/00.raw/20260310/XZT500039/bag/20260310-132632_soc2/version.json"
+      }
+    ],
+    "XZT500040": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行汇入/soc2/20260306105602.record.00007.110302",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260306/XZT500040/bag/20260306-105602_soc2/20260306105602.record.00007.110302",
+        "version_info": {
+          "branch": "release_260306",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.1.3.release_260306_d5bf7d6e"
+        },
+        "version_path": "/media/nas/00.raw/20260306/XZT500040/bag/20260306-105602_soc2/version.txt"
+      }
+    ],
+    "XZT500048": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/cut in/soc2/20260320201929.record.00140.223025.split",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260320/XZT500048/coding_3870/soc2/20260320201929.record.00140.223025.split",
+        "version_info": {
+          "branch": "master_T5_260320",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260320_ec49687"
+        },
+        "version_path": "/media/nas/00.raw/20260320/XZT500048/coding_3870/soc2/version.txt"
+      }
+    ],
+    "XZT500052": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行分叉/soc2/20260330100450.record.00011.101505",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/20260330100450.record.00011.101505",
+        "version_info": {
+          "branch": "test_0327",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.test_0327_1"
+        },
+        "version_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行分叉/soc2/20260330100450.record.00012.101601",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/20260330100450.record.00012.101601",
+        "version_info": {
+          "branch": "test_0327",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.test_0327_1"
+        },
+        "version_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行分叉/soc2/20260511134714.record.00014.140017",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260511/XZT500052/bag/20260511-134714_soc2/20260511134714.record.00014.140017",
+        "version_info": {
+          "branch": "master_T5_260509",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260509_cd0ff517"
+        },
+        "version_path": "/media/nas/00.raw/20260511/XZT500052/bag/20260511-134714_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行分叉/soc2/records/20260511134714.record.00143.160932",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260511/XZT500052/bag/20260511-134714_soc2/20260511134714.record.00143.160932",
+        "version_info": {
+          "branch": "master_T5_260509",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260509_cd0ff517"
+        },
+        "version_path": "/media/nas/00.raw/20260511/XZT500052/bag/20260511-134714_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行分叉/soc2/records/20260511134714.record.00144.161028",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260511/XZT500052/bag/20260511-134714_soc2/20260511134714.record.00144.161028",
+        "version_info": {
+          "branch": "master_T5_260509",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260509_cd0ff517"
+        },
+        "version_path": "/media/nas/00.raw/20260511/XZT500052/bag/20260511-134714_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行汇入/soc2/20260330133922.record.00057.143223",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-133922_soc2/20260330133922.record.00057.143223",
+        "version_info": {
+          "branch": "test_0327",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.test_0327_1"
+        },
+        "version_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-133922_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行被汇入/soc2/20260330100450.record.00016.101944",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/20260330100450.record.00016.101944",
+        "version_info": {
+          "branch": "test_0327",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.test_0327_1"
+        },
+        "version_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口直行/soc2/20260330100450.record.00016.101944",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/20260330100450.record.00016.101944",
+        "version_info": {
+          "branch": "test_0327",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.test_0327_1"
+        },
+        "version_path": "/media/nas/00.raw/20260330/XZT500052/bag/20260330-100450_soc2/version.txt"
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/路口直行/soc2/20260507091626.record.00007.092259",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260507/XZT500052/bag/20260507-091626_soc2/20260507091626.record.00007.092259",
+        "version_info": {
+          "branch": "master_T5_260501",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260501_30c72ba9"
+        },
+        "version_path": "/media/nas/00.raw/20260507/XZT500052/bag/20260507-091626_soc2/version.txt"
+      }
+    ],
+    "XZT500060": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/直行汇入/soc2/20260318193145.record.00068.203517.split",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260318/XZT500060/3737/soc2/20260318193145.record.00068.203517.split",
+        "version_info": {
+          "branch": "master_T5_260318",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260318_2119fe8b"
+        },
+        "version_path": "/media/nas/00.raw/20260318/XZT500060/3737/soc2/version.txt"
+      }
+    ],
+    "XZT500072": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/u转/soc2/20260403213546.record.00008.214340",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260403/XZT500072/bag/20260403-213546_soc2/20260403213546.record.00008.214340",
+        "version_info": {
+          "branch": "test_0402_1",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.test_0402_1"
+        },
+        "version_path": "/media/nas/00.raw/20260403/XZT500072/bag/20260403-213546_soc2/version.txt"
+      }
+    ],
+    "XZT500105": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/u转/soc2/20260427140753.record.00024.143120",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260427/XZT500105/soc2/20260427140753.record.00024.143120",
+        "version_info": null,
+        "version_path": null
+      },
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/死车绕行/soc2/20260504140820.record.00048.145505",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260504/XZT500105/20260504-140820_soc2/20260504140820.record.00048.145505",
+        "version_info": {
+          "branch": "master_T5_260501",
+          "pakage": "mdrive_conf",
+          "version": "ECAR_HW4.4.3.1.master_T5_260501_30c72ba9"
+        },
+        "version_path": "/media/nas/00.raw/20260504/XZT500105/20260504-140820_soc2/version.txt"
+      }
+    ],
+    "XZT500111": [
+      {
+        "case_record_path": "/media/pnc_team-planning_algo-driving/L4_cases/u转/soc2/20260506144506.record.00027.151119",
+        "match_status": "matched",
+        "raw_record_path": "/media/nas/00.raw/20260506/XZT500111/soc2/20260506144506.record.00027.151119",
+        "version_info": null,
+        "version_path": null
+      }
+    ]
+  },
+  "version_filenames": [
+    "version.json",
+    "version.txt"
+  ]
+}

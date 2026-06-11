@@ -1,0 +1,45 @@
+#compdef sshc
+
+local -a vehicles
+local message_file
+local output
+
+if [[ "$words[2]" == "config" || "$words[2]" == "cfg" ]]; then
+  _arguments \
+    '-u[set prod XiaoZhu username]:username:' \
+    '--username[set prod XiaoZhu username]:username:' \
+    '-p[set prod XiaoZhu password]:password:' \
+    '--password[set prod XiaoZhu password]:password:' \
+    '--prod-username[set prod XiaoZhu username]:username:' \
+    '--prod-password[set prod XiaoZhu password]:password:' \
+    '--test-username[set test XiaoZhu username]:username:' \
+    '--test-password[set test XiaoZhu password]:password:' \
+    '-k[set private key file]:keyfile:_files' \
+    '--keyfile[set private key file]:keyfile:_files'
+  return
+fi
+
+if [[ CURRENT -eq 2 ]]; then
+  message_file="$(mktemp)"
+  output="$(_call_program sshc-vehicles sshc --complete-vehicles "$words[CURRENT]" 2>"$message_file")"
+  if [[ -n "$output" ]]; then
+    vehicles=("${(@f)output}")
+  fi
+  if (( ${#vehicles[@]} > 0 )); then
+    rm -f "$message_file"
+    compstate[insert]=menu
+    compadd -Q -U -a vehicles
+  else
+    local message
+    message="$(<"$message_file")"
+    rm -f "$message_file"
+    if [[ -n "$message" ]]; then
+      _message -r "$message"
+    fi
+  fi
+  return
+fi
+
+_arguments \
+  '-v[show C4 status, versions, and existing port mappings]' \
+  '--versions[show C4 status, versions, and existing port mappings]'
