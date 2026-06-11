@@ -281,7 +281,7 @@ sys::date(){
 sys::_resolve_export_user() {
     local input_user
 
-    if ssh -q "${EXPORT_SSH_OPTS[@]}" "mini@$EXPORT_LOCAL_IP" exit 2>/dev/null; then
+    if ssh -n -q "${EXPORT_SSH_OPTS[@]}" "mini@$EXPORT_LOCAL_IP" exit 2>/dev/null; then
         EXPORT_PC_USER="mini"
         log_info "本地回传用户: $EXPORT_PC_USER"
         return 0
@@ -417,11 +417,11 @@ sys::prepare_export_ssh() {
     fi
     EXPORT_TARGET_LABEL="$EXPORT_PC_USER@$EXPORT_LOCAL_IP"
 
-    if ! ssh -q "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" exit 2>/dev/null; then
+    if ! ssh -n -q "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" exit 2>/dev/null; then
         log_info "未检测到免密授权，准备配置 (Target: $EXPORT_PC_USER@$EXPORT_LOCAL_IP:$EXPORT_SSH_PORT)..."
         if ssh-copy-id "${EXPORT_SSH_COPY_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP"; then
             log_ok "免密验证通过！"
-            if ! ssh -q "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" exit 2>/dev/null; then
+            if ! ssh -n -q "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" exit 2>/dev/null; then
                 log_err "公钥已下发，但免密验证仍失败，请检查目标端 authorized_keys 与 SSH 配置"
                 return 1
             fi
@@ -440,7 +440,7 @@ sys::prepare_export_dirs() {
     local prepare_cmd="mkdir -p $roots"
     local fix_cmd='sudo mkdir -p /media && sudo chown "$USER:$USER" /media && mkdir -p /media/mdrive_export /media/tag_export'
 
-    if ssh "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" "$prepare_cmd" >/dev/null 2>&1; then
+    if ssh -n "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" "$prepare_cmd" >/dev/null 2>&1; then
         return 0
     fi
 
@@ -458,14 +458,14 @@ sys::prepare_export_dirs() {
 
 sys::export_mkdir() {
     local dest=$1
-    ssh "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" "mkdir -p '$dest'"
+    ssh -n "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" "mkdir -p '$dest'"
 }
 
 
 sys::export_copy_file() {
     local src=$1
     local dest=$2
-    rsync -avPL -e "ssh ${EXPORT_SSH_OPTS[*]}" "$src" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP:$dest"
+    rsync -avPL -e "ssh ${EXPORT_SSH_OPTS[*]}" "$src" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP:$dest" < /dev/null
 }
 
 
@@ -583,13 +583,13 @@ sys::export() {
     fi
 
     local failed=false
-    while IFS= read -r item; do
+    while IFS= read -r -u 3 item; do
         [[ -z "$item" ]] && continue
-        if ! rsync -avPL -R -e "ssh ${EXPORT_SSH_OPTS[*]}" "$item" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP:$local_dest/"; then
+        if ! rsync -avPL -R -e "ssh ${EXPORT_SSH_OPTS[*]}" "$item" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP:$local_dest/" < /dev/null; then
             log_err "传输中断: $item"
             failed=true
         fi
-    done <<< "$selections"
+    done 3<<< "$selections"
 
     if $failed; then
         log_warn "导出完成，但存在失败项，本地路径: ${EXPORT_TARGET_LABEL:-$EXPORT_LOCAL_IP}:$local_dest"
@@ -1011,11 +1011,11 @@ tag::_prepare_clip_files() {
     fi
 
     TAG_CLIP_FILES_TO_CLEAN=()
-    while IFS=$'\t' read -r _ _ _ _ records_file; do
+    while IFS=$'\t' read -r -u 3 _ _ _ _ records_file; do
         [[ -z "$records_file" ]] && continue
         tmp_records_file="${records_file}.tmp"
         : > "$tmp_records_file"
-        while IFS=$'\t' read -r clip_path original_path; do
+        while IFS=$'\t' read -r -u 4 clip_path original_path; do
             [[ -z "$clip_path" ]] && continue
             [[ -z "$original_path" ]] && original_path="${clip_path%/*}/${clip_path##*/clip_}"
             if [[ -n "${seen_paths[$original_path]:-}" ]]; then
@@ -1053,9 +1053,9 @@ tag::_prepare_clip_files() {
             seen_paths[$original_path]=$actual_clip_path
             printf "%s\t%s\n" "$actual_clip_path" "$original_path" >> "$tmp_records_file"
             TAG_CLIP_FILES_TO_CLEAN+=("$actual_clip_path")
-        done < "$records_file"
+        done 4< "$records_file"
         mv "$tmp_records_file" "$records_file"
-    done < "$task_file"
+    done 3< "$task_file"
 }
 
 
@@ -1211,14 +1211,14 @@ PY
     local failed=false
     local index folder remote_dest raw_info_file info_file records_file record_path record_count
     local line
-    while IFS= read -r line; do
+    while IFS= read -r -u 3 line; do
         [[ -z "$line" ]] && continue
         IFS=$'\t' read -r index folder raw_info_file info_file records_file <<< "$line"
         if ! tag::_write_export_info "$raw_info_file" "$info_file" "$records_file" "$clip" "$bag_root" "$clip_dir"; then
             log_err "解析 record_paths 失败: 序号 $index"
             failed=true
         fi
-    done < "$task_file"
+    done 3< "$task_file"
 
     if $failed; then
         rm -f "$task_file"
@@ -1241,7 +1241,7 @@ PY
         fi
     fi
 
-    while IFS= read -r line; do
+    while IFS= read -r -u 3 line; do
         [[ -z "$line" ]] && continue
         IFS=$'\t' read -r index folder raw_info_file info_file records_file <<< "$line"
         remote_dest="/media/tag_export/$folder"
@@ -1254,7 +1254,7 @@ PY
         fi
 
         record_count=0
-        while IFS=$'\t' read -r record_path _; do
+        while IFS=$'\t' read -r -u 4 record_path _; do
             [[ -z "$record_path" ]] && continue
             if [[ ! -f "$record_path" ]]; then
                 log_warn "record 文件不存在，跳过: $record_path"
@@ -1266,11 +1266,11 @@ PY
                 log_err "record 导出失败: $record_path"
                 failed=true
             fi
-        done < "$records_file"
+        done 4< "$records_file"
 
         log_ok "tag 序号 $index 导出完成，record 文件数: $record_count"
         exported=$((exported + 1))
-    done < "$task_file"
+    done 3< "$task_file"
     rm -f "$task_file"
     rm -rf "$task_dir"
     $clip && tag::_cleanup_clip_files
