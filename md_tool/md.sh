@@ -95,9 +95,9 @@ usage() {
     printf "  %-45s  %s\n" "c(channel) [1(soc1)|2(soc2)]"                "查看 soc1/soc2 DDS 消息"
     printf "  %-45s  %s\n" "m(module)"                                   "管理 soc1&2 模块，查看对应模块日志和开发日志"
     printf "  %-45s  %s\n" "record [on]|<off>"                           "开启关闭 soc2 的 Recorder"
-    printf "  %-45s  %s\n" "tag info <message>"                          "记录打点信息，导出时关联前后 mcap 包"
+    printf "  %-45s  %s\n" "tag info [message]"                          "记录打点信息；不带 message 时先锁定时间再输入描述"
     printf "  %-45s  %s\n" "tag list"                                    "按日期列出已记录的打点信息"
-    printf "  %-45s  %s\n" "tag exp [--clip] -d <date> [-i <ids...>]"    "导出 tag 关联 mcap 到本地电脑，--clip 先过滤通道"
+    printf "  %-45s  %s\n" "tag exp [--clip] -d <date> [-i <ids|ranges...>]" "导出 tag 关联 mcap 到本地电脑，支持 -i 1 3 5 或 1-20"
     printf "  %-45s  %s\n" "e(export)"                                   "交互式选择需要导出的 bag/log 文件或文件夹"
     printf "  %-45s  %s\n" "remote <add|del|list>"                       "管理本地包对应的远程分支"
     printf "  %-45s  %s\n" ""                                            "  remote add <name> [branch|'-'] [platform]"
@@ -763,10 +763,10 @@ tag::_append_entry() {
     local tag_file=$1
     local time_text=$2
     local time_compact=$3
-    local message=$4
-    local bag_root=$5
+    local timestamp=$4
+    local message=$5
 
-    python3 - "$tag_file" "$time_text" "$time_compact" "$message" "$bag_root" <<'PY'
+    python3 - "$tag_file" "$time_text" "$time_compact" "$timestamp" "$message" <<'PY'
 import fcntl
 import json
 import os
@@ -777,8 +777,8 @@ output_path = Path(sys.argv[1])
 new_entry = {
     "time": sys.argv[2],
     "time_compact": sys.argv[3],
-    "message": sys.argv[4],
-    "record_root": sys.argv[5],
+    "timestamp": int(sys.argv[4]),
+    "message": sys.argv[5],
 }
 
 
@@ -826,13 +826,8 @@ PY
 
 
 tag::info() {
-    if [[ $# -eq 0 ]]; then
-        log_err "Usage: tag info <message>"
-        return 1
-    fi
-
-    local message="$*"
-    local bag_root time_text time_compact tag_date tag_file
+    local message=""
+    local bag_root time_text time_compact timestamp tag_date tag_file
     bag_root=$(tag::_bag_root)
     if [[ ! -d "$bag_root" ]]; then
         log_err "bag 目录不存在: $bag_root"
@@ -841,16 +836,41 @@ tag::info() {
 
     time_text=$(tag::_now_text) || return 1
     time_compact=$(tag::_compact_time "$time_text")
+    timestamp=$(date -d "$time_text" +%s 2>/dev/null) || {
+        log_err "无法解析打点时间: $time_text"
+        return 1
+    }
+
+    if [[ $# -gt 0 ]]; then
+        message="$*"
+    else
+        printf "tag time: %s\n" "$time_text"
+        if [[ -t 0 ]]; then
+            if ! read -e -r -p "message: " message; then
+                log_err "读取打点描述失败"
+                return 1
+            fi
+        elif ! read -r message; then
+            log_err "读取打点描述失败"
+            return 1
+        fi
+        if [[ -z "$message" ]]; then
+            log_warn "描述为空，已取消打点"
+            return 1
+        fi
+    fi
+
     tag_date=${time_compact:0:8}
     tag_file="$bag_root/tag_${tag_date}.json"
 
-    if ! tag::_append_entry "$tag_file" "$time_text" "$time_compact" "$message" "$bag_root"; then
+    if ! tag::_append_entry "$tag_file" "$time_text" "$time_compact" "$timestamp" "$message"; then
         log_err "保存打点失败: $tag_file"
         return 1
     fi
 
     log_ok "打点已保存: $tag_file"
     printf "time: %s\n" "$time_text"
+    printf "timestamp: %s\n" "$timestamp"
     printf "message: %s\n" "$message"
 }
 
@@ -935,8 +955,14 @@ tag::_write_export_info() {
     local clip_enabled=$4
     local bag_root=$5
     local clip_dir=${6:-}
+    local tag_index=${7:-}
     local time_compact
     local path export_path clip_root=""
+    local index_prefix=""
+
+    if [[ -n "$tag_index" ]]; then
+        index_prefix="tag 序号 $tag_index: "
+    fi
 
     mapfile -t tag_export_meta < <(python3 - "$raw_info_file" "$bag_root" <<'PY'
 import json
@@ -959,9 +985,9 @@ PY
 
     if ! tag::_select_records "$bag_root" "$time_compact"; then
         if [[ "$TAG_RECORD_STATUS" == "stale" ]]; then
-            log_err "最近的 mcap 包比 $time_compact 早 ${TAG_RECORD_LAG_SECONDS}s，超过 60s 限制"
+            log_err "${index_prefix}最近的 mcap 包比 $time_compact 早 ${TAG_RECORD_LAG_SECONDS}s，超过 60s 限制"
         else
-            log_err "未找到 $time_compact 对应的 mcap 包"
+            log_err "${index_prefix}未找到 $time_compact 对应的 mcap 包"
         fi
         return 1
     fi
@@ -1087,7 +1113,7 @@ tag::exp() {
                 ;;
             *)
                 log_err "未知参数: $1"
-                log_err "Usage: tag exp [--clip] -d <YYYYmmdd> [-i <ids...>]"
+                log_err "Usage: tag exp [--clip] -d <YYYYmmdd> [-i <ids|ranges...>]"
                 return 1
                 ;;
         esac
@@ -1095,7 +1121,7 @@ tag::exp() {
     done
 
     if [[ ! "$tag_date" =~ ^[0-9]{8}$ ]]; then
-        log_err "Usage: tag exp [--clip] -d <YYYYmmdd> [-i <ids...>]"
+        log_err "Usage: tag exp [--clip] -d <YYYYmmdd> [-i <ids|ranges...>]"
         return 1
     fi
 
@@ -1158,9 +1184,19 @@ if raw_ids:
     selected_indexes = []
     for raw_id in raw_ids:
         for part in raw_id.split():
-            if not part.isdigit():
-                raise SystemExit(f"invalid tag index: {part}")
-            selected_indexes.append(int(part))
+            if "-" in part:
+                start_text, sep, end_text = part.partition("-")
+                if not sep or not start_text.isdigit() or not end_text.isdigit():
+                    raise SystemExit(f"invalid tag index or range: {part}")
+                start = int(start_text)
+                end = int(end_text)
+                if start < 1 or end < 1 or start > end:
+                    raise SystemExit(f"invalid tag range: {part}")
+                selected_indexes.extend(range(start, end + 1))
+            else:
+                if not part.isdigit():
+                    raise SystemExit(f"invalid tag index or range: {part}")
+                selected_indexes.append(int(part))
 else:
     selected_indexes = list(range(1, len(entries) + 1))
 
@@ -1214,8 +1250,8 @@ PY
     while IFS= read -r -u 3 line; do
         [[ -z "$line" ]] && continue
         IFS=$'\t' read -r index folder raw_info_file info_file records_file <<< "$line"
-        if ! tag::_write_export_info "$raw_info_file" "$info_file" "$records_file" "$clip" "$bag_root" "$clip_dir"; then
-            log_err "解析 record_paths 失败: 序号 $index"
+        if ! tag::_write_export_info "$raw_info_file" "$info_file" "$records_file" "$clip" "$bag_root" "$clip_dir" "$index"; then
+            log_err "生成导出信息失败: tag 序号 $index"
             failed=true
         fi
     done 3< "$task_file"
