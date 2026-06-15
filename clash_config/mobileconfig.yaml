@@ -79,15 +79,18 @@ dns:
     - 119.29.29.29
  
 # 出站策略
-pr: &pr {type: select, proxies: [默认代理, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 推荐节点, 🇸🇬 新加节点, 🇬🇧 英国节点, 买游戏节点, DIRECT]}
+pr: &pr {type: select, proxies: [默认代理, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇰🇷 韩国自动, 🇦🇺 澳洲自动, 推荐节点, 🇬🇧 英国节点, 买游戏节点, DIRECT]}
 proxy-groups:
   - {name: 🇨🇳 台湾自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)TW", use: [zsh]}
   - {name: 🇭🇰 香港自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)HK", use: [zsh]}
-  - {name: 默认代理, type: select, proxies: [ 推荐节点, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇸🇬 新加节点, DIRECT], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Available_1.png}
+  - {name: 默认代理, type: select, proxies: [ 推荐节点, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇰🇷 韩国自动, 🇦🇺 澳洲自动, DIRECT], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Available_1.png}
   - {name: 推荐节点, type: select, include-all: true, filter: "(?i)荐", use: [zsh], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Auto.png}
   - {name: 漏网之鱼, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Final.png}
   - {name: 🇺🇸 美国自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)US", use: [zsh]}
-  - {name: 🇯🇵 日本自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)JP", use: [zsh]}
+  - {name: 🇯🇵 日本自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)JP|Japan|日本", use: [zsh]}
+  - {name: 🇸🇬 新加坡自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)SG|Singapore|新加坡", use: [zsh]}
+  - {name: 🇰🇷 韩国自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)KR|Korea|韩国", use: [zsh]}
+  - {name: 🇦🇺 澳洲自动, type: url-test, timeout: 5000, tolerance: 50, interval: 300, max-failed-times: 3, expected-status: 204, filter: "(?i)AU|Australia|澳洲|澳大利亚", use: [zsh]}
   - {name: YouTube, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png}
   - {name: ChatGPT, <<: *pr, icon: https://fastly.jsdelivr.net/gh/shindgewongxj/WHATSINStash@master/icon/openai.png}
   - {name: TikTok, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/TikTok.png}
@@ -100,7 +103,6 @@ proxy-groups:
   - {name: PayPal, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/PayPal.png}
   - {name: 全部节点, type: select, use: [zsh], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Global.png}
   - {name: 买游戏节点, type: select, filter: "(?i)RU|BR|TR", use: [zsh], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png}
-  - {name: 🇸🇬 新加节点, type: select, filter: "(?i)SG", use: [zsh]}
   - {name: 🇬🇧 英国节点, type: select, filter: "(?i)UK", use: [zsh]}
 
 

@@ -70,15 +70,18 @@ dns:
     - 119.29.29.29
 
 # 出站策略
-pr: &pr {type: select, proxies: [默认代理, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, DIRECT]}
+pr: &pr {type: select, proxies: [默认代理, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇰🇷 韩国自动, 🇦🇺 澳洲自动, DIRECT]}
 proxy-groups:
-  - {name: 默认代理, type: select, proxies: [ 推荐节点, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇯🇵 日本自动, DIRECT], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Available_1.png}
+  - {name: 默认代理, type: select, proxies: [ 推荐节点, 🇨🇳 台湾自动, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇰🇷 韩国自动, 🇦🇺 澳洲自动, DIRECT], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Available_1.png}
   - {name: 推荐节点, type: select, include-all: true, filter: "(?i)荐", use: [zsh], icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Auto.png}
   - {name: 漏网之鱼, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Final.png}
   - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, lazy: true,filter: "(?i)US", use: [zsh]}
   - {name: 🇨🇳 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, filter: "(?i)TW", use: [zsh]}
   - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, filter: "(?i)HK", use: [zsh]}
-  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, lazy: true, filter: "(?i)JP", use: [zsh]}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, lazy: true, filter: "(?i)JP|Japan|日本", use: [zsh]}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, lazy: true, filter: "(?i)SG|Singapore|新加坡", use: [zsh]}
+  - {name: 🇰🇷 韩国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, lazy: true, filter: "(?i)KR|Korea|韩国", use: [zsh]}
+  - {name: 🇦🇺 澳洲自动, type: url-test, url: 'https://www.gstatic.com/generate_204', timeout: 5000, tolerance: 20, interval: 600, max-failed-times: 3, expected-status: 204, lazy: true, filter: "(?i)AU|Australia|澳洲|澳大利亚", use: [zsh]}
   - {name: YouTube, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png}
   - {name: ChatGPT, <<: *pr, icon: https://fastly.jsdelivr.net/gh/shindgewongxj/WHATSINStash@master/icon/openai.png}
   - {name: Telegram, <<: *pr, icon: https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Telegram.png}
