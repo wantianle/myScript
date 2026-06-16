@@ -57,7 +57,7 @@ source ~/.bashrc
 
 ### `sshc <vehicle> -v`
 
-只查看信息，不创建映射，不执行 SSH。输出内容包括：
+只查看信息，不创建映射，不执行 SSH。即使车辆当前离线，或者返回里没有 `c4Online` 字段，也会尽量展示最近一次上报的车辆信息。输出内容包括：
 
 - 车辆 ID。
 - `c4Online` 状态。
@@ -110,7 +110,7 @@ sshc 21<Tab>
 - 数字输入大于等于 5 位会直接匹配车辆名后缀，例如 `500010` 可以匹配 `TEST-XZT500010`。
 - 不限制车辆名前缀。
 - 候选只保留 `c4Online == true` 的车辆。
-- 无在线候选时会提示 `sshc: no online vehicle candidates for ...`。
+- 无在线候选时会提示 `[WARNING] no online vehicle candidates for ...`。
 
 Bash 多候选时通常先显示列表或补公共部分。想用 Tab 在候选间切换，可以在 `~/.inputrc` 增加：
 

@@ -94,6 +94,7 @@ class VehicleLookup:
     client: HttpClient
     vehicle: dict[str, Any]
     device_id: str
+    c4_online: bool
     mapping: PortMapping | None
 
 
@@ -258,10 +259,10 @@ def main(argv: list[str] | None = None) -> int:
             configure(config_args)
             return 0
         except SshcError as exc:
-            print(f"sshc: {exc}", file=sys.stderr)
+            print(f"[WARNING] {exc}", file=sys.stderr)
             return 1
         except KeyboardInterrupt:
-            print("\nsshc: interrupted", file=sys.stderr)
+            print("\n[WARNING] interrupted", file=sys.stderr)
             return 130
 
     parser = build_parser()
@@ -277,10 +278,10 @@ def main(argv: list[str] | None = None) -> int:
             run(args, settings)
         return 0
     except SshcError as exc:
-        print(f"sshc: {exc}", file=sys.stderr)
+        print(f"[WARNING] {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print("\nsshc: interrupted", file=sys.stderr)
+        print("\n[WARNING] interrupted", file=sys.stderr)
         return 130
 
 
@@ -466,7 +467,12 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
         )
 
     print("[1/5] 登录并查询车辆环境", flush=True)
-    lookup = resolve_vehicle_lookup(args.vehicle, settings, debug=args.debug)
+    lookup = resolve_vehicle_lookup(
+        args.vehicle,
+        settings,
+        debug=args.debug,
+        require_online=not args.versions,
+    )
     client = lookup.client
     vehicle = lookup.vehicle
     if args.debug:
@@ -476,8 +482,12 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
     device_id = lookup.device_id
     if args.versions:
         show_vehicle_info(client, args.vehicle, vehicle, device_id)
+        if not lookup.c4_online:
+            print(f"[WARNING] {args.vehicle} c4 is offline")
         return
 
+    if not lookup.c4_online:
+        raise SshcError(f"{args.vehicle} c4 is offline")
     print(f"      c4Online=true, device_id={device_id}")
 
     print(f"[3/5] 检查 {DEFAULT_TARGET_PORT} 端口映射", flush=True)
@@ -523,7 +533,7 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
 
 def complete_vehicles(prefix: str, settings: Settings) -> None:
     if not has_any_environment_config(settings):
-        print("sshc: missing XiaoZhu config", file=sys.stderr)
+        print("[WARNING] missing XiaoZhu config", file=sys.stderr)
         return
 
     query = vehicle_completion_query(prefix)
@@ -541,11 +551,11 @@ def complete_vehicles(prefix: str, settings: Settings) -> None:
             client.token = token
             names.extend(complete_vehicle_names(client, prefix, query))
         except SshcError as exc:
-            print(f"sshc: {env.name}: {exc}", file=sys.stderr)
+            print(f"[WARNING] {env.name}: {exc}", file=sys.stderr)
             continue
 
     if not names:
-        print(f"sshc: no online vehicle candidates for {prefix}", file=sys.stderr)
+        print(f"[WARNING] no online vehicle candidates for {prefix}", file=sys.stderr)
         return
 
     for name in sorted(set(names)):
@@ -557,9 +567,10 @@ def resolve_vehicle_lookup(
     settings: Settings,
     *,
     debug: bool,
+    require_online: bool,
 ) -> VehicleLookup:
     lookups: list[VehicleLookup] = []
-    offline_names: list[str] = []
+    found_names: list[str] = []
 
     for env in ENVIRONMENTS:
         username, password_md5 = environment_credentials(settings, env)
@@ -573,38 +584,43 @@ def resolve_vehicle_lookup(
             client.token = token
             vehicle = find_vehicle(client, vehicle_name)
             device_id = extract_device_id(vehicle)
-            if not extract_c4_online(vehicle):
-                offline_names.append(env.name)
-                print(f"      {env.name}: c4Online=false")
-                continue
-            mapping = find_device_port_mapping(
-                list_port_mappings(client, device_id),
-                DEFAULT_TARGET_PORT,
-            )
+            c4_online = extract_c4_online_or_false(vehicle)
+            found_names.append(env.name)
+            mapping = None
+            if c4_online or not require_online:
+                mapping = find_device_port_mapping(
+                    list_port_mappings(client, device_id),
+                    DEFAULT_TARGET_PORT,
+                )
         except SshcError as exc:
             print(f"      {env.name}: {exc}")
             continue
 
-        print(
-            f"      {env.name}: c4Online=true, "
-            f"22={format_mapping_summary(mapping)}"
-        )
+        print(f"      {env.name}: c4Online={format_scalar(c4_online)}, 22={format_mapping_summary(mapping)}")
         lookups.append(
             VehicleLookup(
                 env=env,
                 client=client,
                 vehicle=vehicle,
                 device_id=device_id,
+                c4_online=c4_online,
                 mapping=mapping,
             )
         )
 
     if not lookups:
-        if offline_names:
-            raise SshcError(f"{vehicle_name} c4Online is not true")
-        raise SshcError(f"online vehicle not found: {vehicle_name}")
+        if found_names:
+            raise SshcError(f"{vehicle_name} c4 is offline")
+        raise SshcError(f"vehicle not found: {vehicle_name}")
 
-    selected = select_vehicle_lookup(lookups)
+    if require_online:
+        online_lookups = [lookup for lookup in lookups if lookup.c4_online]
+        if not online_lookups:
+            raise SshcError(f"{vehicle_name} c4 is offline")
+        selected = select_vehicle_lookup(online_lookups)
+    else:
+        selected = select_vehicle_lookup(lookups)
+
     print(f"      selected: {selected.env.name}")
     return selected
 
@@ -743,6 +759,13 @@ def extract_c4_online(vehicle: dict[str, Any]) -> bool:
     return bool(value)
 
 
+def extract_c4_online_or_false(vehicle: dict[str, Any]) -> bool:
+    value = vehicle.get("c4Online")
+    if value is None:
+        return False
+    return bool(value)
+
+
 def show_vehicle_info(
     client: HttpClient,
     vehicle_name: str,
@@ -752,7 +775,7 @@ def show_vehicle_info(
     name = vehicle.get("name") or vehicle_name
     print(f"vehicle: {name}")
     print(f"id: {device_id}")
-    print(f"c4Online: {format_scalar(vehicle.get('c4Online'))}")
+    print(f"c4Online: {format_scalar(extract_c4_online_or_false(vehicle))}")
 
     print("versions:")
     versions = vehicle.get("versions") or {}
