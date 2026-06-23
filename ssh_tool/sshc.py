@@ -500,7 +500,7 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
         raise SshcError("cannot resolve public SSH server port")
 
     print(
-        f"      {DEFAULT_TARGET_PORT} -> {mapping.server_ip or lookup.env.ssh_host}:{mapping.server_port} "
+        f"      {DEFAULT_TARGET_PORT} -> {format_host_port(mapping.server_ip or lookup.env.ssh_host, mapping.server_port)} "
         f"(status={mapping.status or 'unknown'}, "
         f"frpc_connected={format_scalar(mapping.frpc_connected)})"
     )
@@ -655,6 +655,12 @@ def format_mapping_summary(mapping: PortMapping | None) -> str:
     )
 
 
+def format_host_port(host: str, port: int | None) -> str:
+    if port is None:
+        return host
+    return f"{host} -p {port}"
+
+
 def login(client: HttpClient, path: str, username: str, password_md5: str) -> str:
     payload = {
         "identityType": "USERNAME",
@@ -793,9 +799,9 @@ def show_vehicle_info(
     for mapping in mappings:
         endpoint = "-"
         if mapping.server_ip and mapping.server_port:
-            endpoint = f"{mapping.server_ip}:{mapping.server_port}"
+            endpoint = format_host_port(mapping.server_ip, mapping.server_port)
         elif mapping.server_port:
-            endpoint = f"{DEFAULT_SSH_HOST}:{mapping.server_port}"
+            endpoint = format_host_port(DEFAULT_SSH_HOST, mapping.server_port)
         print(
             "  "
             f"{format_scalar(mapping.device_port)}/{mapping.protocol or '-'} "
