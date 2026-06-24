@@ -1,0 +1,64 @@
+{
+  "$schema": "https://unpkg.com/oh-my-opencode-slim@latest/oh-my-opencode-slim.schema.json",
+  "companion": {
+    "debug": false,
+    "enabled": false,
+    "gifPack": "default",
+    "loopStyle": "classic",
+    "position": "bottom-right",
+    "size": "medium",
+    "speed": 1
+  },
+  "preset": "openai",
+  "presets": {
+    "openai": {
+      "designer": {
+        "mcps": [],
+        "model": "minieye/gpt-5.5",
+        "skills": [],
+        "variant": "medium"
+      },
+      "explorer": {
+        "mcps": [],
+        "model": "minieye-openai-claude/claude-opus-4-7",
+        "skills": [],
+        "variant": "low"
+      },
+      "fixer": {
+        "mcps": [],
+        "model": "minieye-openai-claude/claude-opus-4-7",
+        "skills": [],
+        "variant": "medium"
+      },
+      "librarian": {
+        "mcps": [
+          "websearch",
+          "context7",
+          "gh_grep"
+        ],
+        "model": "minieye/gpt-5.4",
+        "skills": [],
+        "variant": "low"
+      },
+      "oracle": {
+        "mcps": [],
+        "model": "minieye/gpt-5.5",
+        "skills": [
+          "simplify"
+        ],
+        "variant": "high"
+      },
+      "orchestrator": {
+        "mcps": [
+          "*",
+          "!context7"
+        ],
+        "model": "minieye-openai-claude/claude-opus-4-7",
+        "skills": [
+          "*"
+        ],
+        "variant": "high"
+      }
+    }
+  }
+}

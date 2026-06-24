@@ -46,18 +46,6 @@ EOF
 else
     # 公网模式配置
     read -rp "请输入公网映射端口(多个用空格隔开): " WAN_PORTS
-    for PORT in $WAN_PORTS; do
-        if ! grep -q "Host soc_$PORT" "$CONFIG_PATH" 2>/dev/null; then
-            cat << EOF >> "$CONFIG_PATH"
-Host soc$PORT
-    HostName $WAN_DOMAIN
-    Port $PORT
-    User $USER_NAME
-    StrictHostKeyChecking no
-    UserKnownHostsFile /dev/null
-EOF
-        fi
-    done
     TARGET_WAN="$WAN_PORTS"
 fi
 chmod 600 "$CONFIG_PATH"
@@ -79,5 +67,5 @@ else
         ssh-keygen -f "$HOME/.ssh/known_hosts" -R "[$WAN_DOMAIN]:$PORT" 2>/dev/null
         ssh-copy-id -o StrictHostKeyChecking=no -p "$PORT" -i "${KEY_PATH}.pub" "$USER_NAME@$WAN_DOMAIN"
     done
-    echo "配置完成！现在可以使用 ssh soc端口号 (例如: ssh soc6171) 登录"
+    echo "配置完成！"
 fi

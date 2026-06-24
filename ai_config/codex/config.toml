@@ -1,0 +1,111 @@
+model_provider = "OpenAI"
+model = "gpt-5.4"
+sandbox_mode = "danger-full-access"
+approval_policy = "on-request"
+approvals_reviewer = "guardian_subagent"
+review_model = "gpt-5.4"
+model_reasoning_effort = "xhigh"
+disable_response_storage = true
+network_access = "enabled"
+windows_wsl_setup_acknowledged = true
+model_context_window = 1000000
+model_auto_compact_token_limit = 900000
+
+[model_providers.OpenAI]
+name = "OpenAI"
+base_url = "https://sub2api.minieye.tech"
+wire_api = "responses"
+requires_openai_auth = true
+
+[projects."/home/mini/dev/myScript"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/remote_tool"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive_conf"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/excel_tool"]
+trust_level = "trusted"
+
+[projects."/media/mini/data"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/logsim/pnc_log_sim"]
+trust_level = "trusted"
+
+[projects."/home/mini/Documents/lidar"]
+trust_level = "trusted"
+
+[projects."/home/mini/Documents/at128上位机/LidarUtilities"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive4/aiplorer"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive4"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive_test"]
+trust_level = "trusted"
+
+[projects."/home/mini/mdrive4_project/mdrive"]
+trust_level = "trusted"
+
+[projects."/home/mini/mdrive4_project"]
+trust_level = "trusted"
+
+[projects."/home/mini"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive4/URT_RS_v0.5.4_20260430101455"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/logsim"]
+trust_level = "trusted"
+
+[projects."/home/mini/Documents/lidar/LidarAssistant_E1SU2310A_SU2310B/linux"]
+trust_level = "trusted"
+
+[projects."/home/mini/Documents/burn/mdrive_release_v2_6090_burn_orin_b_20260227_173557"]
+trust_level = "trusted"
+
+[projects."/home/mini/Documents/burn/mdrive_release_v2_6090_burn_orin_b_20260227_173557/orin_b"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive4/multimcap"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/Something"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev/mdrive4/vehicle_cfg"]
+trust_level = "trusted"
+
+[projects."/home/mini/mdrive4_project/docs"]
+trust_level = "trusted"
+
+[projects."/home/mini/dev"]
+trust_level = "trusted"
+
+[projects."/opt/clash"]
+trust_level = "trusted"
+
+[projects."/home/mini/Downloads/md_tool"]
+trust_level = "trusted"
+
+[projects."/home/mini/mdrive4_project/bag/data"]
+trust_level = "trusted"
+
+[tui]
+status_line = ["model-with-reasoning", "context-remaining", "current-dir"]
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
+
+[notice]
+hide_full_access_warning = true

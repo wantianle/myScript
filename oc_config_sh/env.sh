@@ -1,5 +1,0 @@
-# ai-forge: Intranet 访问凭证
-export INTRANET_ACCESS_KEY_ID="01297"
-export INTRANET_ACCESS_KEY_SECRET="ea72e973968ac5c0ea27e17d0b3c5776"
-export ANTHROPIC_AUTH_TOKEN="sk-4b0a42c7cc3618e03aad34f5206d08c067e10eae9e07b2f689530861203e5da1"
-export ANTHROPIC_BASE_URL="https://sub2api.minieye.tech"

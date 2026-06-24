@@ -14,19 +14,24 @@
     "prune": false,
     "tail_turns": 80
   },
+  "lsp": true,
   "mode": {},
   "model": "minieye-openai-claude/claude-opus-4-7",
   "permission": {
     "*": "allow"
   },
   "plugin": [
-    "oh-my-opencode-slim",
-    "@cortexkit/opencode-magic-context@latest"
+    "@cortexkit/opencode-magic-context@latest",
+    "oh-my-opencode-slim@latest"
   ],
   "provider": {
     "minieye": {
       "models": {
         "gpt-5.4": {
+          "cost": {
+            "input": 1.00,
+            "output": 6.00
+          },
           "limit": {
             "context": 1050000,
             "output": 128000
@@ -34,6 +39,10 @@
           "name": "gpt-5.4"
         },
         "gpt-5.5": {
+          "cost": {
+            "input": 2.00,
+            "output": 12.00
+          },
           "limit": {
             "context": 1000000,
             "output": 128000
@@ -44,24 +53,33 @@
       "name": "MinieyeL4",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "apiKey": "sk-4b0a42c7cc3618e03aad34f5206d08c067e10eae9e07b2f689530861203e5da1",
-        "baseURL": "https://sub2api.minieye.tech/v1"
+        "apiKey": "__MINIEYE_API_KEY__",
+        "baseURL": "https://sub2api.minieye.tech/v1",
+        "includeUsage": true
       }
     },
     "minieye-openai-claude": {
       "models": {
         "claude-opus-4-7": {
-          "name": "claude-opus-4-7"
+          "name": "claude-opus-4-7",
+          "cost": {
+            "input": 0.435,
+            "output": 0.87
+          },
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          }
         }
       },
       "name": "MinieyeL4 OpenAI Claude",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
-        "apiKey": "sk-4b0a42c7cc3618e03aad34f5206d08c067e10eae9e07b2f689530861203e5da1",
-        "baseURL": "https://sub2api.minieye.tech/v1"
+        "apiKey": "__CLAUDE_API_KEY__",
+        "baseURL": "https://sub2api.minieye.tech/v1",
+        "includeUsage": true
       }
     }
   },
-  "username": "01297",
-  "lsp": true
+  "username": "__USERNAME__"
 }
