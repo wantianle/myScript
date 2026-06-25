@@ -160,8 +160,8 @@ const (
 	VK_ESCAPE = 0x1B
 	IDC_ARROW = 32512
 
-	// GWLP_USERDATA = -21 (Windows interprets as signed index; we use two's complement)
-	GWLP_USERDATA_INDEX = 21
+	// GWLP_USERDATA = -21
+	GWLP_USERDATA = ^uintptr(20)
 )
 
 // ============================================================================
@@ -608,29 +608,7 @@ func CreatePopup(state *MenuState) *PopupWindow {
 
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 
-	// Register popup class
 	popupClassPtr, _ := windows.UTF16PtrFromString(popupClassName)
-	var wc WNDCLASSEXW
-	wc.CbSize = uint32(unsafe.Sizeof(wc))
-	wc.LpfnWndProc = syscall.NewCallback(popupWndProc)
-	wc.HInstance = windows.Handle(hInstance)
-	cursor, _, _ := procLoadCursorW.Call(0, uintptr(IDC_ARROW))
-	wc.HCursor = windows.Handle(cursor)
-	wc.LpszClassName = popupClassPtr
-	wc.Style = CS_HREDRAW | CS_VREDRAW
-	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
-
-	// Register tray class
-	trayClassPtr, _ := windows.UTF16PtrFromString(trayClassName)
-	var twc WNDCLASSEXW
-	twc.CbSize = uint32(unsafe.Sizeof(twc))
-	twc.LpfnWndProc = syscall.NewCallback(trayWndProc)
-	twc.HInstance = windows.Handle(hInstance)
-	cursor2, _, _ := procLoadCursorW.Call(0, uintptr(IDC_ARROW))
-	twc.HCursor = windows.Handle(cursor2)
-	twc.LpszClassName = trayClassPtr
-	twc.Style = CS_HREDRAW | CS_VREDRAW
-	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&twc)))
 
 	popupH := pw.calcPopupHeight()
 
@@ -714,7 +692,7 @@ func (pw *PopupWindow) Refresh(state *MenuState) {
 func popupWndProc(hwndU windows.Handle, msg uint32, wParam, lParam uintptr) uintptr {
 	hwnd := uintptr(hwndU)
 
-	ptr, _, _ := procGetWindowLongPtrW.Call(hwnd, ^uintptr(GWLP_USERDATA_INDEX))
+	ptr, _, _ := procGetWindowLongPtrW.Call(hwnd, uintptr(GWLP_USERDATA))
 	pw := (*PopupWindow)(unsafe.Pointer(ptr))
 
 	switch msg {
@@ -733,7 +711,7 @@ func popupWndProc(hwndU windows.Handle, msg uint32, wParam, lParam uintptr) uint
 			LpszClass      *uint16
 			DwExStyle      uint32
 		})(unsafe.Pointer(lParam))
-		procSetWindowLongPtrW.Call(hwnd, ^uintptr(GWLP_USERDATA_INDEX), cs.LpCreateParams)
+		procSetWindowLongPtrW.Call(hwnd, uintptr(GWLP_USERDATA), cs.LpCreateParams)
 		return 1
 
 	case WM_PAINT:
@@ -1022,6 +1000,37 @@ func getPopupFont() windows.Handle {
 // Tray message window
 // ============================================================================
 
+// Window procedure callbacks — created once at startup.
+var (
+	popupWndProcCB = syscall.NewCallback(popupWndProc)
+	trayWndProcCB  = syscall.NewCallback(trayWndProc)
+)
+
+// registerClasses registers the popup and tray window classes with Win32.
+// Must be called once before any window creation.
+func registerClasses() {
+	hInstance, _, _ := procGetModuleHandleW.Call(0)
+	cursor, _, _ := procLoadCursorW.Call(0, uintptr(IDC_ARROW))
+	hCur := windows.Handle(cursor)
+
+	// Popup window class
+	popupClassPtr, _ := windows.UTF16PtrFromString(popupClassName)
+	var wc WNDCLASSEXW
+	wc.CbSize = uint32(unsafe.Sizeof(wc))
+	wc.LpfnWndProc = popupWndProcCB
+	wc.HInstance = windows.Handle(hInstance)
+	wc.HCursor = hCur
+	wc.LpszClassName = popupClassPtr
+	wc.Style = CS_HREDRAW | CS_VREDRAW
+	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+
+	// Tray window class
+	trayClassPtr, _ := windows.UTF16PtrFromString(trayClassName)
+	wc.LpszClassName = trayClassPtr
+	wc.LpfnWndProc = trayWndProcCB
+	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+}
+
 func trayWndProc(hwndU windows.Handle, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case WM_TRAYICON:
@@ -1048,6 +1057,8 @@ func trayWndProc(hwndU windows.Handle, msg uint32, wParam, lParam uintptr) uintp
 // RunMessageLoop creates the tray window and enters the Windows message pump.
 // Returns the exit code.
 func RunMessageLoop(iconData []byte) int {
+	registerClasses()
+
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
 
 	appClassPtr, _ := windows.UTF16PtrFromString(trayClassName)
