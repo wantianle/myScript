@@ -5,6 +5,7 @@
 # ============================================
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../install_utils.sh"
 PROFILE="${1:-mini}"
 
 if [ -z "$CLAUDE_API_KEY" ]; then
@@ -15,9 +16,7 @@ echo "=== 安装 Claude Code 配置 ==="
 
 mkdir -p ~/.claude
 
-sed -e "s/__CLAUDE_API_KEY__/$CLAUDE_API_KEY/g" \
-    -e "s|__ANTHROPIC_BASE_URL__|$ANTHROPIC_BASE_URL|g" \
-    "$SCRIPT_DIR/settings.json" > ~/.claude/settings.json
+safe_sed_write "$SCRIPT_DIR/settings.json" ~/.claude/settings.json -e "s/__CLAUDE_API_KEY__/$CLAUDE_API_KEY/g" -e "s|__ANTHROPIC_BASE_URL__|$ANTHROPIC_BASE_URL|g" -- "claude/settings.json"
 
 echo "✓ 配置文件已复制到 ~/.claude/"
 echo "=== 安装完成 ==="

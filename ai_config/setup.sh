@@ -19,6 +19,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# 确保用户级 bin 目录在 PATH 中 (非交互式 bash 不会 source .zshrc)
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILE="${1:-mini}"
 
@@ -93,22 +96,29 @@ echo ""
 # 2. 安装 CLI 工具
 # ========================================
 
-# --- Claude Code (官方原生安装器, 零依赖, 自动更新) ---
+# --- Claude Code (npm 安装) ---
 if command -v claude &>/dev/null; then
     echo -e "${GREEN}[SKIP]${NC} Claude Code ($(claude --version 2>/dev/null | head -1))"
 else
-    echo -e "${YELLOW}[INSTALL] Claude Code (native installer)...${NC}"
-    curl -fsSL https://claude.ai/install.sh | bash
-    echo -e "${GREEN}[OK]${NC} Claude Code 安装完成"
+    echo -e "${YELLOW}[INSTALL] Claude Code...${NC}"
+    # npm registry 用了 npmmirror, 国内无需科学上网
+    if npm install -g @anthropic-ai/claude-code; then
+        echo -e "${GREEN}[OK]${NC} Claude Code 安装完成"
+    else
+        echo -e "${YELLOW}[WARN] Claude Code 安装失败 (上面有错误信息), 跳过${NC}"
+    fi
 fi
 
-# --- Codex CLI (官方独立安装器, 零依赖) ---
+# --- Codex CLI (npm 安装, chatgpt.com 在国内被墙) ---
 if command -v codex &>/dev/null; then
     echo -e "${GREEN}[SKIP]${NC} Codex CLI ($(codex --version 2>/dev/null | head -1))"
 else
-    echo -e "${YELLOW}[INSTALL] Codex CLI (standalone installer)...${NC}"
-    curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
-    echo -e "${GREEN}[OK]${NC} Codex CLI 安装完成"
+    echo -e "${YELLOW}[INSTALL] Codex CLI...${NC}"
+    if npm install -g @openai/codex; then
+        echo -e "${GREEN}[OK]${NC} Codex CLI 安装完成"
+    else
+        echo -e "${YELLOW}[WARN] Codex CLI 安装失败 (上面有错误信息), 跳过${NC}"
+    fi
 fi
 
 # --- OpenCode (bun) ---

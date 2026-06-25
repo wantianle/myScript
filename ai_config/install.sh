@@ -1,16 +1,25 @@
 #!/bin/bash
 # ============================================
 # AI 工具配置 一键安装
-# 用法: install.sh [profile]
-#   profile 为空时默认 mini
-#   可选: mini | 01297
+# 用法: install.sh [-f] [profile]
+#   -f        强制覆盖, 不询问
+#   profile   默认为 mini, 可选 mini | 01297
 # 示例:
-#   bash install.sh          # 用 mini 的 key
-#   bash install.sh 01297    # 用 01297 的 key
+#   bash install.sh          # 用 mini 的 key, 已有文件会询问
+#   bash install.sh -f 01297 # 用 01297 的 key, 强制覆盖
 # ============================================
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROFILE="${1:-mini}"
+
+FORCE=0
+PROFILE="mini"
+for arg in "$@"; do
+    case "$arg" in
+        -f|--force) FORCE=1 ;;
+        *) PROFILE="$arg" ;;
+    esac
+done
+export FORCE
 
 if [ ! -f "$SCRIPT_DIR/keys/$PROFILE.env" ]; then
     echo "[ERROR] 未知的 profile: $PROFILE"

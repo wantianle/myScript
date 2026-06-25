@@ -5,7 +5,7 @@ REMOTE_HOST="mini@192.168.16.40"
 
 usage() {
     cat <<'USAGE'
-用法: sync_ai_setup.sh <pull|push>
+用法: sync_ai_config.sh <pull|push>
 
   pull   从远端 (mini@192.168.16.40) 拉取配置到本地
   push   将本地配置推送到远端 (mini@192.168.16.40)
@@ -49,7 +49,8 @@ do_sync() {
             src="$HOME/${rel}"
             dst="${host}:~/${rel%/*}/"
         fi
-        rsync -av "$src" "$dst" 2>/dev/null || { echo "  [跳过] ${rel}"; err=$((err+1)); }
+        echo "  ${rel}"
+        rsync -av "$src" "$dst" 2>/dev/null || { echo "    [跳过] 文件不存在"; err=$((err+1)); }
     }
 
     # 单个文件
@@ -69,10 +70,11 @@ do_sync() {
     done
 
     # skills 目录
+    echo "  .config/opencode/skills/"
     if [ "$direction" = "pull" ]; then
-        rsync -av --exclude='node_modules' "${host}:~/.config/opencode/skills/" "$HOME/.config/opencode/skills/" 2>/dev/null || { echo "  [跳过] skills/"; err=$((err+1)); }
+        rsync -av --exclude='node_modules' "${host}:~/.config/opencode/skills/" "$HOME/.config/opencode/skills/" 2>/dev/null || { echo "    [跳过] 目录为空或不存在"; err=$((err+1)); }
     else
-        rsync -av --exclude='node_modules' "$HOME/.config/opencode/skills/" "${host}:~/.config/opencode/skills/" 2>/dev/null || { echo "  [跳过] skills/"; err=$((err+1)); }
+        rsync -av --exclude='node_modules' "$HOME/.config/opencode/skills/" "${host}:~/.config/opencode/skills/" 2>/dev/null || { echo "    [跳过] 目录为空或不存在"; err=$((err+1)); }
     fi
 
     if [ $err -gt 0 ]; then

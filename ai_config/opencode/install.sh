@@ -6,6 +6,7 @@
 # ============================================
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../install_utils.sh"
 PROFILE="${1:-mini}"
 
 # 从 master install.sh 继承环境变量，否则自行加载
@@ -18,14 +19,15 @@ echo "=== 安装 OpenCode 配置 ($USERNAME) ==="
 mkdir -p ~/.config/opencode
 
 # 替换占位符并写入
-sed -e "s/__MINIEYE_API_KEY__/$MINIEYE_API_KEY/g" \
+safe_sed_write "$SCRIPT_DIR/opencode.json" ~/.config/opencode/opencode.json \
+    -e "s/__MINIEYE_API_KEY__/$MINIEYE_API_KEY/g" \
     -e "s/__CLAUDE_API_KEY__/$CLAUDE_API_KEY/g" \
     -e "s/__USERNAME__/$USERNAME/g" \
-    "$SCRIPT_DIR/opencode.json" > ~/.config/opencode/opencode.json
+    -- "opencode/opencode.json"
 
-cp "$SCRIPT_DIR/oh-my-opencode-slim.jsonc" ~/.config/opencode/oh-my-opencode-slim.jsonc
-cp "$SCRIPT_DIR/tui.json" ~/.config/opencode/tui.json
-cp "$SCRIPT_DIR/tui-preferences.jsonc" ~/.config/opencode/tui-preferences.jsonc
+safe_copy "$SCRIPT_DIR/oh-my-opencode-slim.jsonc" ~/.config/opencode/oh-my-opencode-slim.jsonc "opencode/oh-my-opencode-slim.jsonc"
+safe_copy "$SCRIPT_DIR/tui.json" ~/.config/opencode/tui.json "opencode/tui.json"
+safe_copy "$SCRIPT_DIR/tui-preferences.jsonc" ~/.config/opencode/tui-preferences.jsonc "opencode/tui-preferences.jsonc"
 
 echo "✓ 配置文件已复制到 ~/.config/opencode/ (用户: $USERNAME)"
 echo "=== 安装完成 ==="
