@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
-// StartLatencyChecker runs in a background goroutine, checking TCP latency
+// StartLatencyChecker runs in a background goroutine, checking UDP latency
 // to each server in ServerList on port 10010 every 10 seconds.
+// The SDWAN protocol uses UDP, not TCP.
 // Results are reported via the updateFn callback.
 func StartLatencyChecker(updateFn func(results map[string]int64)) {
 	const checkInterval = 10 * time.Second
@@ -37,20 +38,13 @@ func checkAllServers(updateFn func(results map[string]int64), timeout time.Durat
 	if updateFn != nil {
 		updateFn(results)
 	}
-
-	// Also update menu items if available
-	for server, latency := range results {
-		if serverMenuItems != nil {
-			updateLatencyMenu(server, latency)
-		}
-	}
 }
 
 func checkSingleServer(server string, timeout time.Duration) int64 {
 	addr := net.JoinHostPort(server, "10010")
 
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := net.DialTimeout("udp", addr, timeout)
 	if err != nil {
 		log.Printf("Latency check failed for %s: %v", server, err)
 		return -1

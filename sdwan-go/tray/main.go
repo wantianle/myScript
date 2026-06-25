@@ -3,11 +3,7 @@ package main
 import (
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
-
-	"github.com/getlantern/systray"
 )
 
 var (
@@ -60,26 +56,20 @@ func main() {
 		latencies: make(map[string]int64),
 	}
 
-	// Handle OS signals for clean shutdown
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		systray.Quit()
-	}()
+	// Run onReady logic inline
+	onReady()
 
-	// Block on systray.Run
-	systray.Run(onReady, onExit)
+	// 5. Run the raw Win32 message loop (blocks until quit)
+	iconData := generateIcon()
+	exitCode := RunMessageLoop(iconData)
+
+	// 6. onExit cleanup
+	onExit()
+
+	os.Exit(exitCode)
 }
 
 func onReady() {
-	systray.SetIcon(generateIcon())
-	systray.SetTitle("SDWAN Tray")
-	systray.SetTooltip("SDWAN Tray")
-
-	// Build initial menu
-	buildMenu(menuState)
-
 	// 5. Start config file watcher (restart sdwan on change, don't quit tray)
 	exe, _ := os.Executable()
 	configPath := filepath.Join(filepath.Dir(exe), "iwan.conf")
@@ -94,9 +84,12 @@ func onReady() {
 		if mgr != nil {
 			mgr.Restart()
 		}
+		menuState.mu.Lock()
 		menuState.connected = mgr != nil && mgr.IsRunning()
-		updateConnectionStatus(menuState.connected)
-		updateServerSelection()
+		menuState.mu.Unlock()
+
+		// Refresh popup if visible
+		onPopupRefresh()
 	})
 
 	// 6. Start latency checker goroutine
@@ -104,7 +97,15 @@ func onReady() {
 		menuState.mu.Lock()
 		menuState.latencies = results
 		menuState.mu.Unlock()
+		onPopupRefresh()
 	})
+}
+
+// onPopupRefresh refreshes the currently visible popup window.
+func onPopupRefresh() {
+	if globalPopup != nil {
+		globalPopup.Refresh(menuState)
+	}
 }
 
 func onExit() {
@@ -113,6 +114,10 @@ func onExit() {
 		if err := mgr.Stop(); err != nil {
 			log.Printf("Error stopping sdwan.exe: %v", err)
 		}
+	}
+	// Close popup if still open
+	if globalPopup != nil {
+		globalPopup.Hide()
 	}
 	log.Println("SDWAN Tray exiting")
 }

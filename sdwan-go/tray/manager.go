@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -51,6 +52,8 @@ func (p *ProcessManager) Start() error {
 
 	p.cmd = exec.Command(p.exePath)
 	p.cmd.Dir = exeDir
+	// Hide the console window — sdwan.exe is a console app but we run it headless
+	p.cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
 	if logFile != nil {
 		p.cmd.Stdout = logFile
