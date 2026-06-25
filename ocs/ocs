@@ -6,6 +6,7 @@ set -eo pipefail
 
 DB="$HOME/.local/share/opencode/opencode.db"
 LIMIT=50
+VERSION="1.0.0"
 
 # ── 内部函数 ──────────────────────────────────────
 
@@ -24,9 +25,24 @@ _reltime() {
 
 _shortdir() { echo "$1" | sed "s|^$HOME|~|"; }
 
+# 转义 SQL LIKE 通配符 % _
+_escape_like() {
+  local s="$1"
+  s="${s//%/\\%}"
+  s="${s//_/\\_}"
+  echo "$s"
+}
+
 _list() {
-  local filter="$1" where="WHERE parent_id IS NULL" w now
-  [[ -n "$filter" ]] && where="$where AND (title LIKE '%' || '$filter' || '%' OR directory LIKE '%' || '$filter' || '%')"
+  local filter="$1" mode="${2:-search}" kw where="WHERE parent_id IS NULL" w now
+  kw=$(_escape_like "$filter")
+  if [[ -n "$filter" ]]; then
+    if [[ "$mode" == "id" ]]; then
+      where="$where AND id LIKE '%$kw%'"
+    else
+      where="$where AND (title LIKE '%' || '$kw' || '%' OR directory LIKE '%' || '$kw' || '%')"
+    fi
+  fi
 
   local sql="SELECT id||'|'||title||'|'||directory||'|'||time_updated FROM session $where ORDER BY time_updated DESC LIMIT $LIMIT;"
 
@@ -102,31 +118,66 @@ for row in data:
 "
 
   rm -f "$tmp"
-  if [[ -n "$filter" ]]; then echo "→ 找到 $count 条，用 ocs <关键词或ID> 恢复"; fi
 }
 
 # 根据关键词/ID后缀/完整ID 解析为 session ID
 _resolve() {
-  local target="$1" sid
+  local target="$1" sid kw
+  kw=$(_escape_like "$target")
   if [[ "${target:0:4}" == "ses_" ]]; then
     sid=$(_db "SELECT id FROM session WHERE parent_id IS NULL AND id='$target' LIMIT 1;")
-    [[ -z "$sid" ]] && sid=$(_db "SELECT id FROM session WHERE parent_id IS NULL AND id LIKE '%$target%' LIMIT 1;")
+    [[ -z "$sid" ]] && sid=$(_db "SELECT id FROM session WHERE parent_id IS NULL AND id LIKE '%$kw%' LIMIT 1;")
   else
     # 任意长度输入：先按 ID 片段匹配，支持 4 位、8 位、完整 ID 片段等
-    sid=$(_db "SELECT id FROM session WHERE parent_id IS NULL AND id LIKE '%$target%' LIMIT 1;")
-    [[ -z "$sid" ]] && sid=$(_db "SELECT id FROM session WHERE parent_id IS NULL AND title LIKE '%' || '$target' || '%' ORDER BY time_updated DESC LIMIT 1;")
+    sid=$(_db "SELECT id FROM session WHERE parent_id IS NULL AND id LIKE '%$kw%' LIMIT 1;")
+    [[ -z "$sid" ]] && sid=$(_db "SELECT id FROM session WHERE parent_id IS NULL AND title LIKE '%' || '$kw' || '%' ORDER BY time_updated DESC LIMIT 1;")
   fi
   echo "$sid"
 }
 
+# 统计匹配数（与 _resolve 相同的匹配范围）
+_match_count_id() {
+  local target="$1" kw
+  kw=$(_escape_like "$target")
+  if [[ "${target:0:4}" == "ses_" ]]; then
+    # 精确匹配优先，避免 id 片段误判为多条
+    local exact_count
+    exact_count=$(_db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND id='$target';")
+    if [[ "$exact_count" -gt 0 ]]; then
+      echo "1"
+    else
+      _db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND id LIKE '%$kw%';"
+    fi
+  else
+    _db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND id LIKE '%$kw%';"
+  fi
+}
+
+# 标题+目录关键词搜索计数
+_match_count_search() {
+  local target="$1" kw
+  kw=$(_escape_like "$target")
+  _db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND (title LIKE '%' || '$kw' || '%' OR directory LIKE '%' || '$kw' || '%');"
+}
+
 _resume() {
-  local sid
-  sid=$(_resolve "$1")
-  if [[ -z "$sid" ]]; then
-    echo "未找到匹配 '$1' 的会话"
+  local count sid
+  count=$(_match_count_id "$1")
+
+  if [[ "$count" -eq 0 ]]; then
+    _list ""
+    echo "→ 没有匹配 ID '$1' 的会话，已显示全部记录"
     return 1
   fi
 
+  if [[ "$count" -gt 1 ]]; then
+    _list "$1" "id"
+    echo "→ 找到 $count 条，用 ocs <ID> 选择恢复"
+    return 1
+  fi
+
+  # count == 1: 唯一匹配，直接恢复
+  sid=$(_resolve "$1")
   local dir title
   dir=$(_db "SELECT directory FROM session WHERE id='$sid';")
   title=$(_db "SELECT title FROM session WHERE id='$sid';")
@@ -139,17 +190,28 @@ _resume() {
 }
 
 _delete() {
-  local sid
-  sid=$(_resolve "$1")
-  if [[ -z "$sid" ]]; then
-    echo "未找到匹配 '$1' 的会话"
+  local count sid
+  count=$(_match_count_id "$1")
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "未找到匹配 ID '$1' 的会话"
     return 1
   fi
 
-  local title
+  if [[ "$count" -gt 1 ]]; then
+    _list "$1" "id"
+    echo "→ 找到 $count 条，用 ocs d <ID> 指定要删除的会话"
+    return 1
+  fi
+
+  # count == 1: 唯一匹配
+  sid=$(_resolve "$1")
+  local title child_count
   title=$(_db "SELECT title FROM session WHERE id='$sid';")
+  child_count=$(_db "SELECT COUNT(*) FROM session WHERE parent_id='$sid';")
 
   echo "即将删除会话: $title"
+  [[ "$child_count" -gt 0 ]] && echo "  （含 $child_count 个子会话，将一并删除）"
   echo -n "确认删除？(y/N) "
   read -r confirm
   if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
@@ -157,18 +219,29 @@ _delete() {
     return
   fi
 
+  [[ "$child_count" -gt 0 ]] && _db "DELETE FROM session WHERE parent_id='$sid';"
   _db "DELETE FROM session WHERE id='$sid';"
   echo "已删除: $title"
+  [[ "$child_count" -gt 0 ]] && echo "  （已级联删除 $child_count 个子会话）"
 }
 
 _rename() {
-  local sid
-  sid=$(_resolve "$1")
-  if [[ -z "$sid" ]]; then
-    echo "未找到匹配 '$1' 的会话"
+  local count sid
+  count=$(_match_count_id "$1")
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "未找到匹配 ID '$1' 的会话"
     return 1
   fi
 
+  if [[ "$count" -gt 1 ]]; then
+    _list "$1" "id"
+    echo "→ 找到 $count 条，用 ocs r <ID> <新标题> 指定要重命名的会话"
+    return 1
+  fi
+
+  # count == 1: 唯一匹配
+  sid=$(_resolve "$1")
   local old_title new_title="$2"
   old_title=$(_db "SELECT title FROM session WHERE id='$sid';")
 
@@ -181,23 +254,87 @@ _rename() {
   echo "已重命名: $old_title → $new_title"
 }
 
+_info() {
+  local count sid
+  count=$(_match_count_id "$1")
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "未找到匹配 ID '$1' 的会话"
+    return 1
+  fi
+
+  if [[ "$count" -gt 1 ]]; then
+    _list "$1" "id"
+    echo "→ 找到 $count 条，用 ocs i <ID> 查看详情"
+    return 1
+  fi
+
+  # count == 1: 唯一匹配
+  sid=$(_resolve "$1")
+  local info
+  info=$(_db "SELECT title || '|' || directory || '|' || datetime(time_created/1000, 'unixepoch', 'localtime') || '|' || datetime(time_updated/1000, 'unixepoch', 'localtime') || '|' || COALESCE(parent_id, '') || '|' || (SELECT COUNT(*) FROM session WHERE parent_id=s.id) FROM session s WHERE id='$sid';")
+  IFS='|' read -r title dir created updated parent_id child_count <<< "$info"
+
+  echo "ID:         $sid"
+  echo "标题:       $title"
+  echo "目录:       $(_shortdir "$dir")"
+  echo "创建时间:   $created"
+  echo "更新时间:   $updated"
+  [[ -n "$parent_id" ]] && echo "父会话:     $parent_id" || echo "父会话:     （顶层）"
+  [[ "$child_count" -gt 0 ]] && echo "子会话:     $child_count 个" || echo "子会话:     0"
+}
+
+_search() {
+  local count sid
+  count=$(_match_count_search "$1")
+
+  if [[ "$count" -eq 0 ]]; then
+    _list ""
+    echo "→ 没有匹配 '$1' 的关键词，已显示全部记录"
+    return 1
+  fi
+
+  if [[ "$count" -eq 1 ]]; then
+    sid=$(_resolve "$1")
+    local dir title
+    dir=$(_db "SELECT directory FROM session WHERE id='$sid';")
+    title=$(_db "SELECT title FROM session WHERE id='$sid';")
+    echo "会话: $title"
+    echo "目录: $(_shortdir "$dir")"
+    echo ""
+    cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
+    opencode --session "$sid"
+    return
+  fi
+
+  _list "$1"
+  echo "→ 找到 $count 条，用 ocs s <更具体的关键词> 或 ID 选择恢复"
+}
+
+_version() {
+  echo "ocs — OpenCode Session Manager  v$VERSION"
+  echo "路径: $0"
+}
+
 _usage() {
   cat <<'EOF'
 ocs — OpenCode Session Manager
 
 用法:
   ocs                   列出最近会话（带目录、时间）
-  ocs <id|词>            恢复会话（自动切换到对应目录）
-  ocs list [关键词]      按标题/目录搜索列表
-  ocs d <id|词>          删除会话（确认后删除）
-  ocs r <id|词> <名>     重命名会话
-  ocs rename <id|词> <名> 同上
+  ocs <ID片段>           按 ID 恢复：唯一→恢复，多条→列表，无→全部
+  ocs s <关键词>         按标题+目录搜索唯一→恢复，多条→列表，无→全部
+  ocs d <ID片段>         删除会话（确认后删除）
+  ocs i <ID片段>         查看会话详细信息
+  ocs r <ID片段> <名>    重命名会话
+  ocs rename <ID片段> <名> 同上
 
 示例:
   ocs                    # 列出所有
-  ocs coredump           # 恢复最近一条匹配
-  ocs list coredump      # 只筛选查看
+  ocs iyeTCx6Y           # 按 ID 恢复（支持片段匹配）
+  ocs s ssh             # 搜索含 ssh 的会话，唯一匹配直接恢复
   ocs d oJnNVI           # 删除指定会话
+  ocs i oJnNVI           # 查看会话详情
   ocs r oJnNVI 新的名字  # 重命名
 EOF
 }
@@ -210,15 +347,26 @@ if [[ ! -f "$DB" ]]; then
 fi
 
 case "${1:-}" in
-  ""|list|ls)
+  "")
     _list "${2:-}"
     ;;
   -h|--help)
     _usage
     ;;
+  -v|--version)
+    _version
+    ;;
+  s|search)
+    [[ -z "${2:-}" ]] && { echo "用法: ocs s <关键词>"; exit 1; }
+    _search "$2"
+    ;;
   delete|d|rm)
     [[ -z "${2:-}" ]] && { echo "用法: ocs delete <id|关键词>"; exit 1; }
     _delete "$2"
+    ;;
+  info|i)
+    [[ -z "${2:-}" ]] && { echo "用法: ocs info <id|关键词>"; exit 1; }
+    _info "$2"
     ;;
   rename|mv|r)
     [[ -z "${2:-}" ]] && { echo "用法: ocs rename <id|关键词> <新标题>"; exit 1; }

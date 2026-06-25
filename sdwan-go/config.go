@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// Default servers (from the company's SDWAN deployment)
+var DefaultServers = []string{
+	"minieye.9966.org",
+	"dwan.minieye.tech",
+	"minieye.8866.org",
+	"minieye.2288.org",
+	"youjia.8866.org",
+}
+
 // Config holds all settings from iwan.conf
 type Config struct {
 	Server   string
@@ -18,6 +27,8 @@ type Config struct {
 	Encrypt  int
 	PipeID   int
 	PipeIdx  int
+	RouteNet string // route network, e.g. "192.168.0.0/16"
+	TUNName  string // TUN interface name, e.g. "iwan1"
 }
 
 // LoadConfig parses /etc/sdwan/iwan.conf (INI-like format)
@@ -29,11 +40,13 @@ func LoadConfig(path string) (*Config, error) {
 	defer f.Close()
 
 	cfg := &Config{
-		Port:    10010,
-		MTU:     1436,
-		Encrypt: 0,
-		PipeID:  0,
-		PipeIdx: 0,
+		Port:     10010,
+		MTU:      1436,
+		Encrypt:  0,
+		PipeID:   0,
+		PipeIdx:  0,
+		RouteNet: "192.168.0.0/16",
+		TUNName:  "iwan1",
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -72,6 +85,10 @@ func LoadConfig(path string) (*Config, error) {
 			cfg.PipeID, _ = strconv.Atoi(val)
 		case "pipeidx":
 			cfg.PipeIdx, _ = strconv.Atoi(val)
+		case "routenet":
+			cfg.RouteNet = val
+		case "tunname":
+			cfg.TUNName = val
 		}
 	}
 
@@ -79,6 +96,37 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// PrintServerList displays available servers with indices
+func PrintServerList() {
+	fmt.Println("Available servers:")
+	for i, s := range DefaultServers {
+		fmt.Printf("  [%d] %s\n", i+1, s)
+	}
+}
+
+// SelectServer interactively prompts the user to choose a server.
+// Returns the selected server address.
+func SelectServer() string {
+	PrintServerList()
+	fmt.Print("Select server [1]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	if input == "" {
+		return DefaultServers[0]
+	}
+
+	n, err := strconv.Atoi(input)
+	if err != nil || n < 1 || n > len(DefaultServers) {
+		fmt.Printf("Invalid selection, using default [1]\n")
+		return DefaultServers[0]
+	}
+
+	return DefaultServers[n-1]
 }
 
 // Validate checks required fields

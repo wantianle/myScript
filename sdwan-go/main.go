@@ -3,30 +3,71 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 )
 
+// Build metadata — injected via ldflags at build time
+var (
+	Version   = "dev"
+	BuildDate = "unknown"
+)
+
 const (
-	defaultConfigPath = "/etc/sdwan/iwan.conf"
-	defaultTUNName    = "iwan1"
-	routeNetwork      = "192.168.0.0/16"
+	defaultConfigPath = "iwan.conf"
 )
 
 func main() {
 	configPath := flag.String("f", defaultConfigPath, "config file path")
+	serverNum := flag.Int("server", 0, "server index (1-based, default=first)")
+	interactive := flag.Bool("i", false, "interactive server selection")
+	listServers := flag.Bool("list", false, "list available servers and exit")
+	showVersion := flag.Bool("version", false, "show version and exit")
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Printf("sdwan %s\n", Version)
+		fmt.Printf("  Build: %s\n", BuildDate)
+		fmt.Printf("  Language: Go %s\n", runtime.Version())
+		fmt.Printf("  Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		return
+	}
+
+	if *listServers {
+		PrintServerList()
+		return
+	}
+
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
+	// Write log to sdwan.log (in addition to stderr) so errors are
+	// captured even if the console window closes immediately on Windows.
+	logFile, err := os.Create("sdwan.log")
+	if err == nil {
+		defer logFile.Close()
+		log.SetOutput(io.MultiWriter(os.Stderr, logFile))
+	}
+
 	log.Printf("[INFO] SDWAN Go client starting, config=%s", *configPath)
 
 	// 1. Load config
 	cfg, err := LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("[FATAL] Config error: %v", err)
+	}
+
+	// Server selection
+	if *interactive {
+		cfg.Server = SelectServer()
+	} else if *serverNum > 0 && *serverNum <= len(DefaultServers) {
+		cfg.Server = DefaultServers[*serverNum-1]
+	} else if cfg.Server == "" {
+		cfg.Server = DefaultServers[0]
 	}
 	log.Printf("[INFO] Server=%s Port=%d User=%s MTU=%d Encrypt=%d",
 		cfg.Server, cfg.Port, cfg.Username, cfg.MTU, cfg.Encrypt)
@@ -54,9 +95,6 @@ func main() {
 
 	// Parse TUN configuration from OPENACK
 	tunCfg := ParseOPENACK(openAck)
-	log.Printf("[DEBUG] OPENACK raw (%d bytes): %x", len(openAck), openAck)
-	log.Printf("[DEBUG] Parsed: local=%q gateway=%q dns=%q mtu=%d",
-		tunCfg.LocalIP, tunCfg.GatewayIP, tunCfg.DNSIP, tunCfg.MTU)
 	if tunCfg.LocalIP == "" || tunCfg.GatewayIP == "" {
 		log.Fatalf("[FATAL] OPENACK missing IP info: local=%q gateway=%q", tunCfg.LocalIP, tunCfg.GatewayIP)
 	}
@@ -68,33 +106,36 @@ func main() {
 		cfg.MTU = int(tunCfg.MTU)
 	}
 
-	// 5. Create TUN
-	tun, err := CreateTUN(defaultTUNName, cfg.MTU)
+	// 5. Create TUN (Windows TUN mode needs local CIDR to configure the driver)
+	localCIDR := tunCfg.LocalIP + "/24"
+	tun, err := CreateTUN(cfg.TUNName, cfg.MTU, localCIDR)
 	if err != nil {
 		log.Fatalf("[FATAL] Create TUN: %v", err)
 	}
 	client.tun = tun
-	defer CloseTUN(tun, defaultTUNName)
-	log.Printf("[TUN] Created %s (MTU=%d)", defaultTUNName, cfg.MTU)
+	defer CloseTUN(tun, cfg.TUNName)
+	log.Printf("[TUN] Created %s (MTU=%d)", tun.Name(), cfg.MTU)
 
 	// 6. Assign IP and bring up
-	if err := SetTUNIP(defaultTUNName, tunCfg.LocalIP+"/24", tunCfg.GatewayIP); err != nil {
+	tunName := tun.Name()
+	if err := SetTUNIP(tunName, localCIDR, tunCfg.GatewayIP); err != nil {
 		log.Printf("[WARN] Set TUN IP failed: %v", err)
 	} else {
-		log.Printf("[TUN] %s IP=%s/24 gateway=%s", defaultTUNName, tunCfg.LocalIP, tunCfg.GatewayIP)
+		log.Printf("[TUN] %s IP=%s/24 gateway=%s", tunName, tunCfg.LocalIP, tunCfg.GatewayIP)
 	}
 
 	// 7. Add route
-	if err := AddRoute(routeNetwork, defaultTUNName); err != nil {
+	routeGW := tunCfg.LocalIP
+	if err := AddRoute(cfg.RouteNet, tunName, routeGW); err != nil {
 		log.Printf("[WARN] Route add failed (may need to wait): %v", err)
 		// Retry after delay
 		time.Sleep(3 * time.Second)
-		if err := AddRoute(routeNetwork, defaultTUNName); err != nil {
+		if err := AddRoute(cfg.RouteNet, tunName, routeGW); err != nil {
 			log.Printf("[WARN] Route still failed: %v", err)
 		}
 	}
-	defer DelRoute(routeNetwork, defaultTUNName)
-	log.Printf("[ROUTE] Added %s -> %s", routeNetwork, defaultTUNName)
+	defer DelRoute(cfg.RouteNet, tunName, routeGW)
+	log.Printf("[ROUTE] Added %s -> %s", cfg.RouteNet, cfg.TUNName)
 
 	// 8. Handle signals for clean shutdown
 	sigCh := make(chan os.Signal, 1)
@@ -107,8 +148,8 @@ func main() {
 		log.Printf("  Server:  %s:%d", cfg.Server, cfg.Port)
 		log.Printf("  User:    %s", cfg.Username)
 		log.Printf("  Session: %d", client.sessionID)
-		log.Printf("  TUN:     %s", defaultTUNName)
-		log.Printf("  Route:   %s -> %s", routeNetwork, defaultTUNName)
+		log.Printf("  TUN:     %s", tunName)
+		log.Printf("  Route:   %s -> %s", cfg.RouteNet, tunName)
 		fmt.Println()
 	}
 	showStatus()

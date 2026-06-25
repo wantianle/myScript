@@ -6,16 +6,23 @@ import (
 	"log"
 	"net"
 	"time"
-
-	"github.com/songgao/water"
 )
+
+// TunDevice abstracts a TUN virtual network device.
+// It provides simple Read/Write for IP packets, plus name query and close.
+type TunDevice interface {
+	Read([]byte) (int, error)
+	Write([]byte) (int, error)
+	Name() string
+	Close() error
+}
 
 // Client is the SDWAN tunnel client
 type Client struct {
 	config    *Config
 	conn      *net.UDPConn
 	server    *net.UDPAddr
-	tun       *water.Interface
+	tun       TunDevice
 	sessionID uint16
 	seq       uint32
 	echoCnt   uint32
@@ -109,25 +116,18 @@ func (c *Client) Run() error {
 
 	// Main loop: read from server → write to TUN
 	buf := make([]byte, 2048)
-	var recvCount int
 	for {
 		n, err := c.conn.Read(buf)
 		if err != nil {
 			log.Printf("[ERROR] Read from server: %v", err)
 			return err
 		}
-		recvCount++
 		data := buf[:n]
 		mt := msgType(data)
 
-		// DEBUG: log all incoming for first 10, then data/close/echoresp
-		if recvCount <= 10 || mt == MsgECHORESP || mt == MsgDATA || mt == MsgTUNSetup || mt == 0x11 || mt == 0x17 {
-			log.Printf("[RECV #%d] type=0x%02x size=%d", recvCount, mt, n)
-		}
-
 		switch mt {
 		case MsgECHORESP:
-			log.Printf("[HB] ECHORESP received")
+			// heartbeat response, consume silently
 		case MsgTUNSetup, MsgDATA:
 			// 0x14 = unencrypted DATA, 0x18 = encrypted DATA
 			// Both share 8-byte header, skip it for TUN write
@@ -146,7 +146,6 @@ func (c *Client) Run() error {
 // tunToServer reads from TUN device and sends to server
 func (c *Client) tunToServer() {
 	buf := make([]byte, 2048)
-	var sendCount int
 	for {
 		select {
 		case <-c.stopCh:
@@ -164,44 +163,29 @@ func (c *Client) tunToServer() {
 			}
 			continue
 		}
-		sendCount++
 		pkt := buildDataPacket(c.sessionID, c.seq, buf[:n], c.config.Encrypt)
-		if sendCount <= 3 {
-			payLen := n
-			if payLen > 8 {
-				payLen = 8
-			}
-			log.Printf("[TUN->UDP] read %d bytes, DATA type=%02x seq=%d | hdr: %x | payload[0:%d]: %x",
-				n, pkt[0], c.seq, pkt[:8], payLen, buf[:payLen])
-		}
 		c.conn.Write(pkt)
 	}
 }
 
 // heartbeatLoop sends ECHOREQ every 2 seconds; first one fires immediately.
 func (c *Client) heartbeatLoop() {
-	sendBeat := func(hbCount int) {
+	sendBeat := func() {
 		c.echoCnt++
 		ts := uint64(time.Now().UnixNano() / 1000)
 		pkt := BuildEchoReq(c.sessionID, c.seq, ts, c.pipeID, c.pipeIdx, c.echoCnt)
-		if hbCount <= 3 {
-			log.Printf("[HB SEND #%d] session=%d seq=%d echoCnt=%d | TDRi@48: %x",
-				hbCount, c.sessionID, c.seq, c.echoCnt, pkt[48:52])
-		}
 		if _, err := c.conn.Write(pkt); err != nil {
 			log.Printf("[ERROR] Send ECHOREQ: %v", err)
 		}
 	}
 
 	// Fire first heartbeat immediately
-	sendBeat(1)
+	sendBeat()
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	hbCount := 1
 	for range ticker.C {
-		hbCount++
-		sendBeat(hbCount)
+		sendBeat()
 	}
 }
 

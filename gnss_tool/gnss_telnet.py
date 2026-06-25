@@ -87,7 +87,10 @@ class NavDevice:
         # 清上一次残留
         self._drain()
 
-        self.sock.sendall(command.encode() + b"\r\n")
+        try:
+            self.sock.sendall(command.encode() + b"\r\n")
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return False, "(连接已断开)"
 
         # 读响应，直到出现 $command, 标记
         buf = self._recv_until(b"$command,", self.timeout)

@@ -52,6 +52,69 @@ DEFAULT_SSH_OPTS = [
 ]
 
 
+# ── ANSI colour helpers ──────────────────────────────────────────────
+_RESET = "\033[0m"
+_BOLD = "\033[1m"
+_RED = "\033[31m"
+_GREEN = "\033[32m"
+_YELLOW = "\033[33m"
+_BLUE = "\033[34m"
+_CYAN = "\033[36m"
+_BRIGHT_GREEN = "\033[92m"
+
+
+def bold(text: str) -> str:
+    return f"{_BOLD}{text}{_RESET}"
+
+
+def green(text: str) -> str:
+    return f"{_GREEN}{text}{_RESET}"
+
+
+def red(text: str) -> str:
+    return f"{_RED}{text}{_RESET}"
+
+
+def yellow(text: str) -> str:
+    return f"{_YELLOW}{text}{_RESET}"
+
+
+def cyan(text: str) -> str:
+    return f"{_CYAN}{text}{_RESET}"
+
+
+def blue(text: str) -> str:
+    return f"{_BLUE}{text}{_RESET}"
+
+
+def bright_green(text: str) -> str:
+    return f"{_BRIGHT_GREEN}{text}{_RESET}"
+
+
+def _colour_status(value: str | None) -> str:
+    if not value:
+        return "-"
+    v = value.strip().lower()
+    if v == "active":
+        return green(value)
+    if v in ("inactive", "fail", "failed"):
+        return red(value)
+    if v == "pending":
+        return yellow(value)
+    return value
+
+
+def _colour_env(name: str) -> str:
+    if name == "prod":
+        return green(name)
+    if name == "test":
+        return blue(name)
+    return name
+
+
+# ────────────────────────────────────────────────────────────────────
+
+
 class SshcError(RuntimeError):
     """A user-facing error."""
 
@@ -259,10 +322,10 @@ def main(argv: list[str] | None = None) -> int:
             configure(config_args)
             return 0
         except SshcError as exc:
-            print(f"[WARNING] {exc}", file=sys.stderr)
+            print(f"{yellow('[WARNING]')} {exc}", file=sys.stderr)
             return 1
         except KeyboardInterrupt:
-            print("\n[WARNING] interrupted", file=sys.stderr)
+            print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
             return 130
 
     parser = build_parser()
@@ -278,10 +341,10 @@ def main(argv: list[str] | None = None) -> int:
             run(args, settings)
         return 0
     except SshcError as exc:
-        print(f"[WARNING] {exc}", file=sys.stderr)
+        print(f"{yellow('[WARNING]')} {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print("\n[WARNING] interrupted", file=sys.stderr)
+        print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
         return 130
 
 
@@ -466,7 +529,7 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
             '--prod-password "password"'
         )
 
-    print("[1/5] 登录并查询车辆环境", flush=True)
+    print("[INFO] 登录并查询车辆状态...", flush=True)
     lookup = resolve_vehicle_lookup(
         args.vehicle,
         settings,
@@ -478,19 +541,17 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
     if args.debug:
         print_json("vehicle", vehicle)
 
-    print(f"[2/5] 使用环境: {lookup.env.name} {lookup.env.display_url}", flush=True)
     device_id = lookup.device_id
     if args.versions:
         show_vehicle_info(client, args.vehicle, vehicle, device_id)
         if not lookup.c4_online:
-            print(f"[WARNING] {args.vehicle} c4 is offline")
+            print(f"{yellow('[WARNING]')} {args.vehicle} c4 is offline")
         return
 
     if not lookup.c4_online:
         raise SshcError(f"{args.vehicle} c4 is offline")
-    print(f"      c4Online=true, device_id={device_id}")
 
-    print(f"[3/5] 检查 {DEFAULT_TARGET_PORT} 端口映射", flush=True)
+    print(f"[INFO] 检查 {DEFAULT_TARGET_PORT} 端口映射...", flush=True)
     mapping = ensure_port_mapping(
         client=client,
         device_id=device_id,
@@ -501,11 +562,11 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
 
     print(
         f"      {DEFAULT_TARGET_PORT} -> {format_host_port(mapping.server_ip or lookup.env.ssh_host, mapping.server_port)} "
-        f"(status={mapping.status or 'unknown'}, "
+        f"(status={_colour_status(mapping.status)}, "
         f"frpc_connected={format_scalar(mapping.frpc_connected)})"
     )
 
-    print("[4/5] 分发本机公钥，按提示输入车端密码", flush=True)
+    print("[INFO] 分发本机公钥，按提示输入车端密码...", flush=True)
     ensure_local_key(settings.keyfile)
     copy_ssh_key(
         keyfile=settings.keyfile,
@@ -526,14 +587,14 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
         target,
     ]
 
-    print("[5/5] SSH 登录", flush=True)
-    print(shell_join(ssh_command))
+    print("[INFO] SSH 登录...", flush=True)
+    print(green(shell_join(ssh_command)))
     raise SystemExit(subprocess.run(ssh_command).returncode)
 
 
 def complete_vehicles(prefix: str, settings: Settings) -> None:
     if not has_any_environment_config(settings):
-        print("[WARNING] missing XiaoZhu config", file=sys.stderr)
+        print(f"{yellow('[WARNING]')} missing XiaoZhu config", file=sys.stderr)
         return
 
     query = vehicle_completion_query(prefix)
@@ -551,11 +612,11 @@ def complete_vehicles(prefix: str, settings: Settings) -> None:
             client.token = token
             names.extend(complete_vehicle_names(client, prefix, query))
         except SshcError as exc:
-            print(f"[WARNING] {env.name}: {exc}", file=sys.stderr)
+            print(f"{yellow('[WARNING]')} {_colour_env(env.name)}: {exc}", file=sys.stderr)
             continue
 
     if not names:
-        print(f"[WARNING] no online vehicle candidates for {prefix}", file=sys.stderr)
+        print(f"{yellow('[WARNING]')} no online vehicle candidates for {prefix}", file=sys.stderr)
         return
 
     for name in sorted(set(names)):
@@ -575,7 +636,7 @@ def resolve_vehicle_lookup(
     for env in ENVIRONMENTS:
         username, password_md5 = environment_credentials(settings, env)
         if not username or not password_md5:
-            print(f"      {env.name}: skipped, missing config")
+            print(f"      {_colour_env(env.name)}: skipped, missing config")
             continue
 
         client = HttpClient(env.base_url, HTTP_TIMEOUT, debug=debug)
@@ -593,10 +654,10 @@ def resolve_vehicle_lookup(
                     DEFAULT_TARGET_PORT,
                 )
         except SshcError as exc:
-            print(f"      {env.name}: {exc}")
+            print(f"      {_colour_env(env.name)}: {exc}")
             continue
 
-        print(f"      {env.name}: c4Online={format_scalar(c4_online)}, 22={format_mapping_summary(mapping)}")
+        print(f"      {_colour_env(env.name)}: c4Online={format_scalar(c4_online)}, 22={format_mapping_summary(mapping)}")
         lookups.append(
             VehicleLookup(
                 env=env,
@@ -621,7 +682,7 @@ def resolve_vehicle_lookup(
     else:
         selected = select_vehicle_lookup(lookups)
 
-    print(f"      selected: {selected.env.name}")
+    print(f"      selected: {_colour_env(selected.env.name)} {selected.env.display_url}")
     return selected
 
 
@@ -647,18 +708,17 @@ def find_lookup(
 
 def format_mapping_summary(mapping: PortMapping | None) -> str:
     if not mapping:
-        return "missing"
+        return red("missing")
     return (
-        f"{mapping.status or 'unknown'}/"
-        f"frpc_connected={format_scalar(mapping.frpc_connected)}/"
-        f"server_port={format_scalar(mapping.server_port)}"
+        f"{_colour_status(mapping.status)}，"
+        f"frpc_connected={format_scalar(mapping.frpc_connected)}"
     )
 
 
 def format_host_port(host: str, port: int | None) -> str:
     if port is None:
         return host
-    return f"{host} -p {port}"
+    return f"{host}:{port}"
 
 
 def login(client: HttpClient, path: str, username: str, password_md5: str) -> str:
@@ -779,9 +839,8 @@ def show_vehicle_info(
     device_id: str,
 ) -> None:
     name = vehicle.get("name") or vehicle_name
+    print("[INFO] 车辆信息:", flush=True)
     print(f"vehicle: {name}")
-    print(f"id: {device_id}")
-    print(f"c4Online: {format_scalar(extract_c4_online_or_false(vehicle))}")
 
     print("versions:")
     versions = vehicle.get("versions") or {}
@@ -799,21 +858,25 @@ def show_vehicle_info(
     for mapping in mappings:
         endpoint = "-"
         if mapping.server_ip and mapping.server_port:
-            endpoint = format_host_port(mapping.server_ip, mapping.server_port)
+            endpoint = f"{mapping.server_ip}:{mapping.server_port}"
         elif mapping.server_port:
-            endpoint = format_host_port(DEFAULT_SSH_HOST, mapping.server_port)
+            endpoint = f"{DEFAULT_SSH_HOST}:{mapping.server_port}"
         print(
             "  "
             f"{format_scalar(mapping.device_port)}/{mapping.protocol or '-'} "
             f"-> {endpoint} "
-            f"status={mapping.status or '-'} "
+            f"status={_colour_status(mapping.status)} "
             f"frpc_connected={format_scalar(mapping.frpc_connected)}"
         )
         if mapping.device_port == DEFAULT_TARGET_PORT and mapping.server_port:
             ssh_host = mapping.server_ip or DEFAULT_SSH_HOST
             print(
-                f"    ssh: ssh {DEFAULT_SSH_USER}@{ssh_host} "
-                f"-p {mapping.server_port}"
+                f"    ssh: {cyan(f'ssh {DEFAULT_SSH_USER}@{ssh_host} -p {mapping.server_port}')}"
+            )
+        if mapping.device_port in {9000, 8765} and mapping.server_port and (mapping.status or "").strip().lower() == "active":
+            ws_host = mapping.server_ip or DEFAULT_SSH_HOST
+            print(
+                f"    websocket: {cyan(f'ws://{ws_host}:{mapping.server_port}')}"
             )
 
 
@@ -830,13 +893,13 @@ def ensure_port_mapping(
         return mapping
 
     if mapping and mapping.needs_recreate:
-        print(f"      发现 {mapping.status or 'unknown'} 映射，删除后重建")
+        print(f"      发现 {_colour_status(mapping.status)} 映射，删除后重建")
         delete_port_mapping(client, device_id, target_port)
         create_port_mapping(client, device_id, target_port)
     elif mapping:
         print(
             f"      端口映射正在初始化 "
-            f"(status={mapping.status or 'unknown'}, "
+            f"(status={_colour_status(mapping.status)}, "
             f"frpc_connected={format_scalar(mapping.frpc_connected)})"
         )
     else:
@@ -941,7 +1004,7 @@ def wait_for_connectable_mapping(
         if mapping and mapping.needs_recreate:
             if recreated:
                 return mapping
-            print(f"      映射状态为 {mapping.status or 'unknown'}，删除后重建")
+            print(f"      映射状态为 {_colour_status(mapping.status)}，删除后重建")
             delete_port_mapping(client, device_id, target_port)
             create_port_mapping(client, device_id, target_port)
             recreated = True
@@ -1072,7 +1135,8 @@ def extract_port_mapping_list(data: Any) -> list[Any]:
 
 def format_scalar(value: Any) -> str:
     if isinstance(value, bool):
-        return str(value).lower()
+        s = str(value).lower()
+        return green(s) if value else red(s)
     if value is None:
         return "-"
     return str(value)

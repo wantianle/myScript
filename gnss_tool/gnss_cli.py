@@ -48,6 +48,22 @@ def do_saveconfig(dev, label=""):
 # ═══════════════════════════════════════════════════════════
 
 def mode_configure(dev):
+    total_fail = 0
+
+    # ── 0. 查看并清除旧日志配置 ──
+    print("\n── 当前日志输出配置 ──")
+    ok, data = dev.cmd("log loglist")
+    if data:
+        for line in data.strip().split("\n"):
+            print("  " + line.strip())
+    else:
+        print("  (无法读取)")
+
+    print("\n── 清除所有日志输出 ──")
+    ok, _ = dev.cmd("unlogall")
+    print("  unlogall → " + ("✓" if ok else "✗ (继续执行，不影响后续配置)"))
+    # unlogall 失败不计数，不影响后续流程
+
     phases = [
         ("阶段 1/4: 周期性日志输出", [cmd for cmd in cfg.LOG_PERIODIC]),
         ("阶段 2/4: 事件触发日志输出", [cmd for cmd in cfg.LOG_EVENT]),
@@ -57,7 +73,6 @@ def mode_configure(dev):
     ]
     save_keys = ["LOG_PERIODIC", "LOG_EVENT", "CALIB_PARAMS", "FINAL_COMMANDS"]
 
-    total_fail = 0
     for idx, (title, cmds) in enumerate(phases):
         if not cmds:
             continue
