@@ -7,31 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+
+	"github.com/getlantern/systray"
 )
-
-// MenuAction identifies the action triggered by a menu item click.
-type MenuAction int
-
-const (
-	ActionStatus MenuAction = iota // disabled status line
-	ActionDivider
-	ActionServerGroup   // "服务器线路" — expand/collapse
-	ActionSelectServer  // individual server item
-	ActionToggleVPN
-	ActionEditConfig
-	ActionViewLog
-	ActionQuit
-)
-
-// MenuItem is a flat data model for one row in the custom popup.
-type MenuItem struct {
-	Label    string
-	Action   MenuAction
-	Server   string // only for ActionSelectServer
-	Disabled bool
-	Selected bool
-	Indented bool // sub-items indented
-}
 
 // MenuState holds the dynamic state for the tray menu.
 type MenuState struct {
@@ -40,173 +18,223 @@ type MenuState struct {
 	mu        sync.Mutex
 }
 
-// PopupUI bridges the popup window to the application logic.
-type PopupUI struct {
-	state     *MenuState
-	popup     *PopupWindow
+// Dynamic menu items.
+var (
+	menuConnectionStatus *systray.MenuItem
+	menuToggleVPN        *systray.MenuItem
+	serverMenuItems      = make(map[string]*systray.MenuItem)
+)
+
+// buildMenu creates the complete tray menu structure.
+func buildMenu(state *MenuState) {
+	// Connection status (disabled, shows current state)
+	menuConnectionStatus = systray.AddMenuItem("⚡ 连接中...", "")
+	menuConnectionStatus.Disable()
+
+	systray.AddSeparator()
+
+	// Server submenu
+	serverMenu := systray.AddMenuItem("📶 服务器线路", "选择服务器")
+	buildServerSubmenu(serverMenu, state)
+
+	systray.AddSeparator()
+
+	// Toggle VPN
+	menuToggleVPN = systray.AddMenuItem("🔌 启用 VPN", "连接或断开 VPN")
+	go handleToggleVPN()
+
+	// Edit config
+	editConfigItem := systray.AddMenuItem("📝 编辑配置文件", "用记事本打开 iwan.conf")
+	go handleEditConfig(editConfigItem)
+
+	// Reload config
+	reloadConfigItem := systray.AddMenuItem("🔄 重新加载配置", "重启 SDWAN 服务")
+	go handleReloadConfig(reloadConfigItem)
+
+	systray.AddSeparator()
+
+	// View log
+	viewLogItem := systray.AddMenuItem("📋 查看日志", "用记事本打开 sdwan-tray.log")
+	go handleViewLog(viewLogItem)
+
+	systray.AddSeparator()
+
+	// Quit
+	quitItem := systray.AddMenuItem("❌ 退出", "关闭 SDWAN Tray")
+	go handleQuit(quitItem)
+
+	// Initial state
+	updateConnectionStatus(state.connected)
 }
 
-// BuildMenuItems returns the flat list of menu items for the popup.
-func BuildMenuItems(state *MenuState) []MenuItem {
+// buildServerSubmenu populates the server selection submenu.
+func buildServerSubmenu(parent *systray.MenuItem, state *MenuState) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
-	items := []MenuItem{}
-
-	// Status line
-	statusLabel := "SDWAN 已断开"
-	if state.connected {
-		statusLabel = "SDWAN 已连接"
-	}
-	items = append(items, MenuItem{
-		Label:    statusLabel,
-		Action:   ActionStatus,
-		Disabled: true,
-		Selected: state.connected,
-	})
-
-	items = append(items, MenuItem{Action: ActionDivider})
-
-	// Server group header
-	items = append(items, MenuItem{
-		Label:  "服务器线路",
-		Action: ActionServerGroup,
-	})
-
-	// Server items (rendered only when expanded in popup)
 	for _, server := range ServerList {
 		label := server
 		if state.latencies != nil {
 			if lat, ok := state.latencies[server]; ok && lat > 0 {
-				label = fmt.Sprintf("%s · %dms", server, lat)
+				label = formatServerLabel(server, lat)
 			}
 		}
-		isSelected := config != nil && config.Server == server
-		items = append(items, MenuItem{
-			Label:    label,
-			Action:   ActionSelectServer,
-			Server:   server,
-			Indented: true,
-			Selected: isSelected,
-		})
-	}
 
-	items = append(items, MenuItem{Action: ActionDivider})
+		item := parent.AddSubMenuItem(label, "切换到 "+server)
+		serverMenuItems[server] = item
 
-	// Toggle VPN
-	vpnLabel := "启用 VPN"
-	if state.connected {
-		vpnLabel = "断开 VPN"
-	}
-	items = append(items, MenuItem{
-		Label:  vpnLabel,
-		Action: ActionToggleVPN,
-	})
+		if config != nil && config.Server == server {
+			item.Check()
+		}
 
-	items = append(items, MenuItem{Action: ActionDivider})
-
-	// Edit config
-	items = append(items, MenuItem{
-		Label:  "编辑配置",
-		Action: ActionEditConfig,
-	})
-
-	// View log
-	items = append(items, MenuItem{
-		Label:  "查看日志",
-		Action: ActionViewLog,
-	})
-
-	items = append(items, MenuItem{Action: ActionDivider})
-
-	// Quit
-	items = append(items, MenuItem{
-		Label:  "退出",
-		Action: ActionQuit,
-	})
-
-	return items
-}
-
-// HandlePopupClick dispatches a menu item click to the appropriate handler.
-func HandlePopupClick(item MenuItem) {
-	switch item.Action {
-	case ActionToggleVPN:
-		handleToggleVPNAction()
-	case ActionSelectServer:
-		handleServerSelectAction(item.Server)
-	case ActionEditConfig:
-		handleEditConfigAction()
-	case ActionViewLog:
-		handleViewLogAction()
-	case ActionQuit:
-		handleQuitAction()
-	case ActionServerGroup:
-		// handled by popup expand/collapse toggle
+		go handleServerSelect(server, item)
 	}
 }
 
-func handleToggleVPNAction() {
-	if mgr == nil {
-		return
+func updateConnectionStatus(connected bool) {
+	if menuConnectionStatus != nil {
+		if connected {
+			menuConnectionStatus.SetTitle("⚡ 已连接")
+		} else {
+			menuConnectionStatus.SetTitle("⚡ 已断开")
+		}
 	}
-	if mgr.IsRunning() {
-		mgr.Stop()
-		menuState.mu.Lock()
-		menuState.connected = false
-		menuState.mu.Unlock()
-	} else {
-		mgr.Start()
-		menuState.mu.Lock()
-		menuState.connected = true
-		menuState.mu.Unlock()
+	if menuToggleVPN != nil {
+		if connected {
+			menuToggleVPN.SetTitle("🔌 断开 VPN")
+		} else {
+			menuToggleVPN.SetTitle("🔌 启用 VPN")
+		}
 	}
 }
 
-func handleServerSelectAction(server string) {
+func updateServerCheckmarks() {
 	if config == nil {
 		return
 	}
-	config.Server = server
-
-	exe, err := os.Executable()
-	if err != nil {
-		return
+	for server, item := range serverMenuItems {
+		if server == config.Server {
+			item.Check()
+		} else {
+			item.Uncheck()
+		}
 	}
-	configPath := filepath.Join(filepath.Dir(exe), "iwan.conf")
-	if err := SaveConfig(configPath, config); err != nil {
-		log.Printf("Error saving config: %v", err)
-		return
-	}
-
-	if mgr != nil {
-		mgr.Restart()
-	}
-	menuState.connected = mgr != nil && mgr.IsRunning()
 }
 
-func handleEditConfigAction() {
-	exe, err := os.Executable()
-	if err != nil {
-		return
+func formatServerLabel(server string, latencyMs int64) string {
+	prefix := "○ "
+	if config != nil && config.Server == server {
+		prefix = "● "
 	}
-	configPath := filepath.Join(filepath.Dir(exe), "iwan.conf")
-	cmd := exec.Command("notepad.exe", configPath)
-	cmd.Start()
+	return prefix + server + " (" + formatLatency(latencyMs) + ")"
 }
 
-func handleViewLogAction() {
-	exe, err := os.Executable()
-	if err != nil {
-		return
+func formatLatency(ms int64) string {
+	if ms <= 0 {
+		return "超时"
 	}
-	logPath := filepath.Join(filepath.Dir(exe), "sdwan-tray.log")
-	cmd := exec.Command("notepad.exe", logPath)
-	cmd.Start()
+	return fmt.Sprintf("%dms", ms)
 }
 
-func handleQuitAction() {
-	if appHwnd != 0 {
-		PostQuitMessage()
+func handleServerSelect(server string, item *systray.MenuItem) {
+	for range item.ClickedCh {
+		if config == nil {
+			continue
+		}
+		config.Server = server
+
+		exe, err := os.Executable()
+		if err != nil {
+			continue
+		}
+		configPath := filepath.Join(filepath.Dir(exe), "iwan.conf")
+		if err := SaveConfig(configPath, config); err != nil {
+			log.Printf("Error saving config: %v", err)
+			continue
+		}
+
+		updateServerCheckmarks()
+
+		if mgr != nil {
+			mgr.Restart()
+		}
+		menuState.mu.Lock()
+		menuState.connected = mgr != nil && mgr.IsRunning()
+		menuState.mu.Unlock()
+		updateConnectionStatus(menuState.connected)
 	}
+}
+
+func handleToggleVPN() {
+	for range menuToggleVPN.ClickedCh {
+		if mgr == nil {
+			continue
+		}
+		if mgr.IsRunning() {
+			mgr.Stop()
+			menuState.mu.Lock()
+			menuState.connected = false
+			menuState.mu.Unlock()
+		} else {
+			mgr.Start()
+			menuState.mu.Lock()
+			menuState.connected = true
+			menuState.mu.Unlock()
+		}
+		updateConnectionStatus(menuState.connected)
+	}
+}
+
+func handleEditConfig(item *systray.MenuItem) {
+	for range item.ClickedCh {
+		exe, err := os.Executable()
+		if err != nil {
+			continue
+		}
+		configPath := filepath.Join(filepath.Dir(exe), "iwan.conf")
+		cmd := exec.Command("notepad.exe", configPath)
+		cmd.Start()
+	}
+}
+
+func handleReloadConfig(item *systray.MenuItem) {
+	for range item.ClickedCh {
+		exe, err := os.Executable()
+		if err != nil {
+			continue
+		}
+		configPath := filepath.Join(filepath.Dir(exe), "iwan.conf")
+		newCfg, err := LoadConfig(configPath)
+		if err != nil {
+			log.Printf("Error reloading config: %v", err)
+			continue
+		}
+		config = newCfg
+
+		if mgr != nil {
+			mgr.Restart()
+		}
+		menuState.mu.Lock()
+		menuState.connected = mgr != nil && mgr.IsRunning()
+		menuState.mu.Unlock()
+		updateConnectionStatus(menuState.connected)
+		updateServerCheckmarks()
+	}
+}
+
+func handleViewLog(item *systray.MenuItem) {
+	for range item.ClickedCh {
+		exe, err := os.Executable()
+		if err != nil {
+			continue
+		}
+		logPath := filepath.Join(filepath.Dir(exe), "sdwan-tray.log")
+		cmd := exec.Command("notepad.exe", logPath)
+		cmd.Start()
+	}
+}
+
+func handleQuit(item *systray.MenuItem) {
+	<-item.ClickedCh
+	systray.Quit()
 }

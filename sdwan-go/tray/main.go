@@ -3,14 +3,17 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+
+	"github.com/getlantern/systray"
 )
 
 var (
 	config    *Config
 	mgr       *ProcessManager
 	menuState *MenuState
-	exitCh    = make(chan struct{})
 )
 
 func main() {
@@ -56,21 +59,27 @@ func main() {
 		latencies: make(map[string]int64),
 	}
 
-	// Run onReady logic inline
-	onReady()
+	// Handle OS signals for clean shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		systray.Quit()
+	}()
 
-	// 5. Run the raw Win32 message loop (blocks until quit)
-	iconData := generateIcon()
-	exitCode := RunMessageLoop(iconData)
-
-	// 6. onExit cleanup
-	onExit()
-
-	os.Exit(exitCode)
+	// Block on systray.Run
+	systray.Run(onReady, onExit)
 }
 
 func onReady() {
-	// 5. Start config file watcher (restart sdwan on change, don't quit tray)
+	systray.SetIcon(generateIcon())
+	systray.SetTitle("SDWAN Tray")
+	systray.SetTooltip("SDWAN Tray")
+
+	// Build initial menu
+	buildMenu(menuState)
+
+	// Start config file watcher
 	exe, _ := os.Executable()
 	configPath := filepath.Join(filepath.Dir(exe), "iwan.conf")
 	go WatchConfig(configPath, func() {
@@ -87,25 +96,22 @@ func onReady() {
 		menuState.mu.Lock()
 		menuState.connected = mgr != nil && mgr.IsRunning()
 		menuState.mu.Unlock()
-
-		// Refresh popup if visible
-		onPopupRefresh()
+		updateConnectionStatus(menuState.connected)
+		updateServerCheckmarks()
 	})
 
-	// 6. Start latency checker goroutine
+	// Start latency checker goroutine
 	go StartLatencyChecker(func(results map[string]int64) {
 		menuState.mu.Lock()
 		menuState.latencies = results
 		menuState.mu.Unlock()
-		onPopupRefresh()
+		// Update menu labels
+		for server, lat := range results {
+			if item, ok := serverMenuItems[server]; ok {
+				item.SetTitle(formatServerLabel(server, lat))
+			}
+		}
 	})
-}
-
-// onPopupRefresh refreshes the currently visible popup window.
-func onPopupRefresh() {
-	if globalPopup != nil {
-		globalPopup.Refresh(menuState)
-	}
 }
 
 func onExit() {
@@ -114,10 +120,6 @@ func onExit() {
 		if err := mgr.Stop(); err != nil {
 			log.Printf("Error stopping sdwan.exe: %v", err)
 		}
-	}
-	// Close popup if still open
-	if globalPopup != nil {
-		globalPopup.Hide()
 	}
 	log.Println("SDWAN Tray exiting")
 }
