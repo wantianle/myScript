@@ -1,0 +1,19 @@
+# Build outputs
+dist/
+*.exe
+*.dll
+
+# Logs
+*.log
+
+# Local configs (may contain credentials)
+iwan.conf
+config.json
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
