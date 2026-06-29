@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -39,10 +40,13 @@ type SdwanManager struct {
 	config          *Config
 	connected       bool
 	latency         int64
+	serverLatency   map[string]int64 // per-server latency
 	cmd             *exec.Cmd
 	logFile         *os.File
-	stopCh          chan struct{} // signals the latency probe to stop
-	onStateChange   func()        // optional callback for UI refresh
+	stopCh          chan struct{}    // signals the latency probe to stop
+	probeTrigger    chan struct{}    // triggers an immediate probe
+	probePaused     atomic.Bool      // true = probes suspended (panel hidden)
+	onStateChange   func()           // optional callback for UI refresh
 }
 
 var instance *SdwanManager
@@ -56,11 +60,13 @@ func GetManager() *SdwanManager {
 		dir := filepath.Dir(exe)
 
 		m := &SdwanManager{
-			exeDir:     dir,
-			configPath: filepath.Join(dir, "config.json"),
-			iwanPath:   filepath.Join(dir, "iwan.conf"),
-			config:     defaultConfig(),
-			stopCh:     make(chan struct{}),
+			exeDir:        dir,
+			configPath:    filepath.Join(dir, "config.json"),
+			iwanPath:      filepath.Join(dir, "iwan.conf"),
+			config:        defaultConfig(),
+			serverLatency: make(map[string]int64),
+			stopCh:        make(chan struct{}),
+			probeTrigger:  make(chan struct{}, 1),
 		}
 		m.loadConfig()
 		instance = m
@@ -143,6 +149,7 @@ func (m *SdwanManager) GetServers() []map[string]string {
 			"id":       s.ID,
 			"name":     s.Name,
 			"selected": sel,
+			"latency":  formatLatency(m.serverLatency[s.ID]),
 		})
 	}
 	return list
@@ -211,16 +218,45 @@ func (m *SdwanManager) Reload() bool {
 
 // EditConfig opens iwan.conf with Windows Notepad.
 func (m *SdwanManager) EditConfig() error {
-	return exec.Command("cmd", "/c", "notepad", m.iwanPath).Start()
+	return exec.Command("notepad", m.iwanPath).Start()
+}
+
+// NeedsRestart returns true if the server in iwan.conf differs from the
+// server currently running. Used by WatchIwanConf to avoid restarting the
+// tunnel for unrelated config edits (MTU, password, etc.).
+func (m *SdwanManager) NeedsRestart() bool {
+	current := m.ParseIwanServer()
+	if current == "" {
+		return false
+	}
+	cfgServer := m.getCurrentServerName()
+	return current != cfgServer
 }
 
 // Shutdown gracefully stops the core and persists state.
+// ResumeProbes unpauses the latency probe and fires an immediate probe cycle.
+func (m *SdwanManager) ResumeProbes() {
+	m.probePaused.Store(false)
+	select {
+	case m.probeTrigger <- struct{}{}:
+	default:
+	}
+}
+
+// SuspendProbes pauses all latency probing (panel hidden).
+func (m *SdwanManager) SuspendProbes() {
+	m.probePaused.Store(true)
+}
+
 func (m *SdwanManager) Shutdown() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.connected {
 		m.stopCore()
 	}
+	// Clean up stale wintun adapter so next start is fresh
+	exec.Command("wmic", "path", "Win32_NetworkAdapter",
+		"where", "NetConnectionID='iwan1'", "delete").Run()
 }
 
 // --- iwan.conf sync -------------------------------------------------
@@ -228,16 +264,21 @@ func (m *SdwanManager) Shutdown() {
 // syncIwanConf reads the existing iwan.conf and updates the server= line.
 // Other fields (username, password, port, mtu, encrypt, etc.) are preserved.
 func (m *SdwanManager) syncIwanConf() error {
+	serverName := m.getCurrentServerName()
+
+	// Skip if already correct — prevents watcher→reload→sync→watcher loop
+	if m.ParseIwanServer() == serverName {
+		return nil
+	}
+
 	// Read existing iwan.conf
 	data, err := os.ReadFile(m.iwanPath)
 	if err != nil {
-		// No existing iwan.conf — create a minimal one
 		return m.writeDefaultIwanConf()
 	}
 
 	lines := strings.Split(string(data), "\n")
 	found := false
-	serverName := m.getCurrentServerName()
 	newLine := "server=" + serverName
 
 	for i, line := range lines {
@@ -380,33 +421,50 @@ func (m *SdwanManager) stopCore() {
 
 // --- latency probe ---------------------------------------------------
 
-// latencyProbe periodically checks the server latency using UDP echo.
+// latencyProbe periodically checks server latency via TCP dial.
+// Probes are suspended when SuspendProbes() is called (panel hidden).
 func (m *SdwanManager) latencyProbe() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-
-	// Run first probe immediately
-	m.probeOnce()
 
 	for {
 		select {
 		case <-m.stopCh:
 			return
+		case <-m.probeTrigger:
+			if !m.probePaused.Load() {
+				m.probeOnce()
+			}
 		case <-ticker.C:
-			m.probeOnce()
+			if !m.probePaused.Load() {
+				m.probeOnce()
+			}
 		}
 	}
 }
 
 func (m *SdwanManager) probeOnce() {
-	serverName := m.getCurrentServerName()
-	if serverName == "" {
-		return
+	// Probe all servers in parallel for speed
+	var wg sync.WaitGroup
+	for _, s := range m.config.Servers {
+		wg.Add(1)
+		go func(sid, sname string) {
+			defer wg.Done()
+			lat := probeLatency(sname)
+			m.mu.Lock()
+			if lat > 0 {
+				m.serverLatency[sid] = lat
+			}
+			m.mu.Unlock()
+		}(s.ID, s.Name)
 	}
+	wg.Wait()
 
-	lat := probeLatency(serverName)
+	// Update current server latency for status header
 	m.mu.Lock()
-	m.latency = lat
+	if ms, ok := m.serverLatency[m.config.CurrentServer]; ok {
+		m.latency = ms
+	}
 	m.mu.Unlock()
 
 	if m.onStateChange != nil {
@@ -414,30 +472,30 @@ func (m *SdwanManager) probeOnce() {
 	}
 }
 
-// probeLatency measures UDP round-trip time to the server on port 10010.
-func probeLatency(server string) int64 {
-	addr := net.JoinHostPort(server, "10010")
-	start := time.Now()
+// formatLatency converts a latency value to a display string.
+func formatLatency(ms int64) string {
+	if ms <= 0 {
+		return ""
+	}
+	if ms < 1 {
+		return "<1ms"
+	}
+	return fmt.Sprintf("%dms", ms)
+}
 
-	conn, err := net.DialTimeout("udp", addr, 2*time.Second)
+// probeLatency uses TCP dial to port 443 to measure real RTT.
+// TCP handshake gives authentic round-trip time — no output parsing needed.
+func probeLatency(server string) int64 {
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(server, "443"), 2*time.Second)
 	if err != nil {
+		log.Printf("[LATENCY] %s:443 unreachable: %v", server, err)
 		return -1
 	}
-	defer conn.Close()
-
-	// Send a small probe packet and try to read any response
-	conn.SetDeadline(time.Now().Add(1500 * time.Millisecond))
-	conn.Write([]byte{0x00})
-
-	buf := make([]byte, 1)
-	_, err = conn.Read(buf)
-	elapsed := time.Since(start).Milliseconds()
-
-	if err != nil {
-		// Even without a response, the dial succeeded so we have a rough RTT
-		return elapsed
-	}
-	return elapsed
+	conn.Close()
+	ms := time.Since(start).Milliseconds()
+	log.Printf("[LATENCY] %s:443 = %dms", server, ms)
+	return ms
 }
 
 // --- iwan.conf file watcher ------------------------------------------
@@ -445,7 +503,8 @@ func probeLatency(server string) int64 {
 // WatchIwanConf monitors iwan.conf for external changes (e.g. user edits
 // with Notepad) and triggers a restart. onChange is called after a
 // 500ms debounce to avoid multiple rapid fires.
-func (m *SdwanManager) WatchIwanConf(path string, onChange func()) {
+func (m *SdwanManager) WatchIwanConf(onChange func()) {
+	path := m.iwanPath
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Printf("[CORE] Error creating file watcher: %v", err)

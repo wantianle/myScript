@@ -4,9 +4,9 @@ LDFLAGS  := -s -w -X main.Version=$(VERSION) -X 'main.BuildDate=$(BUILDDATE)'
 GOPROXY  ?= https://goproxy.cn,direct
 DST       = dist
 
-.PHONY: all linux macos windows tray clean test vet tidy
+.PHONY: all linux macos windows panel clean test vet tidy
 
-all: linux macos windows tray
+all: linux macos windows panel
 	@ls -lh $(DST)/
 
 linux:
@@ -19,8 +19,8 @@ macos:
 windows:
 	GOOS=windows GOARCH=amd64 GOPROXY=$(GOPROXY) go build -ldflags "$(LDFLAGS)" -o $(DST)/sdwan-windows-amd64.exe     .
 
-tray:
-	cd tray && GOOS=windows GOARCH=amd64 GOPROXY=$(GOPROXY) go build -ldflags="-s -w -H windowsgui" -o ../dist/sdwan-tray.exe .
+panel:
+	cd sdwan-panel && GOPROXY=$(GOPROXY) go mod tidy && GOOS=windows GOARCH=amd64 go build -tags production -ldflags="-s -w -H windowsgui" -o ../dist/sdwan-panel.exe .
 
 clean:
 	rm -f $(DST)/sdwan-*

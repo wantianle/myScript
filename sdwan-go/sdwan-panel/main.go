@@ -5,12 +5,12 @@ import (
 	"embed"
 	"log"
 	"os"
+	"runtime/debug"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
-	windowsOptions "github.com/wailsapp/wails/v2/pkg/options/windows"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend
@@ -20,6 +20,14 @@ var assets embed.FS
 var appCtx context.Context
 
 func main() {
+	// Crash recovery — log panics instead of silently exiting
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("FATAL PANIC: %v\n%s", r, debug.Stack())
+			os.Exit(1)
+		}
+	}()
+
 	app := NewApp()
 
 	if f, err := os.Create("sdwan-panel.log"); err == nil {
@@ -27,21 +35,42 @@ func main() {
 		defer f.Close()
 	}
 	log.Println("SDWAN Panel starting...")
+	log.Println("[DEBUG] Panel version 1.0.0")
 
-	// Start systray in a separate goroutine (it blocks on its own event loop).
-	go startSysTray()
+	go safeSystray()
 
-	// Start a goroutine that listens for systray "show panel" signals
-	// and calls WindowShow/WIndowHide via the Wails runtime.
+	// Show-panel signal watcher — positions panel at bottom-right
 	go func() {
-		for range systrayShowCh {
+		for range trayShowCh {
+			log.Println("[DEBUG] Show panel signal received")
 			if appCtx != nil {
-				runtime.WindowShow(appCtx)
-				runtime.WindowSetPosition(appCtx, -1, -1) // let OS place it (bottom-right)
+				panelJustShown.Store(true)
+				app.OnPanelShown() // resume probes + immediate refresh
+				wailsRuntime.WindowShow(appCtx)
+				if screens, err := wailsRuntime.ScreenGetAll(appCtx); err == nil {
+					for _, s := range screens {
+						if s.IsPrimary {
+							x := s.Size.Width - 280 - 16    // 16px right margin
+							y := s.Size.Height - 380 - 56   // 56px for taskbar
+							wailsRuntime.WindowSetPosition(appCtx, x, y)
+							break
+						}
+					}
+				}
 			}
 		}
 	}()
 
+	// Graceful shutdown watcher
+	go func() {
+		<-shutdownCh
+		log.Println("[DEBUG] Shutdown signal received from systray")
+		if appCtx != nil {
+			wailsRuntime.Quit(appCtx)
+		}
+	}()
+
+	log.Println("[DEBUG] Starting Wails...")
 	err := wails.Run(&options.App{
 		Title:       "SDWAN Panel",
 		Width:       280,
@@ -53,16 +82,16 @@ func main() {
 			Assets: assets,
 		},
 
-		Windows: &windowsOptions.Options{
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
-		},
-
 		OnStartup: func(ctx context.Context) {
+			log.Println("[DEBUG] OnStartup called")
 			appCtx = ctx
 			app.startup(ctx)
 		},
+		OnDomReady: func(ctx context.Context) {
+			log.Println("[DEBUG] OnDomReady called — frontend loaded")
+		},
 		OnShutdown: func(ctx context.Context) {
+			log.Println("[DEBUG] OnShutdown called")
 			app.Shutdown()
 		},
 
@@ -72,4 +101,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Wails error: %v", err)
 	}
+	log.Println("[DEBUG] Wails.Run returned normally")
+}
+
+// safeSystray wraps startSysTray with panic recovery.
+func safeSystray() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("FATAL SYSTRAY PANIC: %v\n%s", r, debug.Stack())
+		}
+	}()
+	startSysTray()
 }

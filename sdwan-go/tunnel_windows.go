@@ -43,6 +43,15 @@ func CreateTUN(name string, mtu int, _ string) (TunDevice, error) {
 	log.Printf("[WINTUN] Creating adapter name=%q mtu=%d", name, mtu)
 	log.Printf("[WINTUN] Note: wintun adapter may not be visible in ncpa.cpl; use Device Manager or 'wmic nic get Name,Index' to verify")
 
+	// Remove stale adapters with the same name left over from crashes.
+	// Without this, each restart creates a new numbered wintun device.
+	if out, err := exec.Command("wmic", "path", "Win32_NetworkAdapter",
+		"where", fmt.Sprintf("NetConnectionID='%s'", name), "delete").CombinedOutput(); err == nil {
+		log.Printf("[WINTUN] Cleaned up old adapter %q", name)
+	} else {
+		log.Printf("[WINTUN] No old adapter to clean (or delete failed): %s", string(out))
+	}
+
 	dev, err := tun.CreateTUN(name, mtu)
 	if err != nil {
 		log.Printf("[WINTUN] FAILED: %v", err)
@@ -59,10 +68,18 @@ func CreateTUN(name string, mtu int, _ string) (TunDevice, error) {
 }
 
 // SetTUNIP assigns a static IP to the TUN adapter via netsh.
+// Gateway is set to the first host on the same subnet (e.g. 10.100.100.1)
+// so Windows treats the interface as having a valid next-hop — without this
+// the on-link route may not forward traffic. The dummy gateway is on the
+// same /24 so it will NOT create a default route that steals internet traffic.
 func SetTUNIP(name, ip, gateway string) error {
-	log.Printf("[WINTUN] Setting IP via netsh: name=%q ip=%s gw=%s", name, ip, gateway)
+	// Derive a dummy gateway from the local IP: first host on the same /24
+	lastDot := strings.LastIndex(ip, ".")
+	dummyGW := ip[:lastDot+1] + "1"
+
+	log.Printf("[WINTUN] Setting IP via netsh: name=%q ip=%s gw=%s (server=%s)", name, ip, dummyGW, gateway)
 	out, err := exec.Command("netsh", "interface", "ip", "set", "address",
-		name, "static", ip, "255.255.255.0", gateway).CombinedOutput()
+		name, "static", ip, "255.255.255.0", dummyGW, "1").CombinedOutput()
 	if err != nil {
 		log.Printf("[WINTUN] netsh failed: %s", string(out))
 		return fmt.Errorf("netsh: %s", string(out))

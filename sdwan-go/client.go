@@ -161,6 +161,7 @@ func (c *Client) tunToServer() {
 			if c.stopped {
 				return
 			}
+			time.Sleep(50 * time.Millisecond) // prevent tight spin on transient error
 			continue
 		}
 		pkt := buildDataPacket(c.sessionID, c.seq, buf[:n], c.config.Encrypt)
