@@ -6,8 +6,11 @@ SOC1_IP="192.168.10.2"
 SOC2_IP="192.168.10.3"
 WAN_DOMAIN="ad.minieye.tech"
 REMOTE_USER="nvidia"
+# 备选 sudo 密码（按顺序尝试，都失败则交互式输入）
+SUDO_PASSWORDS=("mini!@#123.com" "nvidia")
 LOCAL_SCRIPT="$DIR/md.sh"
 bindir="$DIR/bin"
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
 
 # 待部署的软件包列表
 DEB_FILES=(
@@ -38,17 +41,73 @@ check_ssh() {
 declare -a SUCCESS_LIST=()
 declare -a FAIL_LIST=()
 
+# 探测远端 sudo 密码（逐个尝试预设密码，命中后缓存跳过后续主机试错）
+sudo_pass_discover() {
+    local host=$1 port=$2
+    local found=""
+
+    # 先试上次命中过的密码
+    if [[ -n "${SUDO_PASS_CACHED:-}" ]]; then
+        if echo "$SUDO_PASS_CACHED" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
+            "sudo -S true" 2>/dev/null; then
+            echo -e "${GREEN}[OK]${NC}   sudo 密码匹配 (缓存)" >&2
+            echo "$SUDO_PASS_CACHED"
+            return 0
+        fi
+        echo -e "${YELLOW}[WARNING]${NC}   缓存密码失效，重新探测..." >&2
+    fi
+
+    for pw in "${SUDO_PASSWORDS[@]}"; do
+        if echo "$pw" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
+            "sudo -S true" 2>/dev/null; then
+            found="$pw"
+            break
+        fi
+    done
+    if [[ -n "$found" ]]; then
+        SUDO_PASS_CACHED="$found"
+        echo -e "${GREEN}[OK]${NC}   sudo 密码匹配" >&2
+        echo "$found"
+        return 0
+    fi
+    echo -e "${YELLOW}[WARNING]${NC}   预设密码均不匹配" >&2
+    read -rsp "  请输入 ${REMOTE_USER}@${host} sudo 密码: " found
+    echo "" >&2
+    SUDO_PASS_CACHED="$found"
+    echo "$found"
+}
+
 deploy_software() {
     local host=$1 port=$2
     log_info "[$host:$port] 正在部署软件包..."
+
+    # Phase 1: verify all local .debs exist
     for deb in "${DEB_FILES[@]}"; do
         if [[ ! -f "$bindir/$deb" ]]; then
             log_err "本地找不到文件: $deb"
             return 1
         fi
-        scp -P "$port" "$bindir/$deb" "${REMOTE_USER}@${host}:~/" || return 1
-        ssh -p "$port" -t "${REMOTE_USER}@${host}" "sudo dpkg -i ~/$deb && rm ~/$deb" || return 1
     done
+
+    # Phase 2: upload all .debs
+    ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
+    for deb in "${DEB_FILES[@]}"; do
+        log_info "  上传 $deb ..."
+        scp $SSH_OPTS -P "$port" "$bindir/$deb" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
+    done
+
+    # Phase 3: discover password + one-shot sudo install + cleanup
+    local sudo_pass
+    sudo_pass=$(sudo_pass_discover "$host" "$port")
+    [[ -z "$sudo_pass" ]] && return 1
+
+    local deb_paths=()
+    for deb in "${DEB_FILES[@]}"; do
+        deb_paths+=("/tmp/md-tool/$deb")
+    done
+    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" -t "${REMOTE_USER}@${host}" \
+        "sudo -S bash -c 'dpkg -i ${deb_paths[*]} && rm ${deb_paths[*]}'" || return 1
+
     return 0
 }
 
@@ -59,8 +118,65 @@ deploy_script() {
         log_err "本地找不到 $LOCAL_SCRIPT"
         return 1
     fi
-    scp -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${host}:~/" || return 1
-    ssh -p "$port" -t "${REMOTE_USER}@${host}" "chmod +x ~/md.sh && ~/md.sh init" || return 1
+    ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
+    scp $SSH_OPTS -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
+
+    # Discover sudo password for init
+    local sudo_pass
+    sudo_pass=$(sudo_pass_discover "$host" "$port")
+    [[ -z "$sudo_pass" ]] && return 1
+
+    # Save password for md.sh init's ssh-copy-id to soc2 (via SSH_ASKPASS)
+    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
+        "cat > /tmp/md-tool/.soc2_pass && chmod 600 /tmp/md-tool/.soc2_pass" || true
+
+    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" -t "${REMOTE_USER}@${host}" \
+        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && rm -f /tmp/md-tool/.soc2_pass'" || return 1
+}
+
+deploy_all() {
+    local host=$1 port=$2
+    log_info "[$host:$port] 正在部署软件包 + md.sh..."
+
+    # Phase 1: verify all local files
+    for deb in "${DEB_FILES[@]}"; do
+        if [[ ! -f "$bindir/$deb" ]]; then
+            log_err "本地找不到文件: $deb"
+            return 1
+        fi
+    done
+    if [[ ! -f "$LOCAL_SCRIPT" ]]; then
+        log_err "本地找不到 $LOCAL_SCRIPT"
+        return 1
+    fi
+
+    # Phase 2: create remote dir + upload everything
+    ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
+
+    for deb in "${DEB_FILES[@]}"; do
+        log_info "  上传 $deb ..."
+        scp $SSH_OPTS -P "$port" "$bindir/$deb" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
+    done
+    log_info "  上传 md.sh ..."
+    scp $SSH_OPTS -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
+
+    # Phase 3: discover password + save password file for init's ssh-copy-id to soc2
+    local sudo_pass
+    sudo_pass=$(sudo_pass_discover "$host" "$port")
+    [[ -z "$sudo_pass" ]] && return 1
+
+    # Save password for md.sh init's ssh-copy-id to soc2 (via SSH_ASKPASS)
+    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
+        "cat > /tmp/md-tool/.soc2_pass && chmod 600 /tmp/md-tool/.soc2_pass" || true
+
+    local deb_paths=()
+    for deb in "${DEB_FILES[@]}"; do
+        deb_paths+=("/tmp/md-tool/$deb")
+    done
+    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" -t "${REMOTE_USER}@${host}" \
+        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && dpkg -i ${deb_paths[*]} && rm -f ${deb_paths[*]} /tmp/md-tool/.soc2_pass'" || return 1
+
+    return 0
 }
 
 # ============================================================
@@ -96,7 +212,7 @@ else
     for p in "${PORTS[@]}"; do
         TARGET_HOSTS+=("$WAN_DOMAIN")
         TARGET_PORTS+=("$p")
-        TARGET_LABELS+=("soc$p")
+        TARGET_LABELS+=("$p")
     done
 fi
 
@@ -158,11 +274,12 @@ for i in "${!TARGET_HOSTS[@]}"; do
     fi
 
     STATUS=0
-    if [[ "$opt" == "1" || "$opt" == "3" ]]; then
+    if [[ "$opt" == "1" ]]; then
         deploy_software "$host" "$port" || STATUS=1
-    fi
-    if [[ "$STATUS" -eq 0 && ("$opt" == "2" || "$opt" == "3") ]]; then
+    elif [[ "$opt" == "2" ]]; then
         deploy_script "$host" "$port" || STATUS=1
+    else
+        deploy_all "$host" "$port" || STATUS=1
     fi
 
     if [[ "$STATUS" -eq 0 ]]; then

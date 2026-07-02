@@ -26,6 +26,7 @@ SSH_OPTS=(
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
     -o LogLevel=ERROR
+    -i "$KEY_PATH"
 )
 SERVER_IP="ad.minieye.tech"
 INTERNAL_DEVICES=(
@@ -122,7 +123,8 @@ Cmnd_Alias MDRIVE_SERVICE = /usr/bin/systemctl start mdrive.service, /usr/bin/sy
 Cmnd_Alias MDRIVE_LOG = /usr/bin/journalctl -eu mdrive.service *
 Cmnd_Alias MDRIVE_SUPERVISOR = /usr/bin/supervisorctl status, /usr/bin/supervisorctl start *, /usr/bin/supervisorctl stop *, /usr/bin/supervisorctl restart *, /usr/local/bin/supervisorctl status, /usr/local/bin/supervisorctl start *, /usr/local/bin/supervisorctl stop *, /usr/local/bin/supervisorctl restart *
 Cmnd_Alias MDRIVE_DISK = /usr/bin/umount -l /media/data, /bin/umount -l /media/data, /usr/bin/mount /dev/* /media/data, /bin/mount /dev/* /media/data, /usr/sbin/e2fsck -yf /dev/*, /sbin/e2fsck -yf /dev/*
-nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIVE_DISK
+Cmnd_Alias MDRIVE_INSTALL = /usr/bin/dpkg -i /tmp/md-tool/*.deb, /bin/rm /tmp/md-tool/*.deb
+nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIVE_DISK, MDRIVE_INSTALL
 EOF
 }
 
@@ -142,10 +144,24 @@ sys::_install_local_sudoers() {
 }
 
 sys::_install_remote_sudoers() {
-    local encoded remote_cmd
+    local encoded remote_cmd soc2_pass
     encoded=$(sys::_sudoers_content | base64 | tr -d '\n') || return 1
 
-    remote_cmd=$(cat <<EOF
+    if [[ -n "${MDRIVE_SOC2_PASS_FILE:-}" && -f "$MDRIVE_SOC2_PASS_FILE" ]]; then
+        soc2_pass=$(cat "$MDRIVE_SOC2_PASS_FILE")
+        remote_cmd=$(cat <<EOF
+tmp=\$(mktemp) || exit 1
+printf '%s' '$encoded' | base64 -d > "\$tmp" || { rm -f "\$tmp"; exit 1; }
+echo '$soc2_pass' | sudo -S visudo -cf "\$tmp" >/dev/null && \
+echo '$soc2_pass' | sudo -S cp "\$tmp" "$SUDO_PATH" && \
+echo '$soc2_pass' | sudo -S chmod 0440 "$SUDO_PATH"
+status=\$?
+rm -f "\$tmp"
+exit \$status
+EOF
+)
+    else
+        remote_cmd=$(cat <<EOF
 tmp=\$(mktemp) || exit 1
 printf '%s' '$encoded' | base64 -d > "\$tmp" || { rm -f "\$tmp"; exit 1; }
 sudo visudo -cf "\$tmp" >/dev/null && sudo cp "\$tmp" "$SUDO_PATH" && sudo chmod 0440 "$SUDO_PATH"
@@ -154,8 +170,9 @@ rm -f "\$tmp"
 exit \$status
 EOF
 )
+    fi
 
-    ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" "$remote_cmd"
+    ssh "${SSH_OPTS[@]}" -t "$USER@$SOC2_IP" "$remote_cmd"
 }
 
 sys::nopasswd(){
@@ -167,15 +184,37 @@ sys::nopasswd(){
         ssh-keygen -t ed25519 -f "$KEY_PATH" -N ""
     fi
 
-    if ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$SOC2_IP" exit >/dev/null 2>&1; then
+    # 确保证钥权限正确（sudo bash -c 下可能 root 所有）
+    chmod 700 "$(dirname "$KEY_PATH")" 2>/dev/null
+    chmod 600 "$KEY_PATH" "$KEY_PATH.pub" 2>/dev/null
+    chown "$USER:$USER" "$KEY_PATH" "$KEY_PATH.pub" "$(dirname "$KEY_PATH")" 2>/dev/null || true
+
+    if ssh_err=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$USER@$SOC2_IP" exit 2>&1); then
         log_ok "soc2 SSH 免密已配置"
     else
         echo "推送公钥到soc2：$USER@$SOC2_IP..."
-        if ! ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "${KEY_PATH}.pub" "$USER@$SOC2_IP"; then
-            log_err "推送公钥到 soc2 失败，请检查 soc1 -> soc2 网络和 nvidia 用户密码"
-            return 1
+        if [[ -n "${MDRIVE_SOC2_PASS_FILE:-}" && -f "$MDRIVE_SOC2_PASS_FILE" ]]; then
+            # 非交互式：通过 SSH_ASKPASS 自动填写密码
+            local _askpass
+            _askpass=$(mktemp)
+            printf '#!/bin/bash\ncat %s\n' "$MDRIVE_SOC2_PASS_FILE" > "$_askpass"
+            chmod +x "$_askpass"
+            DISPLAY=dummy SSH_ASKPASS="$_askpass" ssh-copy-id \
+                -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                -i "${KEY_PATH}.pub" "$USER@$SOC2_IP" </dev/null || {
+                rm -f "$_askpass"
+                log_err "推送公钥到 soc2 失败，请检查密码或网络"
+                return 1
+            }
+            rm -f "$_askpass"
+        else
+            if ! ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "${KEY_PATH}.pub" "$USER@$SOC2_IP"; then
+                log_err "推送公钥到 soc2 失败，请检查 soc1 -> soc2 网络和 nvidia 用户密码"
+                return 1
+            fi
         fi
-        if ! ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$SOC2_IP" exit >/dev/null 2>&1; then
+        if ! ssh_error=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$USER@$SOC2_IP" exit 2>&1); then
+            echo "$ssh_error" >&2
             log_err "soc2 SSH 免密验证失败"
             return 1
         fi
@@ -1463,12 +1502,20 @@ svc::channel(){
 svc::mod_handler() {
     md::_ensure_ssh_opts
 
-    local line="$1"
-    local action="$2"
-    local clean_line soc mod
-    clean_line="${line//$'\x1b'\\[[0-9;]*m/}"
-    soc=$(echo "$clean_line" | awk '{print $1}' | tr -d '[]')
-    mod=$(echo "$clean_line" | awk '{print $2}')
+    local raw_line=$1 action=$2
+    local line
+    # Strip ANSI escape sequences
+    line=$(echo "$raw_line" | sed 's/\x1b\[[0-9;]*m//g')
+
+    local soc mod state tail
+    if [[ "$line" == *'|'* ]]; then
+        IFS='|' read -r soc mod state tail <<< "$line"
+    else
+        # Backward compat: space format
+        line=$(echo "$line" | tr -s ' ')
+        read -r soc mod state tail <<< "$line"
+        soc="${soc#\[}"; soc="${soc%\]}"
+    fi
     [[ -z "$soc" || -z "$mod" ]] && return
 
     case "$action" in
@@ -1505,7 +1552,7 @@ svc::mod_handler() {
             if [[ "$soc" == "soc1" ]]; then
                 sudo supervisorctl "$action" "$mod"
             else
-                ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod"
+                ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod" </dev/null
             fi
             sleep 1
             ;;
@@ -1591,6 +1638,10 @@ fetch_combined() {
         fi
     done
 }
+
+svc::batch_handler() {
+    : # no longer used; kept for reference
+}
 export -f md::_ensure_ssh_opts fetch_combined svc::mod_handler log_get_path
 export CONF_DIR_SOC1 CONF_DIR_SOC2 SOC2_IP RED GREEN YELLOW BLUE NC
 
@@ -1599,18 +1650,42 @@ svc::module() {
         log_warn "请先安装 fzf..."
         return 1
     fi
-    fetch_combined | fzf \
-        --ansi \
-        --height 95% \
-        --reverse \
-        --header "操作: Enter:模块日志 | Alt-Enter:开发日志 | Alt-S:启动 | Alt-X:停止 | Alt-R:重启 | Ctrl-R:刷新" \
-        --bind "enter:execute(svc::mod_handler {} sv)" \
-        --bind "alt-enter:execute(svc::mod_handler {} glog)" \
-        --bind "alt-s:execute(svc::mod_handler {} start)+reload(fetch_combined)" \
-        --bind "alt-x:execute(svc::mod_handler {} stop)+reload(fetch_combined)" \
-        --bind "alt-r:execute(svc::mod_handler {} restart)+reload(fetch_combined)" \
-        --bind "ctrl-r:reload(fetch_combined)" \
-        --bind "esc:abort"
+    while true; do
+        local result key action
+        result=$(fetch_combined | fzf \
+            --ansi \
+            --multi \
+            --height 95% \
+            --reverse \
+            --bind "tab:select+down" \
+            --header "Tab:多选 | Enter:模块日志 | Alt-Enter:开发日志 | Alt-S/X/R:启/停/重启 | Esc:退出" \
+            --expect=alt-s,alt-x,alt-r,esc \
+            --bind "enter:execute(svc::mod_handler {} sv)" \
+            --bind "alt-enter:execute(svc::mod_handler {} glog)" \
+            --bind "ctrl-r:reload(fetch_combined)")
+
+        [[ -z "$result" ]] && return
+
+        key=$(echo "$result" | head -1)
+        [[ "$key" == "esc" ]] && return
+
+        case "$key" in
+            alt-s) action=start ;;
+            alt-x) action=stop ;;
+            alt-r) action=restart ;;
+            *) continue ;;
+        esac
+
+        # Process all selected items (skip first line which is the key)
+        local count=0
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            svc::mod_handler "$line" "$action"
+            ((count++))
+        done < <(echo "$result" | tail -n +2)
+        [[ $count -gt 1 ]] && echo "批量${action}: $count 个模块"
+        # Loop back → fzf re-opens with refreshed data
+    done
 }
 
 #endregion
@@ -1841,6 +1916,7 @@ vmc::_get_latest_ver() {
     local version
     version=$(vmc fsearch -n "$pkg_name" ${branch:+-v "$branch"} 2>/dev/null | \
         grep -iE "$search_filter" | \
+        grep -F "name: ${pkg_name}," | \
         tail -n 1 | \
         sed -n 's/.*version: \([^,]*\).*/\1/p' | \
         tr -d '[:space:]')
@@ -1888,12 +1964,28 @@ vmc::check_updates() {
 vmc::_install_pkg() {
     local pkg_name=$1
     local version=$2
+    local rc
 
     if [[ $pkg_name == "mdrive_map" ]]; then
         vmc install -n "$pkg_name" -v "$version" --deps
     else
         vmc install -n "$pkg_name" -v "$version"
     fi
+    rc=$?
+
+    if [[ $rc -ne 0 ]]; then
+        return 1
+    fi
+
+    # vmc 可能报错但仍返回 0，通过实际安装版本来验证
+    local installed_ver
+    installed_ver=$(vmc::_get_current_ver "$pkg_name")
+    if [[ -z "$installed_ver" || "$installed_ver" != "$version" ]]; then
+        log_warn "[$pkg_name] vmc 返回成功但版本验证失败: 期望 $version, 实际 ${installed_ver:-未安装}"
+        return 1
+    fi
+
+    return 0
 }
 
 
@@ -2059,7 +2151,20 @@ vmc::install(){
 vmc::finstall() {
     local version=$1
     local pkg_name
-    pkg_name=$(vmc fsearch -v "$version" | tail -n 1 | awk -F'name: |, version:' '{print $2}')
+    # 优先匹配 version 字段以搜索词开头的行（避免 mdrive 误匹配 mdrive_conf）
+    pkg_name=$(vmc fsearch -v "$version" | awk -F', ' -v v="$version" '
+        /^name:/ {
+            n=""; r=""
+            for (i=1; i<=NF; i++) {
+                if ($i ~ /^name: /) { sub(/^name: /, "", $i); n=$i }
+                if ($i ~ /^version:/) { sub(/^version:[ ]*/, "", $i); r=$i }
+            }
+            if (r == v) { print n; exit }
+            if (index(r, v "-") == 1 || index(r, v ".") == 1) { if (!pref) { pref=n } }
+            if (!last) { last=n }
+        }
+        END { if (pref) print pref; else if (last) print last }
+    ')
     if [[ -n "$pkg_name" ]]; then
         log_info "下载安装 [${pkg_name}] ${version}..."
         if vmc::_install_pkg "$pkg_name" "$version"; then
@@ -2099,8 +2204,13 @@ vmc::rollback() {
     local versions_list
     versions_list=$(vmc fsearch ${pkg_name:+-n "$pkg_name"} ${search_v:+-v "$search_v"} -i 100 --verbose | awk '
         /^\[Index:/ {
-            if (version) print time " | " version " | " platform;
-            version=""; time=""; platform="";
+            if (version) print time " | " version " | " platform " | " name;
+            name=""; version=""; time=""; platform="";
+            # 从 Index 行提取包名 (可能在行内也可能单独一行)
+            tmp=$0; sub(/^.*[Nn]ame:[ ]*/, "", tmp); sub(/[,}].*$/, "", tmp); name=tmp
+        }
+        /^[ \t]*[Nn]ame:/ {
+            if (name == "") { $1=""; sub(/^[ \t]+/, "", $0); name=$0 }
         }
         /Platform:/ {
             $1=""; sub(/^[ \t]+/, "", $0); platform=$0
@@ -2112,8 +2222,13 @@ vmc::rollback() {
             $1=""; sub(/^[ \t]+/, "", $0);
             t=$0; sub(/T/, " ", t); time=substr(t, 1, 19);
         }
-        END { if (version) print time " | " version " | " platform; }
+        END { if (version) print time " | " version " | " platform " | " name; }
     ' | sort -r)
+
+    # vmc -n 是子串匹配 (mdrive 会匹配 mdrive_conf)，这里再做一次精确过滤
+    if [[ -n "$pkg_name" ]]; then
+        versions_list=$(echo "$versions_list" | awk -F ' \\| ' -v pkg="$pkg_name" '$4 == pkg')
+    fi
 
     if [[ -z "$versions_list" ]]; then
         log_err "[$search_v] 未搜索到任何远程版本"

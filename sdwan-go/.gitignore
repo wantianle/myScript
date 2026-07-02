@@ -1,14 +1,10 @@
 # Build outputs
 dist/
-*.exe
-*.dll
+**/*.exe
+*.ico
 
 # Logs
 *.log
-
-# Local configs (may contain credentials)
-iwan.conf
-config.json
 
 # IDE
 .idea/
@@ -17,3 +13,8 @@ config.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Legacy TAP driver (replaced by wintun)
+dist.win10/
+.cortexkit/
+.slim/deepwork/
