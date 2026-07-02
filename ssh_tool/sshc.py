@@ -328,6 +328,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
             return 130
 
+    # --- handle "sshc <vehicle> add <port>" ---
+    if len(raw_args) >= 2 and raw_args[1] in {"add", "a"}:
+        vehicle = raw_args[0]
+        try:
+            port = int(raw_args[2])
+        except (IndexError, ValueError):
+            print("usage: sshc <vehicle> add <port>", file=sys.stderr)
+            return 2
+        try:
+            settings = load_settings()
+            cmd_add(vehicle, port, settings, debug="--debug" in raw_args)
+            return 0
+        except SshcError as exc:
+            print(f"{yellow('[WARNING]')} {exc}", file=sys.stderr)
+            return 1
+        except KeyboardInterrupt:
+            print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
+            return 130
+
     parser = build_parser()
     args = parser.parse_args(raw_args)
 
@@ -353,6 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="sshc",
         usage=(
             "sshc [-h] [-v] vehicle\n"
+            "       sshc [-h] vehicle add <port>\n"
             "       sshc config [-h] [--prod-username USERNAME] "
             "[--prod-password PASSWORD] [--test-username USERNAME] "
             "[--test-password PASSWORD] [-k KEYFILE]"
@@ -590,6 +610,41 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
     print("[INFO] SSH 登录...", flush=True)
     print(green(shell_join(ssh_command)))
     raise SystemExit(subprocess.run(ssh_command).returncode)
+
+
+def cmd_add(vehicle_name: str, port: int, settings: Settings, *, debug: bool = False) -> None:
+    """sshc <vehicle> add <port> — ensure the device port mapping exists and is active."""
+    if not has_any_environment_config(settings):
+        raise SshcError(
+            'missing XiaoZhu config; run: sshc config --prod-username "username" '
+            '--prod-password "password"'
+        )
+
+    print("[INFO] 登录并查询车辆状态...", flush=True)
+    lookup = resolve_vehicle_lookup(
+        vehicle_name,
+        settings,
+        debug=debug,
+        require_online=True,
+    )
+
+    if not lookup.c4_online:
+        raise SshcError(f"{vehicle_name} c4 is offline")
+
+    print(f"[INFO] 检查 {port} 端口映射...", flush=True)
+    mapping = ensure_port_mapping(
+        client=lookup.client,
+        device_id=lookup.device_id,
+        target_port=port,
+    )
+    if mapping is None or mapping.server_port is None:
+        raise SshcError("cannot resolve public server port")
+
+    print(
+        f"      {port} -> {format_host_port(mapping.server_ip or lookup.env.ssh_host, mapping.server_port)} "
+        f"(status={_colour_status(mapping.status)}, "
+        f"frpc_connected={format_scalar(mapping.frpc_connected)})"
+    )
 
 
 def complete_vehicles(prefix: str, settings: Settings) -> None:
