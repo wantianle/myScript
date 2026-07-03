@@ -27,6 +27,8 @@ echo ""
 
 # [1/3] 密钥生成逻辑
 log_info "检查本地密钥..."
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
 if [ ! -f "$KEY_PATH" ]; then
     log_info "  未发现密钥，正在生成 ed25519 密钥对..."
     ssh-keygen -t ed25519 -f "$KEY_PATH" -N "" 2>&1 | while IFS= read -r line; do
@@ -36,9 +38,6 @@ if [ ! -f "$KEY_PATH" ]; then
 else
     log_ok "  密钥已存在: $KEY_PATH"
 fi
-
-mkdir -p "$HOME/.ssh"
-chmod 700 "$HOME/.ssh"
 
 # sshpass 辅助分发函数：避免交互密码提示被终端屏蔽
 copy_key() {

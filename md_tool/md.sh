@@ -1457,10 +1457,10 @@ svc::recorder(){
             ;;
     esac
 
-    if ssh "${SSH_OPTS[@]}" "$SOC2_IP" "timeout 2 mountpoint -q '$MOUNT_ROOT'"; then
+    if ssh "${SSH_OPTS[@]}" "$SOC2_IP" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
         echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
         disk_ready=true
-        avail=$(ssh "${SSH_OPTS[@]}" "$SOC2_IP" "df -BG '$MOUNT_ROOT' 2>/dev/null | awk 'NR==2 {print \$4}' | tr -d 'G'")
+        avail=$(ssh "${SSH_OPTS[@]}" "$SOC2_IP" "df -BG $MOUNT_ROOT 2>/dev/null | awk 'NR==2 {print \$4}' | tr -d 'G'")
         if [[ "$avail" =~ ^[0-9]+$ ]]; then
             if [[ "$avail" -lt 200 ]]; then
                 log_warn "soc2 数据盘剩余空间不足 200GB (当前: ${avail}GB)！"
@@ -1497,6 +1497,50 @@ svc::channel(){
     esac
 }
 
+# 执行模块启停操作
+svc::_run_module_action() {
+    local soc=$1 mod=$2 action=$3
+    echo -e "正在对 [$soc] $mod 执行 $action..."
+    if [[ "$soc" == "soc1" ]]; then
+        sudo supervisorctl "$action" "$mod"
+    else
+        ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod" </dev/null
+    fi
+    sleep 1
+}
+
+
+# 打开模块日志
+svc::_open_module_log() {
+    local soc=$1 mod=$2 log_type=$3
+    local path
+    path=$(log_get_path "$soc" "$mod" "$log_type")
+    if [[ "$log_type" == "glog" ]]; then
+        local exists=false
+        if [[ -L "$path" ]]; then
+            exists=true
+        fi
+        if [[ "$exists" == "false" ]]; then
+            echo -e "${YELLOW}未匹配到精准日志，请手动选择:${NC}"
+            local picked
+            picked=$(find "$GLOG_log_dir" -maxdepth 1 -type l -name '*.INFO*' -printf '%f\n' 2>/dev/null | sort | fzf \
+                --height=100% \
+                --layout=reverse \
+                --border \
+                --header "--- 日志列表 ---" \
+                --info=inline)
+            [[ -z "$picked" ]] && return
+            path="$GLOG_log_dir/$picked"
+        fi
+    fi
+    if [[ -r "$path" ]]; then
+        less -R -S --follow-name +F "$path"
+    else
+        sudo less -R -S --follow-name +F "$path"
+    fi
+}
+
+
 # 模块动作执行器
 # 用法: svc::mod_handler "<fzf_line>" <action>
 svc::mod_handler() {
@@ -1519,43 +1563,8 @@ svc::mod_handler() {
     [[ -z "$soc" || -z "$mod" ]] && return
 
     case "$action" in
-        "glog"|"sv")
-            local path
-            path=$(log_get_path "$soc" "$mod" "$action")
-            if [[ "$action" == "glog" ]]; then
-                local exists=false
-                if [[ -L "$path" ]]; then
-                    exists=true
-                fi
-                if [[ "$exists" == "false" ]]; then
-                    echo -e "${YELLOW}未匹配到精准日志，请手动选择:${NC}"
-                    local list_cmd="find $GLOG_log_dir -maxdepth 1 -type l -name '*.INFO*' -printf '%f\n'"
-                    local picked
-                    picked=$(eval "$list_cmd" | sort | fzf \
-                        --height=100% \
-                        --layout=reverse \
-                        --border \
-                        --header "--- 日志列表 ---" \
-                        --info=inline)
-                    [[ -z "$picked" ]] && return
-                    path="$GLOG_log_dir/$picked"
-                fi
-            fi
-            if [[ -r "$path" ]]; then
-                less -R -S --follow-name +F "$path"
-            else
-                sudo less -R -S --follow-name +F "$path"
-            fi
-            ;;
-        "start"|"stop"|"restart")
-            echo -e "正在对 [$soc] $mod 执行 $action..."
-            if [[ "$soc" == "soc1" ]]; then
-                sudo supervisorctl "$action" "$mod"
-            else
-                ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod" </dev/null
-            fi
-            sleep 1
-            ;;
+        "glog"|"sv")  svc::_open_module_log "$soc" "$mod" "$action" ;;
+        "start"|"stop"|"restart") svc::_run_module_action "$soc" "$mod" "$action" ;;
     esac
 }
 
@@ -1642,7 +1651,7 @@ fetch_combined() {
 svc::batch_handler() {
     : # no longer used; kept for reference
 }
-export -f md::_ensure_ssh_opts fetch_combined svc::mod_handler log_get_path
+export -f md::_ensure_ssh_opts fetch_combined svc::mod_handler svc::_run_module_action svc::_open_module_log log_get_path
 export CONF_DIR_SOC1 CONF_DIR_SOC2 SOC2_IP RED GREEN YELLOW BLUE NC
 
 svc::module() {
@@ -1657,26 +1666,34 @@ svc::module() {
             --multi \
             --height 95% \
             --reverse \
-            --bind "tab:select+down" \
+            --bind "tab:toggle+down" \
             --header "Tab:多选 | Enter:模块日志 | Alt-Enter:开发日志 | Alt-S/X/R:启/停/重启 | Esc:退出" \
-            --expect=alt-s,alt-x,alt-r,esc \
-            --bind "enter:execute(svc::mod_handler {} sv)" \
-            --bind "alt-enter:execute(svc::mod_handler {} glog)" \
+            --expect=enter,alt-enter,alt-s,alt-x,alt-r,esc \
             --bind "ctrl-r:reload(fetch_combined)")
 
         [[ -z "$result" ]] && return
 
         key=$(echo "$result" | head -1)
-        [[ "$key" == "esc" ]] && return
 
         case "$key" in
+            esc) return ;;
+            enter) action=sv ;;
+            alt-enter) action=glog ;;
             alt-s) action=start ;;
             alt-x) action=stop ;;
             alt-r) action=restart ;;
             *) continue ;;
         esac
 
-        # Process all selected items (skip first line which is the key)
+        # Log viewing: only process the first item (focused)
+        if [[ "$action" == "sv" || "$action" == "glog" ]]; then
+            local log_line
+            log_line=$(echo "$result" | tail -n +2 | head -1)
+            svc::mod_handler "$log_line" "$action"
+            continue
+        fi
+
+        # Batch start/stop/restart: process all selected items
         local count=0
         while IFS= read -r line; do
             [[ -z "$line" ]] && continue
@@ -1752,9 +1769,14 @@ disk::usage() {
 # 安全卸载
 disk::umount(){
     sync && sync
-    while mountpoint -q $MOUNT_ROOT; do
-        sudo umount -l $MOUNT_ROOT 2>/dev/null
+    local retry=0
+    while mountpoint -q "$MOUNT_ROOT" && (( ++retry <= 5 )); do
+        sudo umount -l "$MOUNT_ROOT" 2>/dev/null || sleep 1
     done
+    if mountpoint -q "$MOUNT_ROOT"; then
+        log_err "卸载 $MOUNT_ROOT 失败，请手动检查"
+        return 1
+    fi
     ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo umount -l $MOUNT_ROOT 2>/dev/null"
     log_ok "硬盘卸载成功..."
 }
@@ -1891,7 +1913,10 @@ vmc::remote() {
                 log_err "请指定要删除的包名"
                 return 1
             fi
-            sed -i -E "/^$2[[:space:]]+/d" "$REMOTE_CONFIG"
+            local tmp
+            tmp=$(mktemp) || return 1
+            awk -v name="$2" '$1 != name' "$REMOTE_CONFIG" > "$tmp" && mv "$tmp" "$REMOTE_CONFIG"
+            rm -f "$tmp"
             log_ok "分支 [$2] 远程配置已删除"
             ;;
         "list")

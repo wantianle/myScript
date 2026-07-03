@@ -36,7 +36,7 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-TMP_HELPER="/tmp/deploy-nas-helper.$$.sh"
+# TMP_HELPER 现在在 gen_helper 里用 mktemp 按调用生成，避免并发覆盖
 
 ###############################################################################
 # 检查依赖
@@ -51,13 +51,16 @@ check_deps() {
 ###############################################################################
 # 生成本地 helper 脚本 (会被 scp 到远程执行)
 # 参数: $1=src_soc1 $2=src_soc2 $3=gateway
+# 返回: 临时文件路径 (stdout)
 ###############################################################################
 gen_helper() {
   local src_soc1="$1"
   local src_soc2="$2"
   local gateway="$3"
+  local tmp
+  tmp="$(mktemp /tmp/deploy-nas-helper.XXXXXX.sh)"
 
-  cat > "$TMP_HELPER" << HELPEREOF
+  cat > "$tmp" << HELPEREOF
 #!/usr/bin/env bash
 set -e
 export LC_ALL=C
@@ -118,8 +121,9 @@ echo ""
 echo "  --- Verification ---"
 ip route show 192.168.2.118 2>/dev/null && echo "  [OK] Route exists" || echo "  [WARN] Route check failed"
 mountpoint -q /media/nas 2>/dev/null && echo "  [OK] /media/nas mounted" || echo "  [WARN] Mount check failed"
-echo ""
+  echo ""
 HELPEREOF
+  echo "$tmp"
 }
 
 ###############################################################################
@@ -132,11 +136,12 @@ deploy_one() {
   local src_soc1="$4"
   local src_soc2="$5"
   local gateway="$6"
+  local helper
 
   echo -e "${YELLOW}>>> [${host}:${port} ${soc_label}] via=${gateway} src=${src_soc1}/${src_soc2}${NC}"
 
-  # 1. 生成本地 helper 脚本
-  gen_helper "$src_soc1" "$src_soc2" "$gateway"
+  # 1. 生成本地 helper 脚本 (独立临时文件，避免并发覆盖)
+  helper="$(gen_helper "$src_soc1" "$src_soc2" "$gateway")"
 
   # 2. scp 到远程
   if ! sshpass -p "$SSH_PASS" scp \
@@ -145,9 +150,10 @@ deploy_one() {
        -o UserKnownHostsFile=/dev/null \
        -o ConnectTimeout=5 \
        -o LogLevel=ERROR \
-       "$TMP_HELPER" \
+       "$helper" \
        "${SSH_USER}@${host}:/tmp/deploy-nas-helper.sh" 2>/dev/null; then
     echo -e "${RED}    SCP failed${NC}"
+    rm -f "$helper"
     return 1
   fi
 
@@ -163,9 +169,11 @@ deploy_one() {
        "${SSH_USER}@${host}" \
        "export LC_ALL=C; sudo -S bash /tmp/deploy-nas-helper.sh; rm -f /tmp/deploy-nas-helper.sh" 2>&1; then
     echo -e "${RED}    Execution failed${NC}"
+    rm -f "$helper"
     return 1
   fi
 
+  rm -f "$helper"
   return 0
 }
 
@@ -225,9 +233,6 @@ main() {
   done
 
   wait
-
-  # 清理临时 helper
-  rm -f "$TMP_HELPER"
 
   echo ""
   echo "============================================"

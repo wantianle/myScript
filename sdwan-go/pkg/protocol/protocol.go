@@ -1,8 +1,9 @@
-package core
+package protocol
 
 import (
 	"crypto/aes"
 	"crypto/md5"
+	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
 )
@@ -16,6 +17,24 @@ const (
 	MsgECHORESP byte = 0x16
 	MsgDATA     byte = 0x18
 )
+
+// OpenConfig holds the parameters needed to construct an OPEN packet.
+// Separated from core.Config so protocol package has no dependency on core.
+type OpenConfig struct {
+	Username string
+	Password string
+	MTU      int
+	Encrypt  int
+}
+
+// OPENACKResult holds parsed TUN configuration from the OPENACK response
+type OPENACKResult struct {
+	LocalIP   string
+	GatewayIP string
+	DNSIP     string
+	MTU       uint16
+	GateMAC   []byte // 6 bytes gateway MAC
+}
 
 // PktSign generates the 16-byte signature for a packet.
 // signature = MD5(header[0:8] + "mw")
@@ -43,12 +62,7 @@ func PktVerify(header []byte) bool {
 	if expected == nil {
 		return false
 	}
-	for i := 0; i < 16; i++ {
-		if header[8+i] != expected[i] {
-			return false
-		}
-	}
-	return true
+	return subtle.ConstantTimeCompare(header[8:24], expected) == 1
 }
 
 // EncryptPassword computes the AES-128 encrypted password block.
@@ -75,7 +89,7 @@ func EncryptPassword(username, password string) []byte {
 }
 
 // BuildOpenPacket constructs the OPEN request (0x13)
-func BuildOpenPacket(cfg *Config) []byte {
+func BuildOpenPacket(cfg OpenConfig) []byte {
 	// Max size estimation: header(24) + TLVs
 	buf := make([]byte, 1024)
 	pos := 0
@@ -163,15 +177,6 @@ func ParseOPENACKSeq(data []byte) uint32 {
 	return binary.BigEndian.Uint32(data[4:8])
 }
 
-// OPENACKResult holds parsed TUN configuration from the OPENACK response
-type OPENACKResult struct {
-	LocalIP   string
-	GatewayIP string
-	DNSIP     string
-	MTU       uint16
-	GateMAC   []byte // 6 bytes gateway MAC
-}
-
 // ParseOPENACK extracts TUN config from an OPENACK response.
 //
 // The original C code assembles IPs as uint32 via:
@@ -221,7 +226,7 @@ func ParseOPENACK(data []byte) *OPENACKResult {
 	return r
 }
 
-// msgType returns the message type byte from packet data
+// MsgType returns the message type byte from packet data
 func MsgType(data []byte) byte {
 	if len(data) < 1 {
 		return 0

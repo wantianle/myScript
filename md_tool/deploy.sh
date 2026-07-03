@@ -10,7 +10,7 @@ REMOTE_USER="nvidia"
 SUDO_PASSWORDS=("mini!@#123.com" "nvidia")
 LOCAL_SCRIPT="$DIR/md.sh"
 bindir="$DIR/bin"
-SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
 # 待部署的软件包列表
 DEB_FILES=(
@@ -48,7 +48,7 @@ sudo_pass_discover() {
 
     # 先试上次命中过的密码
     if [[ -n "${SUDO_PASS_CACHED:-}" ]]; then
-        if echo "$SUDO_PASS_CACHED" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
+        if echo "$SUDO_PASS_CACHED" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
             "sudo -S true" 2>/dev/null; then
             echo -e "${GREEN}[OK]${NC}   sudo 密码匹配 (缓存)" >&2
             echo "$SUDO_PASS_CACHED"
@@ -58,7 +58,7 @@ sudo_pass_discover() {
     fi
 
     for pw in "${SUDO_PASSWORDS[@]}"; do
-        if echo "$pw" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
+        if echo "$pw" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
             "sudo -S true" 2>/dev/null; then
             found="$pw"
             break
@@ -71,32 +71,66 @@ sudo_pass_discover() {
         return 0
     fi
     echo -e "${YELLOW}[WARNING]${NC}   预设密码均不匹配" >&2
-    read -rsp "  请输入 ${REMOTE_USER}@${host} sudo 密码: " found
-    echo "" >&2
+    while true; do
+        read -rsp "  请输入 ${REMOTE_USER}@${host} sudo 密码: " found
+        echo "" >&2
+        if [[ -z "$found" ]]; then
+            log_err "  密码不能为空"
+            continue
+        fi
+        if echo "$found" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
+            "sudo -S true" 2>/dev/null; then
+            echo -e "${GREEN}[OK]${NC}   sudo 密码验证通过" >&2
+            break
+        fi
+        log_err "  sudo 密码验证失败，请重试"
+    done
     SUDO_PASS_CACHED="$found"
     echo "$found"
 }
 
-deploy_software() {
-    local host=$1 port=$2
-    log_info "[$host:$port] 正在部署软件包..."
-
-    # Phase 1: verify all local .debs exist
+# ============================================================
+# 共享辅助函数
+# ============================================================
+# 校验所有 DEB_FILES 本地存在
+local_verify_deb_files() {
     for deb in "${DEB_FILES[@]}"; do
         if [[ ! -f "$bindir/$deb" ]]; then
             log_err "本地找不到文件: $deb"
             return 1
         fi
     done
+}
 
-    # Phase 2: upload all .debs
-    ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
+# 上传所有 DEB_FILES 到远端 /tmp/md-tool/
+remote_upload_debs() {
+    local host=$1 port=$2
     for deb in "${DEB_FILES[@]}"; do
         log_info "  上传 $deb ..."
-        scp $SSH_OPTS -P "$port" "$bindir/$deb" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
+        scp "${SSH_OPTS[@]}" -P "$port" "$bindir/$deb" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
     done
+}
 
-    # Phase 3: discover password + one-shot sudo install + cleanup
+# 远端执行 chmod + md.sh init（含 soc2 密码注入）
+remote_run_init() {
+    local host=$1 port=$2 sudo_pass=$3
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
+        "cat > /tmp/md-tool/.soc2_pass && chmod 600 /tmp/md-tool/.soc2_pass" || true
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" -t "${REMOTE_USER}@${host}" \
+        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && rm -f /tmp/md-tool/.soc2_pass'" || return 1
+}
+
+# ============================================================
+# 部署函数
+# ============================================================
+deploy_software() {
+    local host=$1 port=$2
+    log_info "[$host:$port] 正在部署软件包..."
+
+    local_verify_deb_files || return 1
+    ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
+    remote_upload_debs "$host" "$port" || return 1
+
     local sudo_pass
     sudo_pass=$(sudo_pass_discover "$host" "$port")
     [[ -z "$sudo_pass" ]] && return 1
@@ -105,7 +139,7 @@ deploy_software() {
     for deb in "${DEB_FILES[@]}"; do
         deb_paths+=("/tmp/md-tool/$deb")
     done
-    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" -t "${REMOTE_USER}@${host}" \
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" -t "${REMOTE_USER}@${host}" \
         "sudo -S bash -c 'dpkg -i ${deb_paths[*]} && rm ${deb_paths[*]}'" || return 1
 
     return 0
@@ -118,62 +152,42 @@ deploy_script() {
         log_err "本地找不到 $LOCAL_SCRIPT"
         return 1
     fi
-    ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
-    scp $SSH_OPTS -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
+    ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
+    scp "${SSH_OPTS[@]}" -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
 
-    # Discover sudo password for init
     local sudo_pass
     sudo_pass=$(sudo_pass_discover "$host" "$port")
     [[ -z "$sudo_pass" ]] && return 1
-
-    # Save password for md.sh init's ssh-copy-id to soc2 (via SSH_ASKPASS)
-    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
-        "cat > /tmp/md-tool/.soc2_pass && chmod 600 /tmp/md-tool/.soc2_pass" || true
-
-    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" -t "${REMOTE_USER}@${host}" \
-        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && rm -f /tmp/md-tool/.soc2_pass'" || return 1
+    remote_run_init "$host" "$port" "$sudo_pass"
 }
 
 deploy_all() {
     local host=$1 port=$2
     log_info "[$host:$port] 正在部署软件包 + md.sh..."
 
-    # Phase 1: verify all local files
-    for deb in "${DEB_FILES[@]}"; do
-        if [[ ! -f "$bindir/$deb" ]]; then
-            log_err "本地找不到文件: $deb"
-            return 1
-        fi
-    done
+    local_verify_deb_files || return 1
     if [[ ! -f "$LOCAL_SCRIPT" ]]; then
         log_err "本地找不到 $LOCAL_SCRIPT"
         return 1
     fi
 
-    # Phase 2: create remote dir + upload everything
-    ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
-
-    for deb in "${DEB_FILES[@]}"; do
-        log_info "  上传 $deb ..."
-        scp $SSH_OPTS -P "$port" "$bindir/$deb" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
-    done
+    ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" "mkdir -p /tmp/md-tool" || return 1
+    remote_upload_debs "$host" "$port" || return 1
     log_info "  上传 md.sh ..."
-    scp $SSH_OPTS -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
+    scp "${SSH_OPTS[@]}" -P "$port" "$LOCAL_SCRIPT" "${REMOTE_USER}@${host}:/tmp/md-tool/" || return 1
 
-    # Phase 3: discover password + save password file for init's ssh-copy-id to soc2
     local sudo_pass
     sudo_pass=$(sudo_pass_discover "$host" "$port")
     [[ -z "$sudo_pass" ]] && return 1
 
-    # Save password for md.sh init's ssh-copy-id to soc2 (via SSH_ASKPASS)
-    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" "${REMOTE_USER}@${host}" \
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
         "cat > /tmp/md-tool/.soc2_pass && chmod 600 /tmp/md-tool/.soc2_pass" || true
 
     local deb_paths=()
     for deb in "${DEB_FILES[@]}"; do
         deb_paths+=("/tmp/md-tool/$deb")
     done
-    echo "$sudo_pass" | ssh $SSH_OPTS -p "$port" -t "${REMOTE_USER}@${host}" \
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" -t "${REMOTE_USER}@${host}" \
         "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && dpkg -i ${deb_paths[*]} && rm -f ${deb_paths[*]} /tmp/md-tool/.soc2_pass'" || return 1
 
     return 0
@@ -263,14 +277,12 @@ for i in "${!TARGET_HOSTS[@]}"; do
 
     echo -e "\n${YELLOW}>>>>>> 正在处理: $label ($host:$port) <<<<<<${NC}"
 
-    if ! nc -z -w 3 "$host" "$port" &>/dev/null; then
-        if ! command -v nc &>/dev/null; then
-            log_warn "未安装 nc，跳过连通性检测"
-        else
-            log_err "$label 端口不可达 ($host:$port)"
-            FAIL_LIST+=("$label (连接失败)")
-            continue
-        fi
+    if ! command -v nc &>/dev/null; then
+        log_warn "未安装 nc，跳过连通性检测"
+    elif ! nc -z -w 3 "$host" "$port" &>/dev/null; then
+        log_err "$label 端口不可达 ($host:$port)"
+        FAIL_LIST+=("$label (连接失败)")
+        continue
     fi
 
     STATUS=0

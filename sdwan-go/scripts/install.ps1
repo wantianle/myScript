@@ -230,6 +230,44 @@ if (-not (Test-Path $trayIconPath)) {
 }
 
 # ────────────────────────────────────────────────────────────
+# Probe-MTU: binary search (548..1472) the largest IPv4 ICMP
+# echo payload that passes with the DF bit set.
+# Returns the tunnel MTU (payload + 28 - 64, clamped [1200,1436]).
+function Probe-MTU {
+    param([string]$Server)
+
+    Write-Host "  Auto-probing MTU ($Server)..." -ForegroundColor Cyan
+
+    $low = 548
+    $high = 1472
+    $best = 0
+
+    while ($low -le $high) {
+        $mid = [math]::Floor(($low + $high) / 2)
+        $pingArgs = @("-4", "-f", "-l", "$mid", "-n", "1", "-w", "1000", $Server)
+        & ping.exe $pingArgs 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $best = $mid
+            $low = $mid + 1
+        } else {
+            $high = $mid - 1
+        }
+    }
+
+    if ($best -eq 0) {
+        Write-Host "  MTU probe failed — using default 1436 (non-fatal warning)" -ForegroundColor Yellow
+        return 1436
+    }
+
+    $candidate = $best + 28 - 64
+    if ($candidate -lt 1200) { $candidate = 1200 }
+    if ($candidate -gt 1436) { $candidate = 1436 }
+
+    Write-Host "  MTU probe OK: $candidate (max payload=$best)" -ForegroundColor Green
+    return $candidate
+}
+
+# ────────────────────────────────────────────────────────────
 # 3. Server selection
 # ────────────────────────────────────────────────────────────
 $configPath = "$INSTALL_DIR\iwan.conf"
@@ -293,12 +331,14 @@ if ($useExistingConfig) {
         }
     } while ([string]::IsNullOrWhiteSpace($passwordPlain))
 
+    $probedMtu = Probe-MTU -Server $selectedServer
+
     $configContent = @"
 server=$selectedServer
 username=$username
 password=$passwordPlain
 port=10010
-mtu=1436
+mtu=$probedMtu
 encrypt=0
 tunname=iwan1
 routenet=192.168.0.0/16
@@ -359,70 +399,112 @@ Start-Sleep -Seconds 4
 
 function Test-PostInstallStatus {
     Write-Host ""
-    Write-Host "  Validating tunnel startup (up to 25s)..." -ForegroundColor Cyan
+    Write-Host "  Validating tunnel startup (up to 15s)..." -ForegroundColor Cyan
 
     $authRejected = $false
-    $established = $false
-    $lastMarker = ""
     $sdwanIP = $null
+    $routeOK = $false
 
-    for ($i = 0; $i -lt 25; $i++) {
+    for ($i = 0; $i -lt 15; $i++) {
         Start-Sleep -Seconds 1
+        Write-Host -NoNewline "`r  ... $i s / 15 s"
 
-        if (Test-Path $logPath) {
-            $logText = Get-Content -Path $logPath -Tail 160 -ErrorAction SilentlyContinue | Out-String
-            $markers = [regex]::Matches($logText, "AUTH REJECTED|Authenticated successfully|Tunnel established|OPENACK received", [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-            if ($markers.Count -gt 0) {
-                $lastMarker = $markers[$markers.Count - 1].Value
-                $authRejected = $lastMarker -eq "AUTH REJECTED"
-                $established = $lastMarker -ne "AUTH REJECTED"
-                if ($authRejected) { break }
+        # Scan logs ONLY for AUTH REJECTED — not for success
+        if (-not $authRejected -and (Test-Path $logPath)) {
+            $logText = Get-Content -Path $logPath -Tail 80 -ErrorAction SilentlyContinue | Out-String
+            if ($logText -match "AUTH REJECTED") {
+                $authRejected = $true
+                break
             }
         }
 
-        try {
-            $ipObj = Get-NetIPAddress -InterfaceAlias "iwan1" -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($ipObj) { $sdwanIP = $ipObj.IPAddress }
-        } catch {}
+        # Check iwan1 IPv4
         if (-not $sdwanIP) {
-            $netsh = netsh interface ip show addresses "iwan1" 2>$null | Out-String
-            if ($netsh -match "IP Address:\s*([0-9\.]+)") { $sdwanIP = $Matches[1] }
+            try {
+                $ipObj = Get-NetIPAddress -InterfaceAlias "iwan1" -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($ipObj) { $sdwanIP = $ipObj.IPAddress }
+            } catch {}
+            if (-not $sdwanIP) {
+                $netsh = netsh interface ip show addresses "iwan1" 2>$null | Out-String
+                if ($netsh -match "IP Address:\s*([0-9\.]+)") { $sdwanIP = $Matches[1] }
+            }
         }
 
-        if ($established -and $sdwanIP) { break }
+        # Check route 192.168.0.0/16 via iwan1
+        if (-not $routeOK) {
+            try {
+                $rt = Get-NetRoute -DestinationPrefix "192.168.0.0/16" -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceAlias -eq "iwan1" }
+                if ($rt) { $routeOK = $true }
+            } catch {}
+            if (-not $routeOK) {
+                $rtPrint = route print 192.168.0.0 2>$null | Out-String
+                if ($rtPrint -match "192\.168\.0\.0.*iwan1") { $routeOK = $true }
+            }
+        }
+
+        # Stop waiting if iwan1 has IPv4 and route is present
+        if ($sdwanIP -and $routeOK) {
+            Write-Host ""
+            break
+        }
     }
+    Write-Host "`r                              `r" -NoNewline  # clear progress line
 
     if ($sdwanIP) {
         Write-Host "  iwan1 IPv4: $sdwanIP" -ForegroundColor Green
     } else {
-        Write-Host "  iwan1 IPv4 not detected yet" -ForegroundColor Yellow
+        Write-Host "  iwan1 IPv4 not detected" -ForegroundColor Yellow
+    }
+
+    if ($routeOK) {
+        Write-Host "  Route: 192.168.0.0/16 -> iwan1" -ForegroundColor Green
+    } else {
+        Write-Host "  Route: 192.168.0.0/16 -> iwan1 not confirmed" -ForegroundColor Yellow
     }
 
     if ($authRejected) {
         Write-Host "  AUTH REJECTED: check username/password" -ForegroundColor Red
-    } elseif ($established) {
+        return 1   # auth rejected
+    } elseif ($sdwanIP -and $routeOK) {
         Write-Host "  Tunnel status: established" -ForegroundColor Green
     } else {
-        Write-Host "  Tunnel status: timeout/unknown, check sdwan.log and panel.log" -ForegroundColor Yellow
+        Write-Host "  Tunnel status: timeout/unknown" -ForegroundColor Yellow
+        return 2   # timeout
     }
 
     $pingOk = $false
-    try {
-        $ping = & ping.exe -n 1 -w 2000 $TestHost 2>$null | Out-String
-        if ($LASTEXITCODE -eq 0) { $pingOk = $true }
-    } catch {}
+    for ($attempt = 0; $attempt -lt 3; $attempt++) {
+        if ($attempt -gt 0) { Start-Sleep -Seconds 1 }
+        try {
+            $ping = & ping.exe -n 1 -w 3000 $TestHost 2>$null | Out-String
+            if ($LASTEXITCODE -eq 0) { $pingOk = $true; break }
+        } catch {}
+    }
     if ($pingOk) {
         Write-Host "  Internal connectivity: $TestHost reachable" -ForegroundColor Green
     } else {
         Write-Host "  Internal connectivity: $TestHost not reachable yet (warning only)" -ForegroundColor Yellow
     }
+    return 0   # ok
 }
 
-Test-PostInstallStatus
+$result = Test-PostInstallStatus
 
 Write-Host ""
 Write-Host "===========================================" -ForegroundColor Cyan
-Write-Host "  Install complete!" -ForegroundColor Green
+if ($result -eq 1) {
+    Write-Host "  AUTH REJECTED - check username/password" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Edit config and restart:" -ForegroundColor Yellow
+    Write-Host "    notepad $INSTALL_DIR\iwan.conf"
+    Write-Host "    taskkill /f /im panel.exe"
+    Write-Host "    taskkill /f /im sdwan-windows-amd64.exe"
+    Write-Host "    Start-Process $INSTALL_DIR\panel.exe"
+} elseif ($result -eq 0) {
+    Write-Host "  Install complete!" -ForegroundColor Green
+} else {
+    Write-Host "  Install complete (tunnel may need attention)" -ForegroundColor Yellow
+}
 Write-Host ""
 Write-Host "  Tray icon should appear shortly." -ForegroundColor White
 Write-Host "  Double-click tray icon to open panel." -ForegroundColor White
