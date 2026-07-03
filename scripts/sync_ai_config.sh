@@ -11,17 +11,9 @@ usage() {
   push   将本地配置推送到远端 (mini@192.168.16.40)
 
 同步内容:
-  ~/.claude/settings.json
-  ~/.codex/config.toml
-  ~/.codex/auth.json
-  ~/.config/opencode/opencode.json
-  ~/.config/opencode/oh-my-opencode-slim.jsonc
-  ~/.config/opencode/tui.json
-  ~/.config/opencode/tui-preferences.jsonc
-  ~/.config/opencode/skills/
+  ~/.config/opencode/
   ~/.cc-switch/cc-switch.db
   ~/.cc-switch/settings.json
-  ~/.ai-forge/config.yaml
 USAGE
     exit 1
 }
@@ -55,26 +47,17 @@ do_sync() {
 
     # 单个文件
     for f in \
-        ".claude/settings.json" \
-        ".codex/config.toml" \
-        ".codex/auth.json" \
-        ".config/opencode/opencode.json" \
-        ".config/opencode/oh-my-opencode-slim.jsonc" \
-        ".config/opencode/tui.json" \
-        ".config/opencode/tui-preferences.jsonc" \
         ".cc-switch/cc-switch.db" \
-        ".cc-switch/settings.json" \
-        ".ai-forge/config.yaml"
+        ".cc-switch/settings.json" 
     do
         transfer "$f"
     done
 
-    # skills 目录
-    echo "  .config/opencode/skills/"
+    echo "  .config/opencode/"
     if [ "$direction" = "pull" ]; then
-        rsync -av --exclude='node_modules' "${host}:~/.config/opencode/skills/" "$HOME/.config/opencode/skills/" 2>/dev/null || { echo "    [跳过] 目录为空或不存在"; err=$((err+1)); }
+        rsync -av --exclude='node_modules' "${host}:~/.config/opencode/" "$HOME/.config/opencode/" || { echo "    [失败]"; err=$((err+1)); }
     else
-        rsync -av --exclude='node_modules' "$HOME/.config/opencode/skills/" "${host}:~/.config/opencode/skills/" 2>/dev/null || { echo "    [跳过] 目录为空或不存在"; err=$((err+1)); }
+        rsync -av --exclude='node_modules' "$HOME/.config/opencode/" "${host}:~/.config/opencode/" || { echo "    [失败]"; err=$((err+1)); }
     fi
 
     if [ $err -gt 0 ]; then
