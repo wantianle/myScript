@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import socket
@@ -60,35 +61,36 @@ _GREEN = "\033[32m"
 _YELLOW = "\033[33m"
 _BLUE = "\033[34m"
 _CYAN = "\033[36m"
-_BRIGHT_GREEN = "\033[92m"
+
+_USE_COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _maybe(text: str, code: str) -> str:
+    return f"{code}{text}{_RESET}" if _USE_COLOR else text
 
 
 def bold(text: str) -> str:
-    return f"{_BOLD}{text}{_RESET}"
+    return _maybe(text, _BOLD)
 
 
 def green(text: str) -> str:
-    return f"{_GREEN}{text}{_RESET}"
+    return _maybe(text, _GREEN)
 
 
 def red(text: str) -> str:
-    return f"{_RED}{text}{_RESET}"
+    return _maybe(text, _RED)
 
 
 def yellow(text: str) -> str:
-    return f"{_YELLOW}{text}{_RESET}"
+    return _maybe(text, _YELLOW)
 
 
 def cyan(text: str) -> str:
-    return f"{_CYAN}{text}{_RESET}"
+    return _maybe(text, _CYAN)
 
 
 def blue(text: str) -> str:
-    return f"{_BLUE}{text}{_RESET}"
-
-
-def bright_green(text: str) -> str:
-    return f"{_BRIGHT_GREEN}{text}{_RESET}"
+    return _maybe(text, _BLUE)
 
 
 def _colour_status(value: str | None) -> str:
@@ -328,25 +330,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
             return 130
 
-    # --- handle "sshc <vehicle> add <port>" ---
-    if len(raw_args) >= 2 and raw_args[1] in {"add", "a"}:
-        vehicle = raw_args[0]
-        try:
-            port = int(raw_args[2])
-        except (IndexError, ValueError):
-            print("usage: sshc <vehicle> add <port>", file=sys.stderr)
-            return 2
-        try:
-            settings = load_settings()
-            cmd_add(vehicle, port, settings, debug="--debug" in raw_args)
-            return 0
-        except SshcError as exc:
-            print(f"{yellow('[WARNING]')} {exc}", file=sys.stderr)
-            return 1
-        except KeyboardInterrupt:
-            print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
-            return 130
-
     parser = build_parser()
     args = parser.parse_args(raw_args)
 
@@ -354,10 +337,14 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_settings()
         if args.complete_vehicles is not None:
             complete_vehicles(args.complete_vehicles, settings)
+        elif args.action in ("add", "a"):
+            if args.port is None:
+                parser.error("add requires a port number (1-65535)")
+            cmd_add(args.vehicle, args.port, settings, debug=args.debug)
         else:
             if not args.vehicle:
                 parser.error("the following arguments are required: vehicle")
-            run(args, settings)
+            return run(args, settings)
         return 0
     except SshcError as exc:
         print(f"{yellow('[WARNING]')} {exc}", file=sys.stderr)
@@ -365,6 +352,13 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
         return 130
+
+
+def parse_tcp_port(value: str) -> int:
+    port = int(value)
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be 1-65535")
+    return port
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -380,6 +374,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Login to XiaoZhu, prepare the vehicle SSH mapping, copy your key, and SSH in.",
     )
     parser.add_argument("vehicle", nargs="?", help="vehicle name, for example xzt500021")
+    parser.add_argument("action", nargs="?", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("port", nargs="?", type=parse_tcp_port, default=None, help=argparse.SUPPRESS)
     parser.add_argument(
         "-v",
         "--versions",
@@ -512,11 +508,16 @@ def default_config() -> dict[str, str]:
 
 
 def print_config(config: dict[str, str]) -> None:
+    def _mask(value: str) -> str:
+        if not value or len(value) <= 4:
+            return value or "-"
+        return "*" * (len(value) - 4) + value[-4:]
+
     print(f"config: {CONFIG_PATH}")
     print(f"prod_username: {config['prod_username'] or '-'}")
-    print(f"prod_password_md5: {config['prod_password_md5'] or '-'}")
+    print(f"prod_password_md5: {_mask(config['prod_password_md5'])}")
     print(f"test_username: {config['test_username'] or '-'}")
-    print(f"test_password_md5: {config['test_password_md5'] or '-'}")
+    print(f"test_password_md5: {_mask(config['test_password_md5'])}")
     print(f"keyfile: {config['keyfile'] or '-'}")
 
 
@@ -542,7 +543,7 @@ def environment_credentials(
     return "", ""
 
 
-def run(args: argparse.Namespace, settings: Settings) -> None:
+def run(args: argparse.Namespace, settings: Settings) -> int:
     if not has_any_environment_config(settings):
         raise SshcError(
             'missing XiaoZhu config; run: sshc config --prod-username "username" '
@@ -566,7 +567,7 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
         show_vehicle_info(client, args.vehicle, vehicle, device_id)
         if not lookup.c4_online:
             print(f"{yellow('[WARNING]')} {args.vehicle} c4 is offline")
-        return
+        return 0
 
     if not lookup.c4_online:
         raise SshcError(f"{args.vehicle} c4 is offline")
@@ -609,7 +610,7 @@ def run(args: argparse.Namespace, settings: Settings) -> None:
 
     print("[INFO] SSH 登录...", flush=True)
     print(green(shell_join(ssh_command)))
-    raise SystemExit(subprocess.run(ssh_command).returncode)
+    return subprocess.run(ssh_command).returncode
 
 
 def cmd_add(vehicle_name: str, port: int, settings: Settings, *, debug: bool = False) -> None:
@@ -873,12 +874,6 @@ def extract_device_id(vehicle: dict[str, Any]) -> str:
     return str(device_id)
 
 
-def extract_c4_online(vehicle: dict[str, Any]) -> bool:
-    value = vehicle.get("c4Online")
-    if value is None:
-        raise SshcError("vehicle record does not contain c4Online")
-    return bool(value)
-
 
 def extract_c4_online_or_false(vehicle: dict[str, Any]) -> bool:
     value = vehicle.get("c4Online")
@@ -1040,7 +1035,7 @@ def create_port_mapping(
         "protocol": "tcp",
         "device_id": device_id,
     }
-    result = client.request("POST", DEFAULT_PORT_MAPPINGS_PATH, json_body=payload)
+    result = client.request("POST", DEFAULT_PORT_MAPPINGS_PATH, json_body=payload, raise_for_status=False)
     if not (200 <= result.status < 300):
         raise SshcError(f"failed to create port mapping: {result.status}")
 
@@ -1141,12 +1136,6 @@ def copy_ssh_key(
     ssh_opts: list[str],
 ) -> None:
     target = f"{ssh_user}@{ssh_host}"
-    known_host = f"[{ssh_host}]:{server_port}"
-    subprocess.run(
-        ["ssh-keygen", "-f", str(Path.home() / ".ssh/known_hosts"), "-R", known_host],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
     command = [
         "ssh-copy-id",
         *ssh_opts,
