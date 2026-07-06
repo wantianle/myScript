@@ -1477,7 +1477,7 @@ svc::recorder(){
         return 1
     fi
 
-    if ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $supervisor_action Recorder"; then
+    if ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $supervisor_action Recorder 2>/dev/null"; then
         log_ok "soc2 Recorder 已${action_text}"
     else
         log_err "soc2 Recorder ${action_text}失败"
@@ -1492,7 +1492,7 @@ svc::channel(){
             dtop
             ;;
         "soc2"|"2")
-            ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && dtop"
+            ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && export GLOG_log_dir='${GLOG_log_dir:-/mnt/ufs_data/project/data/log}' && dtop"
             ;;
     esac
 }
@@ -1502,9 +1502,9 @@ svc::_run_module_action() {
     local soc=$1 mod=$2 action=$3
     echo -e "正在对 [$soc] $mod 执行 $action..."
     if [[ "$soc" == "soc1" ]]; then
-        sudo supervisorctl "$action" "$mod"
+        sudo supervisorctl "$action" "$mod" 2>/dev/null
     else
-        ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod" </dev/null
+        ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod 2>/dev/null" </dev/null
     fi
     sleep 1
 }
@@ -1630,7 +1630,7 @@ fetch_combined() {
     md::_ensure_ssh_opts
 
     local s1 s2
-    s1=$(sudo supervisorctl status | awk '{print "soc1 " $0}')
+    s1=$(sudo supervisorctl status 2>/dev/null | awk '{print "soc1 " $0}')
     s2=$(ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc2 " $0}')
     printf "%s\n" "$s1" "$s2" | while read -r line; do
         local clean_line soc mod state tail

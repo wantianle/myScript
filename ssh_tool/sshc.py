@@ -508,16 +508,11 @@ def default_config() -> dict[str, str]:
 
 
 def print_config(config: dict[str, str]) -> None:
-    def _mask(value: str) -> str:
-        if not value or len(value) <= 4:
-            return value or "-"
-        return "*" * (len(value) - 4) + value[-4:]
-
     print(f"config: {CONFIG_PATH}")
     print(f"prod_username: {config['prod_username'] or '-'}")
-    print(f"prod_password_md5: {_mask(config['prod_password_md5'])}")
+    print(f"prod_password_md5: {config['prod_password_md5'] or '-'}")
     print(f"test_username: {config['test_username'] or '-'}")
-    print(f"test_password_md5: {_mask(config['test_password_md5'])}")
+    print(f"test_password_md5: {config['test_password_md5'] or '-'}")
     print(f"keyfile: {config['keyfile'] or '-'}")
 
 
