@@ -1,19 +1,23 @@
 # bench_smoke 默认数据集清单
 # =============================
 # ./run.sh 无参执行时自动使用此文件。包含 6 条真实 bench 验证数据。
-# 运行前请将 packages 版本替换为实际值。
 #
 # 用法:
 #   ./run.sh                              # 全跑
 #   ./run.sh --dataset-id 7037566695      # 选一条
 #   ./run.sh --dataset-id 7037566695,7037600648  # 选多条
 #   ./run.sh run --manifest other.yaml    # 使用其他清单
+#
+# 版本包（3 个）:
+#   mdrive      — 核心代码库
+#   mdrive_conf — 核心配置库
+#   mdrive_map  — 地图库（只有此包安装时追加 --deps）
 
 packages:
   # ----- 运行前必须替换为实际版本 -----
   - mdrive=test.4.0.1.mdrive4_test_base_0706
   - mdrive_conf=ECAR_HW4.4.0.1.conf_test_base_0706
-  - mdrive_map=GD_SZ_FuBao_new_map.3.2.0 # 地图包（可选）
+  - mdrive_map=GD_SZ_FuBao_new_map.3.2.0
 
 datasets:
   - dataset_id: "7037566695"

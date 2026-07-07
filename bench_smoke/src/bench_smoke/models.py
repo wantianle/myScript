@@ -54,7 +54,6 @@ class DatasetEntry:
 class PackageSpec:
     package: str
     version: str
-    install_with_deps: bool = True
 
 
 # 工具配置
@@ -126,12 +125,6 @@ class ToolConfig:
     playback_timeout_sec: int = 60
     recorder_start_timeout_sec: int = 30
     recorder_stop_timeout_sec: int = 30
-
-    # -- 录制提前停止偏移量（秒） --
-    # 回灌与录制重叠时，在回灌预计结束前提前停止录制，
-    # 避免产生多余的尾部 mcap 片段。
-    recorder_early_stop_offset_sec: float = 0.5
-
 
 # 命令执行结果
 

@@ -7,9 +7,7 @@
 import glob as _glob
 import logging
 import os
-import re as _re
 import shlex
-import subprocess as _sp
 from datetime import datetime, timezone
 from typing import FrozenSet, List, Optional, Tuple
 
@@ -130,33 +128,3 @@ def build_playback_command(
     供编排器用于后台启动回灌子进程，以便与录制重叠执行。
     """
     return _validate(context, config)
-
-
-_DURATION_RE = _re.compile(r"Duration:\s+([\d.]+)\s+seconds")
-
-
-def get_playback_duration(context: RunContext, config: ToolConfig) -> Optional[float]:
-    """通过 mkit info 探测本地化回灌输入文件的预期时长（秒）。"""
-    local_path = context.local_dataset_path
-    if not local_path or not os.path.isdir(local_path):
-        return None
-    mcaps = sorted(_glob.glob(os.path.join(local_path, "*.mcap")))
-    if not mcaps:
-        return None
-    target = mcaps[0]
-    logger.info("Probing playback duration from %s", target)
-    cmd = ["bash", "-c", env.shell_init() + env.mkit_bin() + " info " + shlex.quote(target)]
-    try:
-        proc = _sp.run(cmd, capture_output=True, text=True,
-                       timeout=config.command_timeout_sec)
-        if proc.returncode != 0:
-            return None
-        match = _DURATION_RE.search(proc.stdout)
-        if match:
-            dur = float(match.group(1))
-            logger.info("Expected playback duration: %.1f seconds", dur)
-            return dur
-        return None
-    except Exception as exc:
-        logger.warning("Failed to probe playback duration: %s", exc)
-        return None

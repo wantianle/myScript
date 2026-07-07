@@ -241,14 +241,23 @@ def run_remote(
 
     # 远程执行 → SSH
     started_at = _now_iso()
+
+    # 远端 sudo 注入：插入 -S 让 sudo 从 stdin 读密码，密码通过 SSH 转发到远端 stdin
+    sudo_stdin: Optional[str] = None
+    cmd_for_ssh = remote_command
+    if password is not None and remote_command.lstrip().startswith("sudo"):
+        idx = remote_command.find("sudo")
+        cmd_for_ssh = remote_command[: idx + 4] + " -S" + remote_command[idx + 4 :]
+        sudo_stdin = password + "\n"
+
     display = f"ssh -p {port} {user}@{host} \"{remote_command}\""
 
     extra_env: Dict[str, str] = {}
     if password:
         extra_env["SSHPASS"] = password
 
-    argv = _build_ssh_args(host, port, user, password, remote_command)
-    result = _run_argv(argv, timeout_sec=timeout_sec, extra_env=extra_env)
+    argv = _build_ssh_args(host, port, user, password, cmd_for_ssh)
+    result = _run_argv(argv, timeout_sec=timeout_sec, extra_env=extra_env, stdin_input=sudo_stdin)
     ended_at = _now_iso()
 
     safe_command: List[str] = [

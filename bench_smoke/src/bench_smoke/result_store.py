@@ -81,17 +81,17 @@ def create_run_context(
 ) -> RunContext:
     """创建唯一运行目录并返回 RunContext。
 
-    目录规则: {run_root}/runs/<MMDDHHMM>/<dataset_id>__<short_name>/
+    目录规则: {run_root}/runs/<YYYYMMDD_HHMM>/<dataset_id>__<short_name>/
     当 short_name 为空时回退为使用 dataset_id。
 
-    若 batch_timestamp 由外部提供（如 run_many 批次共享），
+    若 batch_timestamp 由外部提供（如 run_batch 批次共享），
     则直接使用该时间戳，不再重新做冲突检测；
     否则由当前时间生成并进行自动冲突检测（_2, _3 后缀）。
     """
     if batch_timestamp is not None:
         batch_dir = os.path.join(config.run_root, "runs", batch_timestamp)
     else:
-        ts = datetime.now().strftime("%m%d%H%M")
+        ts = datetime.now().strftime("%Y%m%d_%H%M")
         batch_dir, batch_timestamp = _resolve_batch_dir(config.run_root, ts)
 
     # type-narrowing: batch_timestamp is definitely a str here
@@ -204,8 +204,7 @@ def _format_summary_text(summary: RunSummary) -> str:
     if summary.packages:
         lines.append("  Packages:")
         for pkg in summary.packages:
-            deps_flag = " (with deps)" if pkg.install_with_deps else ""
-            lines.append(f"    - {pkg.package} == {pkg.version}{deps_flag}")
+            lines.append(f"    - {pkg.package} == {pkg.version}")
         lines.append("")
 
     lines.append("  Steps:")

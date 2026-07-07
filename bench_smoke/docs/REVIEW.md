@@ -1,3 +1,4 @@
+<!-- 历史文档 — 当前行为以 README + docs/V1_SUMMARY.md 为准 -->
 ## CRITICAL
 - [cli.py:124] `run_many(datasets, packages, config)` is called once and its result is discarded, then called again at line 128; for multi-dataset runs this will execute installs/copies/module switching/playback/recording twice → remove the first call and keep only `summaries = run_many(...)`.
 - [recorder.py:42] `_build_record_command()` calls `config.record_command_template.format(output=output_path)`, but the default template and config validation require `{output_dir}`; `start_recorder` will fail with `KeyError: 'output_dir'` before recording can start → change the format argument to `output_dir=output_dir` or change the template/validator consistently.

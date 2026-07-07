@@ -14,4 +14,4 @@ export BENCH_SMOKE_SOC2_HOST='localhost'
 # export BENCH_SMOKE_RECORD_ROOT='/mdrive_data/bag'       # Recorder 落盘路径
 # export BENCH_SMOKE_MOUNT_CHECK_PATH='/media/nas'        # NAS 挂载检查路径
 # export BENCH_SMOKE_COMMAND_TIMEOUT_SEC=30               # 单条命令超时(秒)
-# export BENCH_SMOKE_RECORDER_EARLY_STOP_OFFSET=0.5       # 录制提前停止偏移(秒)
+# export BENCH_SMOKE_PLAYBACK_TOPICS="/t1,/t2,/t3"         # 回灌 topic (逗号分隔，覆盖内置默认)

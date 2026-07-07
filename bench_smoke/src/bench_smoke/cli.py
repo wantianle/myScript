@@ -18,27 +18,21 @@ from bench_smoke.config import load_config
 from bench_smoke.logging_setup import setup_logging
 from bench_smoke.manifest import load_manifest, load_manifest_packages, select_datasets
 from bench_smoke.models import ManifestError, PackageSpec, StepStatus
-from bench_smoke.orchestrator import run_debug_step, run_full, run_many
+from bench_smoke.orchestrator import run_batch, run_debug_step
 
 
 def _parse_package_specs(raw: List[str]) -> List[PackageSpec]:
     """解析 --package NAME=VERSION 参数为 PackageSpec 列表。"""
     specs: List[PackageSpec] = []
     for item in raw:
-        parts = item.split(",", 1)
-        core = parts[0].strip()
-        with_deps = True
-        if len(parts) == 2:
-            flag = parts[1].strip().lower()
-            with_deps = flag in ("1", "true", "yes")
-        if "=" not in core:
+        if "=" not in item:
             raise ValueError(f"Invalid package spec '{item}': expected NAME=VERSION format")
-        pkg, ver = core.split("=", 1)
+        pkg, ver = item.split("=", 1)
         pkg = pkg.strip()
         ver = ver.strip()
         if not pkg or not ver:
             raise ValueError(f"Invalid package spec '{item}': NAME and VERSION must be non-empty")
-        specs.append(PackageSpec(package=pkg, version=ver, install_with_deps=with_deps))
+        specs.append(PackageSpec(package=pkg, version=ver))
     return specs
 
 
@@ -121,12 +115,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     _setup_console_logging()
 
     try:
-        if len(datasets) == 1:
-            summary = run_full(datasets[0], packages, config)
-            return 0 if summary.status == StepStatus.SUCCESS else 1
-        else:
-            summaries = run_many(datasets, packages, config)
-            return 0 if summaries and summaries[-1].status == StepStatus.SUCCESS else 1
+        summaries = run_batch(datasets, packages, config)
+        return 0 if summaries and summaries[-1].status == StepStatus.SUCCESS else 1
     except Exception as exc:
         print(f"Unexpected error during execution: {exc}", file=sys.stderr)
         return 1

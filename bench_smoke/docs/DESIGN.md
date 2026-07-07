@@ -1,11 +1,13 @@
 # DESIGN
 
+<!-- 历史文档 — 当前行为以 README + docs/V1_SUMMARY.md 为准 -->
+
 ## 1. Overview
 
 该工具是一个运行在 Orin 域控台架上的 Python 3.8 命令行冒烟测试执行器，用于自动化每日开环基线数据生成流程：
 
 1. 读取人工维护的数据集清单。
-2. 使用 `md-tool` 在 soc1 安装目标软件版本并启动 `mdrive` 服务。
+2. 在 soc1 安装目标软件版本并启动 `mdrive` 服务（systemctl + vmc install，已废弃 md-tool）。
 3. 将原始传感器数据从 `/media/nas` 同步到 `/mdrive_data` 本地工作目录。
 4. 切换 `soc1` 和 `soc2` 的底软模块状态。
 5. 在 `soc2` 直接启动 `mkit record` 进行录制。
@@ -126,7 +128,7 @@ cli
 
 ### `versioning.py`
 
-负责通过 `md-tool` 在 soc1 执行版本安装与服务启动，记录安装命令、执行结果以及必要的版本信息摘要。
+负责通过 systemctl + vmc install 在 soc1 执行版本安装与服务启停，记录安装命令、执行结果以及必要的版本信息摘要。
 
 ### `data_prep.py`
 
@@ -199,7 +201,7 @@ Contract:
 class PackageSpec:
     package: str
     version: str
-    install_with_deps: bool = True
+    # --deps 仅 mdrive_map，由 versioning.py 硬编码，不再作为通用字段
 ```
 ```
 
@@ -509,10 +511,10 @@ class VersionSnapshot:
 Commands:
 
 ```text
-ssh nvidia@192.168.10.2 "md install <version>"
-ssh nvidia@192.168.10.2 "md install <version>"
-...
-ssh nvidia@192.168.10.2 "md start"
+# V1.1: 已从 md-tool 迁移到 systemctl + vmc install
+sudo systemctl stop mdrive  # on soc1 & soc2
+ssh nvidia@192.168.10.2 "source ... && vmc install -n <pkg> -v <version>"
+sudo systemctl start mdrive # on soc1 & soc2
 ```
 
 Contract:
@@ -870,7 +872,7 @@ Failure behavior:
    `result_store.create_run_context()` 创建唯一路径和运行上下文，并写出初始 `run_context.json`。
 
 4. **版本检查与安装**  
-   `versioning.install_versions()` 在 soc1 上按一组版本组合依次执行 `md install <version>`，全部安装完成后执行 `md start`，并记录安装前后版本信息摘要。
+   `versioning.install_versions()` 在 soc1 上按一组版本组合依次执行安装，全部安装完成后启动 soc1/soc2 mdrive 服务，并记录安装前后版本信息摘要（V1.1: systemctl stop/start + vmc install）。
 
 5. **数据本地化**  
    `data_prep.prepare_dataset()` 先校验 `/media/nas` 已挂载，再校验源路径，并通过 `rsync` 将数据从数据集清单路径拷到 `/mdrive_data/base_test/...` 下的 run 专属目录。
@@ -961,7 +963,7 @@ HTML 报告、NAS 上传、算法验证通过稳定产物格式预留扩展点�
 | DRI-Orchestrator | `orchestrator.py` | 全流程顺序、debug 单步分发、fail-fast 与 cleanup 策略 |
 | DRI-StepRunner | `step_runner.py` | step 生命周期记录、异常归一化、step 结果落盘 |
 | DRI-CommandRunner | `command_runner.py` | 本地/远程命令执行、timeout、stdout/stderr 捕获 |
-| DRI-Versioning | `versioning.py` | `md install` / `md start`、多版本安装、版本前后记录 |
+| DRI-Versioning | `versioning.py` | systemctl mdrive 启停 + `vmc install -n <pkg> -v <ver>`、版本前后记录 |
 | DRI-DataPrep | `data_prep.py` | manifest 数据源 → `/mdrive_data/base_test` 的 `rsync` 本地化与校验 |
 | DRI-ModuleControl | `module_control.py` | soc1/soc2 的 SSH 模块停启 |
 | DRI-Recorder | `recorder.py` | `mkit record` 启停、输出目录、`.mcap` 发现 |
@@ -995,12 +997,12 @@ HTML 报告、NAS 上传、算法验证通过稳定产物格式预留扩展点�
    需要确认模块已停/已起时命令是成功还是失败，以便决定是否实现幂等判定。  
    **影响模块**：`module_control.py`
 
-6. **`md install` 的版本组合映射规则**  
+6. **版本安装的包组合映射规则（V1.1: vmc install -n <pkg> -v <ver> [--deps]）**  
    已确认用户输入的是一组版本组合，其中 `mdrive` 与 `mdrive_conf` 为核心包，地图包可选；但 CLI 是否直接收 2~3 个显式参数，还是收一个组合文件，仍可在实现前最终确定。  
    **影响模块**：`cli.py`, `versioning.py`
 
 7. **超时默认值**  
-   已知 `md install` 由工具自动处理；`rsync` 网络千兆、单包约 500MB / 15s；`mkit play` / `record` 启停可先按 0.5s 起步，但仍需结合台架实测收敛默认值。  
+    已知版本安装由工具自动处理（V1.1: systemctl + vmc install）；`rsync` 网络千兆、单包约 500MB / 15s；`mkit play` / `record` 启停可先按 0.5s 起步，但仍需结合台架实测收敛默认值。  
    **影响模块**：`config.py`
 
 8. **Debug 模式是否允许复用已拷贝数据**  

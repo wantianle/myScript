@@ -81,7 +81,7 @@ def run_step(
     if result.duration_sec <= 0:
         result.duration_sec = time.monotonic() - t0
 
-    if result.started_at:
+    if not result.started_at:
         result.started_at = started_at
 
     status_label = result.status.value.upper() if result.status else "??"

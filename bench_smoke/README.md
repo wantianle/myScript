@@ -33,21 +33,22 @@ export BENCH_SMOKE_SSH_PASSWORD='your-password'
 ./run.sh debug playback --dataset-id 7037566695
 
 # 清理历史 runs 产物（不影响 cache）
-./run.sh clean
+./run.sh clean-runs
 ```
 
 ---
 
 ## 功能概述
 
-1. **安装版本** — 在 soc1 上执行 `md install <version>`，完成后 `md start`。
+1. **安装版本** — 批次级，仅执行一次：停止 soc1/soc2 mdrive → `vmc install -n <pkg> -v <version>` → 重启 mdrive。全部已安装则跳过。
 2. **准备数据** — 从 NAS 复制原始传感器数据到本地缓存目录。同源只复制一次。
-3. **切换模块** — 关闭生产模块，启动 debug 模块。
+3. **切换模块** — 批次级，仅执行一次：关闭生产模块，启动 debug 模块（soc1/soc2 分别处理）。
 4. **录制 + 回灌** — 先启动 Recorder，再后台启动 `mkit play`，重叠执行。
 5. **停止录制** — 等待回灌完成后停止 Recorder。
 6. **mcap 后处理** — 成功时按文件大小选取主 mcap，move 到 run 目录并重命名，清理原始 recorder 输出目录。
 7. **采集元数据** — 执行 `vmc list` 和 `mkit info`。
-8. **生成汇总** — 单 dataset: `summary.json` + `summary.txt`；多 dataset 批次: 额外 `batch_summary.json` + `batch_summary.txt`。
+8. **生成汇总** — 每条 dataset: `summary.json` + `summary.txt`；批次级: `batch_summary.json` + `batch_summary.txt`（始终生成）。
+9. **上传到 NAS** — 每次批处理完成后（不论 1 条或多条），通过 sudo 非交互方式将本次批次目录上传到 `/media/nas/mdrive4/bench_smoke_test/`（NAS 上 dataset 子目录仅保留 dataset_id，去掉 `__short_name` 避免中文乱码；NAS 未挂载或上传失败时仅 warning，不丢失本地结果）。
 
 ---
 
@@ -92,8 +93,9 @@ bench_smoke/
 
 ```yaml
 packages:
-  - mdrive=1.2.3
-  - mdrive_conf=1.2.3
+  - mdrive=1.2.3       # 核心代码库
+  - mdrive_conf=1.2.3  # 核心配置库
+  - mdrive_map=1.2.3   # 地图库（只有此包追加 --deps）
 
 datasets:
   - dataset_id: "7037566695"
@@ -129,9 +131,15 @@ datasets:
 | `BENCH_SMOKE_RECORD_ROOT` | Recorder 原始落盘路径 | `/mdrive_data/bag` |
 | `BENCH_SMOKE_MOUNT_CHECK_PATH` | NAS 挂载检查路径 | `/media/nas` |
 | `BENCH_SMOKE_COMMAND_TIMEOUT_SEC` | 单条命令超时（秒） | `30` |
-| `BENCH_SMOKE_RECORDER_EARLY_STOP_OFFSET` | 录制提前停止偏移（秒） | `0.5` |
+| `BENCH_SMOKE_PLAYBACK_TOPICS` | 回灌 topic 列表（逗号分隔） | 内置默认 21 个 topic |
 
-默认路径: run_root=`<tool_root>/output`, record_root=`/mdrive_data/bag`, mount_check_path=`/media/nas`。
+**修改回灌 topic**: 如果后续回灌 topic 有变化，优先修改 `settings.sh` 中的 `BENCH_SMOKE_PLAYBACK_TOPICS`，无需改动 Python 代码。格式为逗号分隔的 topic 列表，例如：
+
+```bash
+export BENCH_SMOKE_PLAYBACK_TOPICS="/sensor/gnss/raw,/sensor/imu,camera1,camera2"
+```
+
+不设置此变量时，回灌 topic 使用内置默认值（共 21 个 topic，覆盖 GNSS/IMU/LiDAR/Camera/Vehicle 等传感器）。
 
 其中 `run_root` 由 `run.sh` 按当前工具目录自动注入为：
 
@@ -152,16 +160,16 @@ datasets:
 ```
 output/
 ├── runs/
-│   └── <MMDDHHMM>/                     # 批次目录 (月日时分，不含年/秒)
-│       ├── batch_summary.txt           # 批次级人可读汇总（多 dataset 时）
-│       ├── batch_summary.json          # 批次级结构化汇总（多 dataset 时）
+│   └── <YYYYMMDD_HHMM>/                     # 批次目录 (年月日_时分)
+│       ├── batch_summary.txt           # 批次级人可读汇总（始终生成）
+│       ├── batch_summary.json          # 批次级结构化汇总（始终生成）
 │       ├── <dataset_id>__<short_name>/ # 单 dataset 产物目录
 │       │   ├── summary.txt             # 终端可读汇总
 │       │   ├── summary.json            # 机器可读汇总
 │       │   ├── run_context.json        # 运行上下文快照
 │       │   ├── run.log                 # 运行日志
 │       │   ├── execution.json          # 步骤明细（仅失败/debug 时）
-│       │   └── playback_<dataset_id>_<MMDDHHMM>.mcap  # 主输出 mcap
+│       │   └── playback_<dataset_id>_<YYYYMMDD_HHMM>.mcap  # 主输出 mcap
 │       └── ...
 └── cache/
     └── <dataset_id>/                   # 数据缓存（按 dataset_id）
@@ -173,19 +181,19 @@ output/
 ```
 output/
   runs/
-    07061430/
+    20260706_1430/
       batch_summary.txt
       batch_summary.json
       7037566695__鬼探头二轮车/
         summary.txt
         summary.json
         run_context.json
-        playback_7037566695_07061430.mcap
+        playback_7037566695_20260706_1430.mcap
       7037600648__掉头碰撞风险/
         summary.txt
         summary.json
         run_context.json
-        playback_7037600648_07061430.mcap
+        playback_7037600648_20260706_1430.mcap
   cache/
     7037566695/
       source_manifest.txt
@@ -197,10 +205,10 @@ output/
 - **成功 run**: summary.json、summary.txt、run.log、run_context.json、playback_*.mcap
 - **失败 run**: 额外包含 execution.json
 - **debug**: 额外包含 execution.json
-- **同一分钟重复运行**: 批次目录追加 `_2`、`_3` 后缀（如 `07061430_2`）
+- **同一分钟重复运行**: 批次目录追加 `_2`、`_3` 后缀（如 `20260706_1430_2`）
 - **short_name 回退**: 若 dataset 未提供 short_name，使用 dataset_id 替代
-- **单 dataset 运行**: 不生成 batch_summary；仅含该 dataset 的 summary.txt/json
-- **多 dataset 批次**: 额外生成 batch_summary.txt + batch_summary.json 于批次目录根下
+- **单 dataset 运行**: 也生成 batch_summary.txt/json 于批次目录根下（统一批处理语义）
+- **多 dataset 批次**: 同样生成 batch_summary.txt + batch_summary.json 于批次目录根下
 
 **产物文件角色**:
 | 文件 | 格式 | 层级 | 作用 |
@@ -219,12 +227,10 @@ output/
 
 ## 批次汇总（batch_summary）
 
-当一次运行包含多条数据集时，批次目录根下会额外生成：
+当一次运行包含 1 条或多条数据集时，批次目录根下都会生成 batch_summary：
 
 - **`batch_summary.txt`** — 终端可读批次总览，包含 Total/Success/Failed 计数和每条 dataset 一行结果
 - **`batch_summary.json`** — 结构化批次视图，供后续 HTML 渲染或自动报告消费
-
-单条 dataset 运行时不会生成 batch_summary，只会在该 dataset 子目录下产出 summary.txt/json。
 
 ---
 

@@ -22,7 +22,7 @@ bench_smoke/
 │   └── V1_SUMMARY.md         # 本文件
 ├── src/bench_smoke/          # Python 包
 │   ├── cli.py                # 命令行解析（run / debug 子命令）
-│   ├── orchestrator.py       # 工作流编排（run_full / run_many / batch_summary）
+│   ├── orchestrator.py       # 工作流编排（run_batch / run_full / batch_summary）
 │   ├── models.py             # 共享数据类型（dataclass / enum）
 │   ├── config.py             # 配置加载（默认值 + 环境变量覆盖）
 │   ├── manifest.py           # 清单加载与校验
@@ -32,13 +32,13 @@ bench_smoke/
 │   ├── env.py                # 台架运行时环境辅助（shell_init / mkit_bin）
 │   ├── logging_setup.py      # 日志配置
 │   ├── steps/                # 步骤模块
-│   │   ├── versioning.py     # md install + inspect
+│   │   ├── versioning.py     # vmc install + systemctl mdrive 启停
 │   │   ├── data_prep.py      # NAS 复制 + 缓存管理
 │   │   ├── module_control.py # soc1/soc2 模块启停
 │   │   ├── playback.py       # mkit play 回灌
 │   │   ├── recorder.py       # supervisor-managed Recorder 启停 + mcap 发现
 │   │   └── metadata.py       # vmc list + mkit info 采集
-│   └── extensions/           # 扩展点 stubs（上传等，暂未实现）
+│   └── extensions/           # 扩展点（NAS 上传已实现于 orchestrator，stub 供未来扩展）
 ├── output/                   # 运行产物（自动创建）
 │   ├── runs/                 # 批次运行产物
 │   └── cache/                # 数据缓存
@@ -80,16 +80,16 @@ bench_smoke/
 ```
 output/
 ├── runs/
-│   └── <MMDDHHMM>/                     # 批次目录（月日时分，不含年/秒）
-│       ├── batch_summary.txt           # 批次级总览（仅多 dataset 时有）
-│       ├── batch_summary.json          # 批次级结构化（仅多 dataset 时有）
+│   └── <YYYYMMDD_HHMM>/                     # 批次目录（年月日_时分）
+│       ├── batch_summary.txt           # 批次级总览（始终生成，含 install/module_switch 状态）
+│       ├── batch_summary.json          # 批次级结构化（始终生成）
 │       └── <dataset_id>__<short_name>/ # 单 dataset 产物目录
 │           ├── summary.txt             # 终端可读单条结果
 │           ├── summary.json            # 机器可读完整结构
 │           ├── run_context.json        # 运行上下文快照
 │           ├── run.log                 # 运行日志
 │           ├── execution.json          # 步骤明细（仅失败/debug 时）
-│           └── playback_<dataset_id>_<MMDDHHMM>.mcap  # 主输出 mcap
+│           └── playback_<dataset_id>_<YYYYMMDD_HHMM>.mcap  # 主输出 mcap
 └── cache/
     └── <dataset_id>/
         ├── source_manifest.txt
@@ -100,23 +100,27 @@ output/
 结合一个实际示例（2026-07-06 14:30 执行 2 条数据集）:
 
 ```
-output/runs/07061430/
+output/runs/20260706_1430/
   batch_summary.txt
   batch_summary.json
   7037566695__鬼探头二轮车/
     summary.txt, summary.json, run_context.json, run.log
-    playback_7037566695_07061430.mcap
+    playback_7037566695_20260706_1430.mcap
   7037600648__掉头碰撞风险/
     summary.txt, summary.json, run_context.json, run.log
-    playback_7037600648_07061430.mcap
+    playback_7037600648_20260706_1430.mcap
 ```
 
 ### 1.5 当前已实现的能力
 
-**管线（8 步）**:
-1. `install_versions` — 在 soc1 上 `md install` + `md start`
-2. `prepare_data` — NAS 挂载检查 → 缓存命中/未命中 → 复制到本地 `cache/<dataset_id>/data/`
-3. `switch_modules` — 关闭生产模块，启动 debug 模块（soc1/soc2 分别处理）
+**管线**:
+
+*批次级（每批仅一次）:*
+1. `install_packages` — 停止 soc1/soc2 mdrive → soc1 上 `vmc install -n <pkg> -v <ver>` → 重启 soc1/soc2 mdrive
+2. `switch_modules` — 关闭生产模块，启动 debug 模块（soc1/soc2 分别处理）
+
+*per-dataset（每条 dataset 依次）:*
+3. `prepare_data` — NAS 挂载检查 → 缓存命中/未命中 → 复制到本地 `cache/<dataset_id>/data/`
 4. `start_recorder` — 通过 supervisorctl 启动 Recorder 服务
 5. `playback` — 后台启动 `mkit play`（子进程），紧跟 recorder 之后
 6. `stop_recorder` — 等待回灌完成后停止 Recorder → discover 新生成的 mcap 文件
@@ -129,9 +133,11 @@ output/runs/07061430/
 - 主 mcap move + 清理：成功后 move 主文件到 run_dir，`sudo rm -rf` 清空原始 recorder 输出目录
 
 **批次支持**:
-- `run_many` 依次执行多个 dataset，首个失败即停止
-- 所有 dataset 共享同一个 `MMDDHHMM` 批次目录
-- 多 dataset 时生成 `batch_summary.txt` + `batch_summary.json`
+- `run_batch` 统一处理 1 条或多条 dataset，遇首个失败即停止
+- 所有 dataset 共享同一个 `YYYYMMDD_HHMM` 批次目录
+- 始终生成 `batch_summary.txt` + `batch_summary.json`
+- install_packages 与 switch_modules 在批次级仅执行一次
+- 完成时自动通过 sudo 非交互方式上传批次目录到 NAS（目标已存在则跳过）
 
 **容错**:
 - fail-fast：任何步骤失败即停止后续
@@ -140,7 +146,7 @@ output/runs/07061430/
 
 **配置**:
 - 内建默认值覆盖全部关键路径/端口/超时（无需配置文件即可运行）
-- 8 个环境变量支持覆盖：`SSH_PASSWORD` / `SOC1_HOST` / `SOC2_HOST` / `RUN_ROOT` / `RECORD_ROOT` / `MOUNT_CHECK_PATH` / `COMMAND_TIMEOUT_SEC` / `RECORDER_EARLY_STOP_OFFSET`
+- 8 个环境变量支持覆盖：`SSH_PASSWORD` / `SOC1_HOST` / `SOC2_HOST` / `RUN_ROOT` / `RECORD_ROOT` / `MOUNT_CHECK_PATH` / `COMMAND_TIMEOUT_SEC` / `PLAYBACK_TOPICS`
 - `settings.sh` 提供一键配置入口
 
 ---
@@ -155,9 +161,8 @@ output/runs/07061430/
 
 | 阶段 | 内容 | 说明 |
 |---|---|---|
-| **已完成 (V1)** | 管线、数据、产物结构 | 可以稳定运行，产出 json/txt |
+| **已完成 (V1.0)** | 管线、数据、产物结构、NAS 上传 | 可以稳定运行，产出 json/txt，自动推送 NAS |
 | **下一步 (V1.1)** | 批处理脚本 + cron 调度 | 让工具真正变成"每日自动跑" |
-| **下一步 (V1.1)** | 远程上传产物 | 把 output/ 自动推送到开发机/NAS |
 | **再下一步 (V1.2)** | 简易文本报告（聚合版） | 把所有 dataset 的 summary.txt 拼成一个"今日冒烟报告.txt" |
 | **再下一步 (V1.2)** | 中文终端彩色输出 | `./run.sh` 结束时打印直观的 PASS/FAIL 面板 |
 | **然后 (V2.0)** | 静态 HTML 报告 | 单文件，可直接浏览器打开，无需服务端 |
@@ -215,8 +220,7 @@ datasets/
 # /home/nvidia/daily_bench.sh
 cd /home/nvidia/bench_smoke
 ./run.sh 2>&1 | tee -a logs/daily_$(date +%Y%m%d).log
-# 推送到 NAS（待实现）
-# rsync -av output/ nas:/path/to/bench_results/$(date +%Y%m%d)/
+# NAS 上传已由 run_batch 自动处理，无需额外 rsync
 ```
 
 ---
@@ -261,7 +265,7 @@ cd /home/nvidia/bench_smoke
   - 标题栏：批次时间、Total/Success/Failed 计数
   - 每条 dataset 一行：状态图标（✅/❌）、ID、short_name、失败步骤
   - 点击展开：步骤列表、用时、MCAP 路径、飞书链接
-- 生成方式：Python 脚本在 `run_many` 结束时调用，写到批次根目录下 `report.html`
+- 生成方式：Python 脚本在 `run_batch` 结束时调用，写到批次根目录下 `report.html`
 - 依赖：零（用 Python 字符串拼接 HTML，或用 `html` 标准库）
 
 **完整版本（后续迭代）**:
@@ -283,10 +287,8 @@ cd /home/nvidia/bench_smoke
 - 每天定时跑一次，输出到带日期的日志文件
 - 失败时发 notify（飞书 webhook 或简单 echo）
 
-### 2. 产物自动上传到 NAS
-> 台架磁盘有限，产物堆在本地不是长久之计。
-- `run_many` 完成后，自动 rsync `output/runs/<batch_ts>/` 到 NAS 指定目录
-- 或者在 `extensions/` 下实现一个简单的上传 stub
+### 2. 产物自动上传到 NAS ✓ (已实现)
+> `run_batch` 完成时自动通过 sudo 非交互上传批次目录到 `/media/nas/mdrive4/bench_smoke_test/`。目标已存在时跳过不覆盖。
 
 ### 3. 补充版本信息到 summary.json
 > 为 HTML 报告铺路，也让当前 txt 报告更有用。
@@ -302,5 +304,4 @@ cd /home/nvidia/bench_smoke
 - HTML 报告（基础数据已就绪，等管线稳定 1-2 周后再做）
 - 历史趋势图表（需要积累至少 2 周以上的数据）
 - 多台架并行执行（当前单台架单 soc2 够用）
-- extension 上传完整实现（当前 stub 即可）
 - 飞书 bot 自动通知失败（等 cron 稳定后再加）

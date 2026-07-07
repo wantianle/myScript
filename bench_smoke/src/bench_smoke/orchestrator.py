@@ -38,17 +38,15 @@ def run_full(
     config: ToolConfig,
     batch_timestamp: Optional[str] = None,
 ) -> RunSummary:
-    """对单个数据集执行完整的一键流程。
+    """对单个数据集执行录制 + 回灌流程（不含 install_versions / switch_modules，这两步在批次级完成）。
 
-    步骤顺序（先拉起录制，再立即回灌）:
-      1. install_versions
-      2. prepare_data
-      3. switch_modules
-      4. start_recorder
-      5. playback（后台启动，紧跟 recorder 之后）
-      6. stop_recorder（等待回灌完成后停止录制）
-      7. collect_metadata
-      8. summarize（内联，写入 RunSummary）
+    步骤顺序:
+      1. prepare_data
+      2. start_recorder
+      3. playback（后台启动，紧跟 recorder 之后）
+      4. stop_recorder（等待回灌完成后停止录制）
+      5. collect_metadata
+      6. summarize（内联，写入 RunSummary）
 
     默认 fail-fast：第一个 FAILED 步骤即停止。
     start_recorder 成功后若后续步骤失败，尝试 best-effort 清理。
@@ -59,9 +57,7 @@ def run_full(
     setup_logging(context.run_dir, console=True)
 
     steps: List[tuple] = [
-        ("install_versions", partial(versioning.install_versions, config=config)),
         ("prepare_data",     partial(data_prep.prepare_dataset, config=config)),
-        ("switch_modules",   partial(module_control.switch_to_playback_mode, config=config)),
         ("start_recorder",   partial(recorder.start_recorder, config=config)),
         ("playback",         partial(playback.play_once, config=config)),
         ("stop_recorder",    partial(recorder.stop_recorder, config=config)),
@@ -72,9 +68,8 @@ def run_full(
     recorder_started = False
     failed_step: Optional[str] = None
 
-    global _playback_proc, _playback_start_ts
+    global _playback_proc
     _playback_proc = None
-    _playback_start_ts = 0.0
 
     for step_name, step_fn in steps:
         # -- playback: 后台启动，立即进入 stop_recorder --
@@ -130,24 +125,68 @@ def run_full(
     )
 
 
-def run_many(
+def run_batch(
     datasets: List[DatasetEntry],
     packages: List[PackageSpec],
     config: ToolConfig,
 ) -> List[RunSummary]:
-    """依次对多个数据集执行完整流程，遇首个失败即停止批次。
+    """统一批处理入口：1 条或 N 条数据集使用同一流程。
 
-    同一批次内所有 dataset 共享一个 batch_timestamp (MMDDHHMM)，
-    产物统一落在同一个批次目录下。
+    1. 创建批次目录（YYYYMMDD_HHMM）
+    2. 批次级: install_packages（仅一次）
+    3. 批次级: switch_to_playback_mode（仅一次）
+    4. 逐条 dataset: prepare_data → recorder/playback → metadata → summarize
+    5. 写 batch_summary.txt/json
+    6. 上传批次目录到 NAS
+
+    任一批次级步骤失败即整批终止，写入 batch_summary 后返回。
+    遇首个 dataset 失败即停止，但仍会写入 batch_summary 和触发 NAS 上传。
     """
     from datetime import datetime as _dt_mod
     import os as _os_mod
-    batch_ts = _dt_mod.now().strftime("%m%d%H%M")
+    batch_ts = _dt_mod.now().strftime("%Y%m%d_%H%M")
     # 先解析批次目录并创建，避免每个 create_run_context 各自碰撞
     batch_dir, resolved_ts = result_store._resolve_batch_dir(
         config.run_root, batch_ts,
     )
     _os_mod.makedirs(batch_dir, exist_ok=True)
+
+    # 批次级版本安装（仅一次）
+    logger.info("Batch-level install: %d package(s)", len(packages))
+    install_result = versioning.install_packages(packages, config)
+    if install_result.status != StepStatus.SUCCESS:
+        logger.error("Batch install failed: %s — aborting entire batch", install_result.message)
+        _write_batch_summary(batch_dir, [], install_result=install_result)
+        _upload_batch_to_nas(config, batch_dir, [install_result])
+        return []
+
+    # 批次级模块切换（仅一次）
+    logger.info("Batch-level module switch")
+    _setup_ctx = RunContext(
+        run_id="batch_setup", run_dir=batch_dir,
+        dataset=datasets[0], packages=list(packages),
+    )
+    try:
+        module_switch_result = module_control.switch_to_playback_mode(_setup_ctx, config)
+    except Exception as exc:
+        from bench_smoke.models import StepResult as _SR
+        module_switch_result = _SR(
+            name="switch_modules", status=StepStatus.FAILED,
+            started_at="", ended_at="", duration_sec=0.0,
+            message="Exception during module switch: {}".format(exc),
+            error_type="UnexpectedError",
+        )
+    if module_switch_result.status != StepStatus.SUCCESS:
+        logger.error("Batch module switch failed: %s — aborting entire batch",
+                     module_switch_result.message)
+        _write_batch_summary(
+            batch_dir, [], install_result=install_result,
+            module_switch_result=module_switch_result,
+        )
+        _upload_batch_to_nas(
+            config, batch_dir, [install_result, module_switch_result],
+        )
+        return []
 
     summaries: List[RunSummary] = []
     for dataset in datasets:
@@ -163,11 +202,16 @@ def run_many(
                 "Dataset %s failed at step '%s'; stopping batch.",
                 dataset.dataset_id, summary.failed_step,
             )
-            _write_batch_summary(batch_dir, summaries)
+            _write_batch_summary(batch_dir, summaries, install_result=install_result,
+                                 module_switch_result=module_switch_result)
             break
 
-    if len(datasets) > 1 or (summaries and summaries[-1].status == StepStatus.SUCCESS):
-        _write_batch_summary(batch_dir, summaries)
+    if summaries:
+        _write_batch_summary(batch_dir, summaries, install_result=install_result,
+                             module_switch_result=module_switch_result)
+
+    # 将本次批次目录上传到 NAS
+    _upload_batch_to_nas(config, batch_dir, summaries)
     return summaries
 
 
@@ -354,7 +398,6 @@ def _launch_playback_background(
 ) -> StepResult:
     """以子进程方式后台启动 mkit play，返回合成 StepResult。"""
     import subprocess
-    import time as _time_mod
     from datetime import datetime as _dt, timezone as _tz
 
     started_at = _dt.now(_tz.utc).isoformat()
@@ -383,9 +426,8 @@ def _launch_playback_background(
             error_type="ProcessError",
         )
 
-    global _playback_proc, _playback_start_ts
+    global _playback_proc
     _playback_proc = proc
-    _playback_start_ts = _time_mod.monotonic()
 
     result = StepResult(
         name="playback", status=StepStatus.SUCCESS,
@@ -500,8 +542,84 @@ def _cleanup_stop_recorder(
         ))
 
 
-def _write_batch_summary(batch_dir: str, summaries: list) -> None:
-    """在批次目录写入 batch_summary.json（结构化）和 batch_summary.txt（终端可读）。"""
+# ── NAS 上传 ──
+
+_NAS_BENCH_ROOT = "/media/nas/mdrive4/bench_smoke_test"
+
+
+def _upload_batch_to_nas(config: ToolConfig, batch_dir: str, summaries: list) -> None:
+    """将本次批次目录上传到 NAS（sudo 非交互执行，CIFS 挂载需 root 写权限）。
+
+    上传前确认 NAS 挂载点可用；目标若已存在则跳过（不覆盖不删除）。
+    dataset 子目录在 NAS 上仅保留 dataset_id（去掉 __short_name 避免中文乱码）。
+    失败时仅记录 warning，不阻断 run 结果。
+    """
+    import os as _os_mod
+    import shlex as _shlex
+    from bench_smoke.command_runner import run_remote as _run_remote
+
+    if not _os_mod.path.ismount(config.mount_check_path):
+        logger.warning(
+            "NAS not mounted at %s; skipping batch upload. "
+            "Results remain at %s",
+            config.mount_check_path, batch_dir,
+        )
+        return
+
+    _nas_batch = _os_mod.path.join(_NAS_BENCH_ROOT, _os_mod.path.basename(batch_dir))
+    if _os_mod.path.exists(_nas_batch):
+        logger.warning(
+            "Upload destination already exists (%s). Skipping upload. "
+            "Local results remain at %s",
+            _nas_batch, batch_dir,
+        )
+        return
+
+    # 构造上传命令链：mkdir → copy batch_summary → cp -a 每条 dataset（NAS 目录名仅保留 dataset_id）
+    _cmds = "sudo mkdir -p {}".format(_shlex.quote(_nas_batch))
+    for _fname in ("batch_summary.txt", "batch_summary.json"):
+        _src = _os_mod.path.join(batch_dir, _fname)
+        if _os_mod.path.isfile(_src):
+            _cmds += " && sudo cp {} {}".format(
+                _shlex.quote(_src),
+                _shlex.quote(_os_mod.path.join(_nas_batch, _fname)),
+            )
+
+    for _ent in sorted(_os_mod.listdir(batch_dir)):
+        _full = _os_mod.path.join(batch_dir, _ent)
+        if not _os_mod.path.isdir(_full):
+            continue
+        # _ent 形如 "7037566695__鬼探头二轮车" → NAS 上仅保留 "7037566695"
+        _nas_name = _ent.split("__", 1)[0]
+        _cmds += " && sudo cp -a {} {}".format(
+            _shlex.quote(_full),
+            _shlex.quote(_os_mod.path.join(_nas_batch, _nas_name)),
+        )
+
+    _upload_timeout = config.command_timeout_sec * 20  # 上传可慢（CIFS + 大文件）
+    try:
+        _run_remote(
+            host=config.soc2_host, port=config.soc2_port,
+            user=config.soc2_user, password=config.ssh_password,
+            remote_command=_cmds,
+            timeout_sec=_upload_timeout, check=False,
+        )
+        logger.info("Batch uploaded to NAS: %s", _nas_batch)
+    except Exception as exc:
+        logger.warning(
+            "Failed to upload batch to NAS (%s). "
+            "Results remain at %s",
+            exc, batch_dir,
+        )
+
+
+def _write_batch_summary(batch_dir: str, summaries: list, install_result=None,
+                         module_switch_result=None) -> None:
+    """在批次目录写入 batch_summary.json（结构化）和 batch_summary.txt（终端可读）。
+
+    install_result     — 批次级 install_packages 的 StepResult
+    module_switch_result — 批次级 switch_to_playback_mode 的 StepResult
+    """
     import json as _json_mod
     from datetime import datetime as _dt_mod
 
@@ -529,6 +647,18 @@ def _write_batch_summary(batch_dir: str, summaries: list) -> None:
             for s in summaries
         ],
     }
+    if install_result is not None:
+        json_payload["install"] = {
+            "status": install_result.status.value,
+            "message": install_result.message,
+            "duration_sec": install_result.duration_sec,
+        }
+    if module_switch_result is not None:
+        json_payload["module_switch"] = {
+            "status": module_switch_result.status.value,
+            "message": module_switch_result.message,
+            "duration_sec": module_switch_result.duration_sec,
+        }
     json_path = os.path.join(batch_dir, "batch_summary.json")
     try:
         os.makedirs(batch_dir, exist_ok=True)
@@ -544,6 +674,12 @@ def _write_batch_summary(batch_dir: str, summaries: list) -> None:
     lines.append("BENCH SMOKE BATCH SUMMARY")
     lines.append("=" * 72)
     lines.append(f"  Batch Dir    : {batch_dir}")
+    if install_result is not None:
+        inst_marker = "PASS" if install_result.status == StepStatus.SUCCESS else "FAIL"
+        lines.append(f"  Install       : [{inst_marker}] {install_result.message}")
+    if module_switch_result is not None:
+        sw_marker = "PASS" if module_switch_result.status == StepStatus.SUCCESS else "FAIL"
+        lines.append(f"  Module Switch : [{sw_marker}] {module_switch_result.message}")
     lines.append(f"  Total        : {total}")
     lines.append(f"  Success      : {success}")
     lines.append(f"  Failed       : {failed}")

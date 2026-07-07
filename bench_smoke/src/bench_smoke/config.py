@@ -17,13 +17,6 @@ def _env_optional(name: str) -> Optional[str]:
     return v if v else None
 
 
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.environ.get(name, ""))
-    except (ValueError, TypeError):
-        return default
-
-
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, ""))
@@ -62,7 +55,7 @@ def load_config() -> ToolConfig:
       BENCH_SMOKE_RECORD_ROOT
       BENCH_SMOKE_MOUNT_CHECK_PATH
       BENCH_SMOKE_COMMAND_TIMEOUT_SEC
-      BENCH_SMOKE_RECORDER_EARLY_STOP_OFFSET
+      BENCH_SMOKE_PLAYBACK_TOPICS (逗号分隔 topic 列表，覆盖内置默认值)
     """
     cfg = ToolConfig()
 
@@ -80,9 +73,10 @@ def load_config() -> ToolConfig:
     if (h := _env_optional("BENCH_SMOKE_MOUNT_CHECK_PATH")) is not None:
         cfg.mount_check_path = h
     cfg.command_timeout_sec = _env_int("BENCH_SMOKE_COMMAND_TIMEOUT_SEC", cfg.command_timeout_sec)
-    cfg.recorder_early_stop_offset_sec = _env_float(
-        "BENCH_SMOKE_RECORDER_EARLY_STOP_OFFSET", cfg.recorder_early_stop_offset_sec
-    )
+    if (topics_raw := _env_optional("BENCH_SMOKE_PLAYBACK_TOPICS")) is not None:
+        cfg.playback_topics = [
+            t.strip() for t in topics_raw.split(",") if t.strip()
+        ]
 
     _validate_config(cfg)
     return cfg

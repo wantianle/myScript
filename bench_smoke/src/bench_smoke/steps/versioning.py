@@ -1,6 +1,7 @@
-"""通过 md-tool 在 soc1 上执行版本安装与检查。"""
+"""通过 systemctl + vmc install 在 soc1 上执行版本安装与管理。"""
 
 import logging
+import re
 import shlex
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -39,28 +40,112 @@ def inspect_versions(config: ToolConfig) -> VersionSnapshot:
     )
 
 
-def _skip_if_installed(pkg_version: str, version_info: str) -> bool:
-    """检查 pkg_version 是否出现在 version_info 字符串中。"""
-    return pkg_version in version_info
+def _parse_vmc_list(raw: str) -> Dict[str, str]:
+    """从 vmc list 输出中提取 {package_name: version} 映射。
+
+    vmc list 固定输出格式:
+        Installed Software Packages:
+        ----------------------------
+        <package> (<version>)
+        <package> (<version>)
+        ...
+
+    仅匹配 "<package> (<version>)" 行，其余行（表头/分隔线）自动跳过。
+    """
+    installed: Dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        m = re.match(r"^(\S+)\s+\((.+)\)$", line)
+        if m:
+            installed[m.group(1)] = m.group(2)
+    return installed
 
 
-def install_versions(context: RunContext, config: ToolConfig) -> StepResult:
-    """在 soc1 上安装目标软件版本并启动 mdrive 服务。
+def _skip_if_installed(pkg_name: str, pkg_version: str, version_info: str) -> bool:
+    """检查 (package, version) 对是否已出现在 vmc list 输出中。"""
+    installed = _parse_vmc_list(version_info)
+    return installed.get(pkg_name) == pkg_version
 
-    依次执行:
-    1. 清理残留的 vmc install 僵尸进程
-    2. 捕获当前已安装版本信息
-    3. 对每个 package spec：若目标版本已安装则跳过，否则执行 md install
-    4. 启动 mdrive 服务
 
-    md install 通过 SSH 在 soc1 上执行，下载耗时取决于 bench 网络速度。
-    若 subprocess 输出被完全捕获，进度条不会实时显示——下载期间无新日志。
+def install_packages(packages: list, config: ToolConfig) -> StepResult:
+    """批次级软件安装：对所有 packages 执行 vmc install，不依赖 RunContext。
+
+    先检查当前版本：若所有包均已安装则直接返回，节省 stop/start 开销。
+    否则:
+    1. 停止 soc1 / soc2 上的 mdrive（sudo systemctl stop mdrive）
+    2. 清理残留的 vmc install 僵尸进程
+    3. 在 soc1 上对需要安装的包执行 vmc install -n <pkg> -v <ver> [--deps]
+    4. 重新启动 soc1 / soc2 上的 mdrive（sudo systemctl start mdrive）
     """
     started_at = datetime.now(timezone.utc)
     commands: List[CommandResult] = []
     installed_packages: List[Dict[str, str]] = []
 
-    # 1. 清理残留 VMC 进程
+    # 1. 捕获当前版本信息，预判哪些包需要安装
+    before_info = _collect_raw_version_info(config)
+
+    to_install: list = []
+    for pkg in packages:
+        if _skip_if_installed(pkg.package, pkg.version, before_info):
+            logger.info(
+                "SKIP %s=%s — already installed on soc1",
+                pkg.package, pkg.version,
+            )
+            installed_packages.append({
+                "package": pkg.package,
+                "version": pkg.version,
+                "action": "skipped",
+            })
+        else:
+            to_install.append(pkg)
+
+    # 全部已安装 — 无需 stop/install/start
+    if not to_install:
+        ended_at = datetime.now(timezone.utc)
+        duration_sec = (ended_at - started_at).total_seconds()
+        logger.info(
+            "All %d package(s) already installed; skipping mdrive restart.",
+            len(packages),
+        )
+        return StepResult(
+            name="install_versions",
+            status=StepStatus.SUCCESS,
+            started_at=started_at.isoformat(),
+            ended_at=ended_at.isoformat(),
+            duration_sec=duration_sec,
+            message="All {} package(s) already installed, no service restart needed".format(
+                len(packages)
+            ),
+            commands=commands,
+            artifacts={
+                "before_version_info": before_info,
+                "installed_packages": installed_packages,
+            },
+        )
+
+    # 2. 至少有一个包需要安装 → 停止 mdrive
+    logger.info(
+        "%d package(s) need installation; stopping mdrive on soc1/soc2",
+        len(to_install),
+    )
+    for host_label, host, port, user in [
+        ("soc1", config.soc1_host, config.soc1_port, config.soc1_user),
+        ("soc2", config.soc2_host, config.soc2_port, config.soc2_user),
+    ]:
+        logger.info("Stopping mdrive on %s", host_label)
+        try:
+            stop_result = run_remote(
+                host=host, port=port, user=user,
+                password=config.ssh_password,
+                remote_command="sudo systemctl stop mdrive",
+                timeout_sec=config.command_timeout_sec,
+                check=False,
+            )
+            commands.append(stop_result)
+        except Exception:
+            logger.warning("Failed to stop mdrive on %s (non-fatal)", host_label)
+
+    # 3. 清理残留 VMC 进程
     try:
         run_remote(
             host=config.soc1_host,
@@ -74,29 +159,18 @@ def install_versions(context: RunContext, config: ToolConfig) -> StepResult:
     except Exception:
         pass
 
-    # 2. 捕获安装前版本信息
-    before_info = _collect_raw_version_info(config)
-
     try:
-        for pkg in context.packages:
-            # 跳过已安装的版本（对比 vmc list 输出）
-            if _skip_if_installed(pkg.version, before_info):
-                logger.info(
-                    "SKIP %s=%s — already installed on soc1",
-                    pkg.package, pkg.version,
+        for pkg in to_install:
+            install_cmd = (
+                env.shell_init()
+                + "vmc install -n {} -v {}{}".format(
+                    shlex.quote(pkg.package),
+                    shlex.quote(pkg.version),
+                    " --deps" if pkg.package == "mdrive_map" else "",
                 )
-                installed_packages.append({
-                    "package": pkg.package,
-                    "version": pkg.version,
-                    "action": "skipped",
-                })
-                continue
-
-            install_cmd = env.shell_init() + "md install {}".format(shlex.quote(pkg.version))
+            )
             logger.info(
-                "INSTALL %s=%s on soc1 (timeout %ds). "
-                "md install may download ~100 MB; subprocess output is captured "
-                "so no progress lines appear until it finishes.",
+                "INSTALL %s=%s on soc1 (timeout %ds)",
                 pkg.package, pkg.version, config.install_timeout_sec,
             )
             t0 = datetime.now(timezone.utc)
@@ -119,19 +193,21 @@ def install_versions(context: RunContext, config: ToolConfig) -> StepResult:
             })
             logger.info("DONE %s=%s (%.1fs)", pkg.package, pkg.version, elapsed)
 
-        # 3. 启动 mdrive 服务
-        logger.info("Starting mdrive service on soc1 (md start)")
-        start_result = run_remote(
-            host=config.soc1_host,
-            port=config.soc1_port,
-            user=config.soc1_user,
-            password=config.ssh_password,
-            remote_command=env.shell_init() + "md start",
-            timeout_sec=config.command_timeout_sec,
-            check=True,
-        )
-        commands.append(start_result)
-        logger.info("mdrive service started successfully")
+        # 4. 启动 soc1 / soc2 上的 mdrive
+        for host_label, host, port, user in [
+            ("soc1", config.soc1_host, config.soc1_port, config.soc1_user),
+            ("soc2", config.soc2_host, config.soc2_port, config.soc2_user),
+        ]:
+            logger.info("Starting mdrive on %s", host_label)
+            start_result = run_remote(
+                host=host, port=port, user=user,
+                password=config.ssh_password,
+                remote_command="sudo systemctl start mdrive",
+                timeout_sec=config.command_timeout_sec,
+                check=True,
+            )
+            commands.append(start_result)
+            logger.info("mdrive started on %s", host_label)
 
     except CommandExecutionError as exc:
         ended_at = datetime.now(timezone.utc)
@@ -182,7 +258,7 @@ def install_versions(context: RunContext, config: ToolConfig) -> StepResult:
         ended_at=ended_at.isoformat(),
         duration_sec=duration_sec,
         message="Installed {} package(s) and started mdrive".format(
-            len(installed_packages)
+            len(to_install)
         ),
         commands=commands,
         artifacts={
@@ -191,3 +267,11 @@ def install_versions(context: RunContext, config: ToolConfig) -> StepResult:
             "installed_packages": installed_packages,
         },
     )
+
+
+def install_versions(context: RunContext, config: ToolConfig) -> StepResult:
+    """per-dataset 包装器，委托给批次级 install_packages。
+    
+    保留此函数以兼容 debug 模式和单点 install_version 调用。
+    """
+    return install_packages(context.packages, config)

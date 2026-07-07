@@ -108,10 +108,7 @@ def load_manifest_packages(path: str) -> Optional[List[PackageSpec]]:
                 raise ManifestError(
                     f"Package #{idx + 1}: 'package' and 'version' are required"
                 )
-            deps = item.get("install_with_deps", True)
-            if isinstance(deps, str):
-                deps = deps.lower() in ("1", "true", "yes")
-            specs.append(PackageSpec(package=pkg, version=ver, install_with_deps=bool(deps)))
+            specs.append(PackageSpec(package=pkg, version=ver))
         else:
             raise ManifestError(
                 f"Package #{idx + 1}: must be a string or dict, got {type(item).__name__}"
