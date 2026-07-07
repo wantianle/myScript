@@ -29,6 +29,12 @@ sshc xzt500021
 sshc xzt500021 -v
 ```
 
+为车辆创建或检查指定端口映射：
+
+```bash
+sshc xzt500021 add 8765
+```
+
 安装脚本会自动安装命令入口、zsh/bash 补全，并创建默认配置文件 `~/.sshc_config`。安装后如果当前 shell 还没有识别 `sshc` 或补全，重新加载 shell 配置：
 
 ```bash
@@ -55,14 +61,40 @@ source ~/.bashrc
 10. 执行 `ssh-copy-id` 上传配置私钥对应的 `.pub` 公钥，按提示输入车端密码。
 11. 执行 `ssh nvidia@<server_ip> -p <server_port>`。
 
+终端输出会自动着色：`active` / `true` 为绿色，`inactive` / `failed` 为红色，`pending` 为黄色，端口地址中的数字为青色，`[INFO]` / `[WARNING]` 带颜色前缀。管道重定向或设置 `NO_COLOR` 环境变量时自动关闭颜色。
+
 ### `sshc <vehicle> -v`
 
-只查看信息，不创建映射，不执行 SSH。即使车辆当前离线，或者返回里没有 `c4Online` 字段，也会尽量展示最近一次上报的车辆信息。输出内容包括：
+只查看信息，不创建映射，不执行 SSH。即使车辆当前离线，也会尽量展示最近一次上报的车辆信息。输出内容包括：
 
-- 车辆 ID。
-- `c4Online` 状态。
+- 车辆名称。
 - 车辆版本信息，例如 `c4`、`mdrive`、`mdrive_conf`。
-- 已有端口映射、状态和可复制的 SSH 命令。
+- 已有端口映射（格式 `port/proto -> host:port`）、状态和 `frpc_connected` 标记。
+- 22 端口映射下方显示可复制的 `ssh` 命令。
+- 9000 / 8765 端口映射下方显示 `websocket` 连接地址。
+
+### `sshc <vehicle> add <port>`
+
+为指定车辆创建或检查端口映射，不执行 SSH：
+
+```bash
+sshc xzt500021 add 8765
+```
+
+流程：
+
+1. 登录并查询车辆，要求 `c4Online == true`。
+2. 检查目标端口映射是否 `status=active`、`frpc_connected=true` 且公网端口可连接。
+3. 已存在且正常 → 直接返回映射信息。
+4. 映射为 `inactive`、`fail` 或 `failed` → 删除旧映射后重建。
+5. 无映射 → 创建新映射并等待就绪。
+6. 等待超时（10 秒 → `PORT_WAIT_SECONDS`）后仍未就绪则报错退出。
+
+支持短写 `a` 替代 `add`：
+
+```bash
+sshc xzt500021 a 22
+```
 
 ### `sshc config`
 
