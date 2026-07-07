@@ -188,6 +188,8 @@ sys::nopasswd(){
     chmod 700 "$(dirname "$KEY_PATH")" 2>/dev/null
     chmod 600 "$KEY_PATH" "$KEY_PATH.pub" 2>/dev/null
     chown "$USER:$USER" "$KEY_PATH" "$KEY_PATH.pub" "$(dirname "$KEY_PATH")" 2>/dev/null || true
+    # 修复 ~/.ssh 下所有文件权限（sudo bash -c 下可能 root 所有）
+    chown -R "$USER:$USER" "$(dirname "$KEY_PATH")" 2>/dev/null || true
 
     if ssh_err=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$USER@$SOC2_IP" exit 2>&1); then
         log_ok "soc2 SSH 免密已配置"

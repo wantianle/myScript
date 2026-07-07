@@ -13,6 +13,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
 
+# 备选密码列表（按顺序尝试）
+SSH_PASSWORDS=("mini!@#123.com" "nvidia")
+SSH_PASS_CACHED=""
+
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
@@ -38,6 +42,58 @@ if [ ! -f "$KEY_PATH" ]; then
 else
     log_ok "  密钥已存在: $KEY_PATH"
 fi
+
+# 自动探测 SSH 密码（类似 deploy.sh 的 sudo_pass_discover）
+ssh_pass_discover() {
+    local target=$1 port=$2
+    local found=""
+
+    # 1. 先试缓存的密码
+    if [[ -n "${SSH_PASS_CACHED:-}" ]]; then
+        if SSHPASS="$SSH_PASS_CACHED" sshpass -e ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o PreferredAuthentications=password -o PasswordAuthentication=yes \
+            -o ConnectTimeout=5 -o LogLevel=ERROR \
+            -p "$port" "$target" "exit" 2>/dev/null; then
+            echo -e "${GREEN}[OK]${NC}  密码匹配 (缓存)" >&2
+            echo "$SSH_PASS_CACHED"
+            return 0
+        fi
+        echo -e "${YELLOW}[WARNING]${NC}  缓存密码失效，重新探测..." >&2
+        SSH_PASS_CACHED=""
+    fi
+
+    # 2. 遍历预设密码
+    for pw in "${SSH_PASSWORDS[@]}"; do
+        if SSHPASS="$pw" sshpass -e ssh \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o PreferredAuthentications=password -o PasswordAuthentication=yes \
+            -o ConnectTimeout=5 -o LogLevel=ERROR \
+            -p "$port" "$target" "exit" 2>/dev/null; then
+            found="$pw"
+            break
+        fi
+    done
+
+    # 3. 命中则缓存并返回
+    if [[ -n "$found" ]]; then
+        SSH_PASS_CACHED="$found"
+        echo -e "${GREEN}[OK]${NC}  密码匹配" >&2
+        echo "$found"
+        return 0
+    fi
+
+    # 4. 都不行则交互式问
+    echo -e "${YELLOW}[WARNING]${NC}  预设密码均不匹配" >&2
+    read -rsp "  请输入 $target 的密码: " found
+    echo ""
+    if [[ -n "$found" ]]; then
+        SSH_PASS_CACHED="$found"
+        echo "$found"
+        return 0
+    fi
+    return 1
+}
 
 # sshpass 辅助分发函数：避免交互密码提示被终端屏蔽
 copy_key() {
@@ -118,13 +174,25 @@ chmod 600 "$CONFIG_PATH"
 # [3/3] 分发公钥
 log_info "分发公钥..."
 
-# 尝试用 sshpass 避免交互密码提示被终端吞掉
+# 自动探测密码（尝试预设密码列表 + 缓存命中）
 if command -v sshpass &>/dev/null; then
-    read -rsp "  请输入远程主机 ($USER_NAME) 的密码 (直接回车使用交互式): " SSHPASS
-    echo ""
-fi
-if [ -z "${SSHPASS:-}" ]; then
-    log_info "  将使用交互式 ssh-copy-id，请留意终端密码提示。"
+    first_target=""
+    first_port=""
+    if [ "$MODE" == "1" ]; then
+        first_target="$USER_NAME@$SOC1_IP"
+        first_port=22
+    else
+        first_port=$(echo "$TARGET_WAN" | awk '{print $1}')
+        first_target="$USER_NAME@$WAN_DOMAIN"
+    fi
+
+    SSHPASS=$(ssh_pass_discover "$first_target" "$first_port")
+    if [[ -z "$SSHPASS" ]]; then
+        log_err "  未获取到密码，退出"
+        exit 1
+    fi
+else
+    log_info "  未安装 sshpass，将使用交互式 ssh-copy-id。"
 fi
 export SSHPASS
 

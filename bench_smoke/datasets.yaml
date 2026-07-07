@@ -1,0 +1,53 @@
+# bench_smoke 默认数据集清单
+# =============================
+# ./run.sh 无参执行时自动使用此文件。包含 6 条真实 bench 验证数据。
+# 运行前请将 packages 版本替换为实际值。
+#
+# 用法:
+#   ./run.sh                              # 全跑
+#   ./run.sh --dataset-id 7037566695      # 选一条
+#   ./run.sh --dataset-id 7037566695,7037600648  # 选多条
+#   ./run.sh run --manifest other.yaml    # 使用其他清单
+
+packages:
+  # ----- 运行前必须替换为实际版本 -----
+  - mdrive=test.4.0.1.mdrive4_test_base_0706
+  - mdrive_conf=ECAR_HW4.4.0.1.conf_test_base_0706
+  - mdrive_map=GD_SZ_FuBao_new_map.3.2.0 # 地图包（可选）
+
+datasets:
+  - dataset_id: "7037566695"
+    short_name: "鬼探头二轮车"
+    issue_description: "mdrive4_鬼探头二轮车_自车刹车不及时"
+    feishu_url: "https://project.feishu.cn/t03o4q/issue/detail/7037566695"
+    source_path: "/media/nas/mdrive4/20260703/XZT500018/bag/record_20260703_142922/record.00050.144153.mcap"
+
+  - dataset_id: "7037600648"
+    short_name: "掉头碰撞风险"
+    issue_description: "mdrive4_XZT500101_掉头_掉头转弯半径大且速度快，有碰撞风险"
+    feishu_url: "https://project.feishu.cn/t03o4q/issue/detail/7037600648"
+    source_path: "/media/nas/mdrive4/20260703/XZT500101/bag/record_20260703_160021/record.00103.162552.mcap"
+
+  - dataset_id: "7038416777"
+    short_name: "对向掉头未减速"
+    issue_description: "Mdrive4_福保_对向车掉头自车未减速"
+    feishu_url: "https://project.feishu.cn/t03o4q/issue/detail/7038416777"
+    source_path: "/media/nas/mdrive4/20260704/XZT500021/bag/record_20260704_203202/record.00310.214903.mcap"
+
+  - dataset_id: "7036330090"
+    short_name: "横穿二轮车"
+    issue_description: "mdrive4_横穿二轮车未及时刹车"
+    feishu_url: "https://project.feishu.cn/t03o4q/issue/detail/7036330090"
+    source_path: "/media/nas/mdrive4/20260702/XZT500021/bag/record_20260702_165427/record.00245.175513.mcap"
+
+  - dataset_id: "7035526258"
+    short_name: "右侧鬼探头"
+    issue_description: "mdrive4_右侧鬼探头碰撞风险"
+    feishu_url: "https://project.feishu.cn/t03o4q/issue/detail/7035526258"
+    source_path: "/media/nas/mdrive4/20260701/XZT500021/bag/record_20260701_202437_luxian1/record.00055.203823.mcap"
+
+  - dataset_id: "7034495672"
+    short_name: "违规右转未避让"
+    issue_description: "Mdrive4_左边车违规右转_自车未减速避让_防御性驾驶不足"
+    feishu_url: "https://project.feishu.cn/t03o4q/issue/detail/7034495672"
+    source_path: "/media/nas/mdrive4/20260701/XZT500018/bag/record_20260701_105907/record.00083.111938.mcap"

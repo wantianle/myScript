@@ -15,7 +15,7 @@ SSH_USER="nvidia"
 SSH_PASS="mini!@#123.com"
 SUDO_PASS="mini!@#123.com"
 BASE_IP_START=51
-BASE_IP_END=58
+BASE_IP_END=57
 SOC1_PORT=222
 SOC2_PORT=322
 TIMEOUT=20
@@ -103,18 +103,27 @@ else
   echo "    fstab entry already exists, skipping"
 fi
 
-echo "  [4/6] Starting systemd service..."
+echo "  [4/7] Adding mount dependency on route service..."
+mkdir -p /etc/systemd/system/media-nas.mount.d
+cat > /etc/systemd/system/media-nas.mount.d/route-first.conf << 'DROPOF'
+[Unit]
+Requires=add-nas-route.service
+After=add-nas-route.service
+DROPOF
+echo "    Drop-in written"
+
+echo "  [5/7] Reloading systemd and starting route service..."
 systemctl daemon-reload
 systemctl enable add-nas-route.service 2>/dev/null || true
 systemctl restart add-nas-route.service 2>/dev/null || true
 sleep 1
 
-echo "  [5/6] Creating /media/nas..."
+echo "  [6/7] Creating /media/nas..."
 mkdir -p /media/nas
 chown -R nvidia:nvidia /media/nas
 echo "    Done"
 
-echo "  [6/6] Mounting NAS..."
+echo "  [7/7] Mounting NAS..."
 mount -a 2>&1 || true
 
 echo ""
