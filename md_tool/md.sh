@@ -596,10 +596,10 @@ sys::export() {
     sys::prepare_export_ssh || return 1
 
     # 2. 文件扫描与交互选择
-    log_info "正在扫描 $MDRIVE_DATA_ROOT 下的可导出目录..."
+    log_info "正在扫描 $MDRIVE_DATA_ROOT 下的所有可导出内容..."
 
     local selections
-    selections=$(cd -L "$MDRIVE_DATA_ROOT" && find -L bag log core pcap crash_log perf -mindepth 1 -maxdepth 3 -not -path '*/.*' 2>/dev/null | sort | fzf \
+    selections=$(cd -L "$MDRIVE_DATA_ROOT" && find -L . -mindepth 1 -maxdepth 3 -not -path '*/.*' 2>/dev/null | sort | fzf \
         --multi \
         --ansi \
         --layout=reverse \
@@ -2186,11 +2186,11 @@ vmc::finstall() {
                 if ($i ~ /^name: /) { sub(/^name: /, "", $i); n=$i }
                 if ($i ~ /^version:/) { sub(/^version:[ ]*/, "", $i); r=$i }
             }
-            if (r == v) { print n; exit }
+            if (r == v) { print n; exact=1; exit }
             if (index(r, v "-") == 1 || index(r, v ".") == 1) { if (!pref) { pref=n } }
             if (!last) { last=n }
         }
-        END { if (pref) print pref; else if (last) print last }
+        END { if (!exact) { if (pref) print pref; else if (last) print last } }
     ')
     if [[ -n "$pkg_name" ]]; then
         log_info "下载安装 [${pkg_name}] ${version}..."

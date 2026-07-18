@@ -11,14 +11,17 @@ Go 实现的 SD-WAN VPN 隧道客户端，跨平台支持。
 ## 架构
 
 ```
-panel (Wails) / CLI  ──HTTP──▶  sdwan daemon  ──UDP──▶  SD-WAN server
-                                    │
-                                    ├─ TUN/Wintun/utun
-                                    ├─ IP + 路由
-                                    └─ 控制 API (:17890)
+Windows panel  ──HTTP──▶  sdwan daemon  ──UDP──▶  SD-WAN server
+Linux/macOS service ───▶  sdwan foreground ──UDP──▶ SD-WAN server
+                                  │
+                                  ├─ TUN/Wintun/utun
+                                  └─ IP + 路由
 ```
 
-核心进程以 **daemon 模式** 运行，拥有 TUN 网卡、IP 和路由的生命周期。面板和 CLI 通过 localhost HTTP 控制 API 与之通信，不直接操作网卡或路由。daemon 启动失败时不退出，后台自动重连（指数退避 500ms~8s），auth 拒绝时永久停止。
+Windows 面板通过 localhost 控制 API 管理 daemon。Linux 和 macOS 由 systemd/launchd
+以前台模式运行 `sdwan -f /etc/sdwan/iwan.conf`，由服务管理器负责重启。核心进程拥有
+TUN 网卡、IP 和路由的生命周期；启动失败时会后台自动重连（指数退避 500ms~8s），auth
+拒绝时永久停止。
 
 ## 目录结构
 
@@ -53,7 +56,7 @@ sdwan-go/
 
 **Linux / macOS：**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wantianle/sdwan-go/master/scripts/install.sh | sudo bash
+curl --connect-timeout 10 --max-time 60 -fsSL https://gh.ddlc.top/https://raw.githubusercontent.com/wantianle/sdwan-go/master/scripts/install.sh | sudo bash
 ```
 
 **Windows（管理员 PowerShell）：**
@@ -61,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/wantianle/sdwan-go/master/scripts/i
 iwr -useb https://raw.githubusercontent.com/wantianle/sdwan-go/master/scripts/install.ps1 | iex
 ```
 
-> 直连 GitHub 失败时脚本会自动切换镜像（gh.ddlc.top → gh-proxy.com → gh.idayer.com）。
+> 上面的镜像只用于拉取安装脚本；脚本启动后会自动切换下载镜像（gh.ddlc.top → gh-proxy.com → gh.idayer.com）。若该镜像不可用，可把 `https://gh.ddlc.top/` 改为 `https://gh-proxy.com/` 或 `https://gh.idayer.com/`。`--connect-timeout 10 --max-time 60` 会避免外层 curl 无限等待。
 
 **安装指定版本：**
 ```bash
@@ -102,23 +105,105 @@ routenet=192.168.0.0/16
 | `tunname` | | TUN 网卡名，默认 iwan1 |
 | `routenet` | | 内网路由网段，CIDR 格式 |
 
+## 日常管理
+
+安装脚本会把 Linux/macOS 配置成系统服务；Windows 由 `panel.exe`、托盘图标和后台 daemon 共同管理。修改配置后需要重启对应服务或面板才会生效。
+
+### Linux（systemd）
+
+```bash
+# 服务状态 / 启动 / 停止 / 重启
+sudo systemctl status sdwan
+sudo systemctl start sdwan
+sudo systemctl stop sdwan
+sudo systemctl restart sdwan
+
+# 设置或取消开机自启
+sudo systemctl enable sdwan
+sudo systemctl disable sdwan
+
+# 编辑配置并重启
+sudo vi /etc/sdwan/iwan.conf
+sudo systemctl restart sdwan
+
+# 实时日志 / 最近日志
+sudo journalctl -u sdwan -f
+sudo journalctl -u sdwan -n 50 --no-pager
+
+# 检查虚拟网卡、分配 IP 与内网路由
+ip -4 addr show iwan1
+ip route show 192.168.0.0/16
+```
+
+### macOS（launchd）
+
+macOS 会动态分配本次服务进程所拥有的 `utunN`（不应假定固定网卡名）。LaunchDaemon
+以 `sdwan -f /etc/sdwan/iwan.conf` 前台运行，并由 `KeepAlive` 负责重启。要持续停止服务，
+请使用 `launchctl bootout`。服务 stderr 日志为 `/var/log/sdwan.log`。
+
+```bash
+# 服务状态
+sudo launchctl list | grep com.minieye.sdwan
+
+# 重启服务（修改配置后使用）
+sudo launchctl kickstart -k system/com.minieye.sdwan
+
+# 持续停止/移除当前已加载的服务
+sudo launchctl bootout system/com.minieye.sdwan
+
+# 重新加载服务（bootout 后或排错时使用）
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.minieye.sdwan.plist
+
+# 编辑配置并重启
+sudo vi /etc/sdwan/iwan.conf
+sudo launchctl kickstart -k system/com.minieye.sdwan
+
+# 实时日志 / 检查 utun 网卡与路由
+tail -f /var/log/sdwan.log
+ifconfig | grep -A4 '^utun'
+route -n get 192.168.0.0
+```
+
+### Windows（Panel / 托盘）
+
+在开始菜单运行 **SDWAN Panel**，或双击安装目录中的 `panel.exe`。托盘图标左键打开面板，右键可退出；退出会断开 SD-WAN 并清理虚拟网卡。
+
+```powershell
+# 配置和日志位置
+notepad C:\ProgramData\sdwan\iwan.conf
+Get-Content C:\ProgramData\sdwan\sdwan.log -Wait -Tail 30
+Get-Content C:\ProgramData\sdwan\panel.log -Tail 80
+
+# 配置修改后：完全退出旧进程，再启动面板
+taskkill /f /im panel.exe
+taskkill /f /im sdwan-windows-amd64.exe
+Start-Process C:\ProgramData\sdwan\panel.exe
+
+# 检查虚拟网卡、IP 与内网路由
+Get-NetIPAddress -InterfaceAlias iwan1 -AddressFamily IPv4
+Get-NetRoute -DestinationPrefix 192.168.0.0/16 | Where-Object InterfaceAlias -eq iwan1
+```
+
+> Windows 安装脚本会尝试授予当前用户 `C:\ProgramData\sdwan\iwan.conf` 的修改权限；若仍被公司策略拦截，请以管理员身份打开记事本后编辑该文件。
+
 ## CLI 子命令
 
-`sdwan -f iwan.conf` 启动 daemon 后，可用子命令控制：
+Windows 面板启动后台 daemon 后，可用 CLI 子命令通过控制 API 查询状态或切换服务器。
+Linux/macOS 服务以前台模式运行，不提供 daemon 控制 API。
 
 ```bash
 # 查看当前状态（服务器、路由、session、冲突等）
-sdwan status -f /etc/sdwan/iwan.conf
+sudo sdwan status -f /etc/sdwan/iwan.conf
 
 # 切换服务器
-sdwan switch minieye.8866.org -f /etc/sdwan/iwan.conf
+sudo sdwan switch minieye.8866.org -f /etc/sdwan/iwan.conf
 ```
 
-子命令通过读取同目录下的 `control.token` 与 daemon 的 HTTP API 通信。
+Windows 子命令通过读取同目录下的 `control.token` 与 daemon 的 HTTP API 通信。
 
 ## 控制 API (HTTP)
 
-daemon 在 `127.0.0.1:17890` 提供 REST API，Bearer token 鉴权（token 文件与 daemon 同目录的 `control.token`）。
+Windows daemon 在 `127.0.0.1:17890` 提供 REST API，Bearer token 鉴权（token 文件与 daemon 同目录的 `control.token`）。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

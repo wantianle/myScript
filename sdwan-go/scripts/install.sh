@@ -20,6 +20,11 @@ CONFIG_DIR="/etc/sdwan"
 CONFIG_FILE="$CONFIG_DIR/iwan.conf"
 VERSION="latest"
 TEST_HOST="${TEST_HOST:-hfs.minieye.tech}"
+ROUTENET="192.168.0.0/16"
+DOWNLOAD_TMP=""
+MANIFEST_TMP=""
+SERVICE_JOURNAL_CURSOR=""
+MACOS_LOG_OFFSET=0
 
 G='\033[0;32m'; R='\033[0;31m'; Y='\033[0;33m'; B='\033[0;34m'; NC='\033[0m'
 
@@ -84,6 +89,14 @@ check_root() {
     fi
 }
 
+check_controlling_tty() {
+    if ! { exec 3<>/dev/tty; } 2>/dev/null; then
+        echo -e "${R}❌ 此安装程序需要可用的控制终端以读取交互式配置${NC}" >&2
+        exit 1
+    fi
+    exec 3>&-
+}
+
 # ────────────────────────────────────────────────────────────
 detect_platform() {
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -97,7 +110,7 @@ detect_platform() {
 
     case "$OS" in
         linux)   BINARY="sdwan-linux-${ARCH}" ;;
-        darwin)  BINARY="sdwan-macos-${ARCH}" ;;
+        darwin)  BINARY="sdwan-darwin-${ARCH}" ;;
         *) echo -e "${R}❌ 不支持的系统: $OS${NC}"; exit 1 ;;
     esac
 
@@ -120,7 +133,12 @@ select_server() {
     for node in "${nodes[@]}"; do
         IFS="|" read -r id desc addr <<< "$node"
         local lat
-        lat=$(ping -c 2 -W 2 "$addr" 2>/dev/null | awk -F '/' '/^rtt |^round-trip / {printf "%.0f", $5}')
+        local -a ping_args=(-c 2)
+        case "$OS" in
+            linux)  ping_args+=(-W 2) ;;    # seconds
+            darwin) ping_args+=(-W 2000) ;; # milliseconds
+        esac
+        lat=$(ping "${ping_args[@]}" "$addr" 2>/dev/null | awk -F '/' '/^rtt |^round-trip / {printf "%.0f", $5}')
         local display color suffix="ms"
         if [[ -z "$lat" ]]; then
             display="超时"; color="$R"; suffix=""
@@ -170,9 +188,17 @@ probe_mtu() {
         local -a _ping_args=()
         case "$OS" in
             linux)  _ping_args=(-4 -M "$do_flag" -s "$mid" -c 1 -W 1 "$server") ;;
-            darwin) _ping_args=(-4 -D -s "$mid" -c 1 -W 1000 "$server") ;;
+            darwin) _ping_args=(-D -s "$mid" -c 1 -W 1000 "$server") ;;
         esac
-        if ping "${_ping_args[@]}" >/dev/null 2>&1; then
+        local attempt=0 passed=0
+        while [[ $attempt -lt 3 ]]; do
+            attempt=$(( attempt + 1 ))
+            if ping "${_ping_args[@]}" >/dev/null 2>&1; then
+                passed=1
+                break
+            fi
+        done
+        if [[ $passed -eq 1 ]]; then
             best=$mid
             low=$(( mid + 1 ))
         else
@@ -231,7 +257,10 @@ EOF
 file_size() {
     local f="$1"
     [[ -f "$f" ]] || { echo 0; return; }
-    stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || { wc -c < "$f" | tr -d ' '; }
+    case "$OS" in
+        darwin) stat -f%z "$f" 2>/dev/null || { wc -c < "$f" | tr -d ' '; } ;;
+        linux)  stat -c%s "$f" 2>/dev/null || { wc -c < "$f" | tr -d ' '; } ;;
+    esac
 }
 
 # Helper: human-readable byte count
@@ -256,26 +285,92 @@ clear_download_line() {
     printf "\r\033[K"
 }
 
+cleanup_download_temp() {
+    if [[ -n "$DOWNLOAD_TMP" ]]; then
+        rm -f "$DOWNLOAD_TMP"
+    fi
+    if [[ -n "$MANIFEST_TMP" ]]; then
+        rm -f "$MANIFEST_TMP"
+    fi
+}
+
+trap cleanup_download_temp EXIT
+
 # ────────────────────────────────────────────────────────────
+sha256_file() {
+    local file="$1"
+    case "$OS" in
+        darwin) shasum -a 256 "$file" | awk '{print $1}' ;;
+        linux)  sha256sum "$file" | awk '{print $1}' ;;
+    esac
+}
+
+checksum_from_manifest() {
+    local manifest="$1"
+    local binary="$2"
+    awk -v binary="$binary" '
+        length($1) == 64 && $1 ~ /^[0-9a-fA-F]+$/ && \
+            ($2 == binary || $2 == "*" binary || $2 == "dist/" binary || $2 == "*dist/" binary) {
+            print tolower($1)
+            exit
+        }
+    ' "$manifest"
+}
+
 download_binary() {
     local binary="$1"
-    local release_url
+    local release_base
     if [[ "$VERSION" == "latest" ]]; then
-        release_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/${binary}"
+        release_base="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download"
     else
-        release_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}/${binary}"
+        release_base="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${VERSION}"
     fi
+    local release_url="${release_base}/${binary}"
+    local manifest_url="${release_base}/SHA256SUMS"
     local dest="$INSTALL_DIR/sdwan"
+
+    mkdir -p "$INSTALL_DIR"
 
     echo -e "${B}📥 下载 $binary (version: $VERSION) ...${NC}"
 
-    # Build ordered URL list: each proxy mirror then direct
+    # Build ordered URL lists: each proxy mirror then direct.
     local -a urls=()
+    local -a manifest_urls=()
     for mirror in "${GH_PROXIES[@]}"; do
         local name="${mirror#*://}"; name="${name%/}"  # "ghproxy.com"
         urls+=("${mirror}${release_url} (${name})")
+        manifest_urls+=("${mirror}${manifest_url} (${name})")
     done
     urls+=("$release_url (direct)")
+    manifest_urls+=("$manifest_url (direct)")
+
+    local expected_checksum="" manifest_entry manifest_candidate manifest_label
+    echo -e "${B}🔐 获取 SHA256SUMS ...${NC}"
+    for manifest_entry in "${manifest_urls[@]}"; do
+        manifest_candidate="${manifest_entry% (*}"
+        manifest_label="${manifest_entry##*(}"
+        manifest_label="${manifest_label%)}"
+        MANIFEST_TMP=$(mktemp "$INSTALL_DIR/.sdwan-sha256sums.XXXXXX")
+        if curl -fsSL --connect-timeout 5 --max-time 60 "$manifest_candidate" -o "$MANIFEST_TMP" 2>/dev/null; then
+            expected_checksum=$(checksum_from_manifest "$MANIFEST_TMP" "$binary")
+            rm -f "$MANIFEST_TMP"
+            MANIFEST_TMP=""
+            if [[ "$expected_checksum" =~ ^[0-9a-f]{64}$ ]]; then
+                echo -e "  ${G}✅ SHA256SUMS: ${manifest_label}${NC}"
+                break
+            fi
+            echo -e "  ${Y}⚠️  SHA256SUMS 无效: ${manifest_label}${NC}"
+        else
+            rm -f "$MANIFEST_TMP"
+            MANIFEST_TMP=""
+            echo -e "  ${Y}⚠️  SHA256SUMS 下载失败: ${manifest_label}${NC}"
+        fi
+    done
+
+    if [[ ! "$expected_checksum" =~ ^[0-9a-f]{64}$ ]]; then
+        echo -e "${R}❌ 无法获取或解析 ${binary} 的 SHA256SUMS，已停止安装以保护完整性${NC}"
+        exit 1
+    fi
 
     local total=${#urls[@]}
     local i=0
@@ -288,7 +383,10 @@ download_binary() {
         # ── discover total size via HEAD (follow redirects) ──
         local total_size=0 headers
         headers=$(curl -fsSLI --connect-timeout 5 --max-time 10 "$url" 2>/dev/null || true)
-        total_size=$(printf '%s\n' "$headers" | grep -i '^Content-Length:' | tail -1 | awk '{print $2}' | tr -d '\r')
+        # A proxy/redirect may omit Content-Length. With pipefail enabled,
+        # grep then returns 1; treat that as "no progress size available",
+        # not as a fatal installer error.
+        total_size=$(printf '%s\n' "$headers" | awk 'tolower($1) == "content-length:" { size=$2 } END { gsub("\\r", "", size); print size }')
         if [[ -z "$total_size" ]] || ! [[ "$total_size" =~ ^[0-9]+$ ]] || (( total_size <= 0 )); then
             total_size=0
         fi
@@ -299,13 +397,14 @@ download_binary() {
             human_total=$(bytes_human "$total_size")
 
             # Start download silently in background
-            curl -fsSL --connect-timeout 5 --max-time 60 "$url" -o "$dest" &>/dev/null &
+            DOWNLOAD_TMP=$(mktemp "$INSTALL_DIR/.sdwan.XXXXXX")
+            curl -fsSL --connect-timeout 5 --max-time 60 "$url" -o "$DOWNLOAD_TMP" &>/dev/null &
             local curl_pid=$!
 
             # Poll destination file size; render single-line progress
             local cur=0 pct=0 human_cur=""
             while kill -0 "$curl_pid" 2>/dev/null; do
-                cur=$(file_size "$dest" 2>/dev/null || echo 0)
+                cur=$(file_size "$DOWNLOAD_TMP" 2>/dev/null || echo 0)
                 pct=$(( cur * 100 / total_size ))
                 [[ $pct -gt 100 ]] && pct=100
                 human_cur=$(bytes_human "$cur")
@@ -321,36 +420,61 @@ download_binary() {
 
             if [[ $curl_rc -eq 0 ]]; then
                 local final_sz
-                final_sz=$(file_size "$dest" 2>/dev/null || echo 0)
+                final_sz=$(file_size "$DOWNLOAD_TMP" 2>/dev/null || echo 0)
                 human_cur=$(bytes_human "$final_sz")
                 clear_download_line
-                printf "  [%d/%d] %-20s ${G}✅ %s${NC}\n" \
-                    "$i" "$total" "$label" "$human_cur"
-                chmod +x "$dest"
-                return 0
-            else
-                rm -f "$dest"
-                clear_download_line
-                printf "  [%d/%d] %-20s ${Y}超时${NC}\n" \
+                local actual_checksum
+                actual_checksum=$(sha256_file "$DOWNLOAD_TMP" 2>/dev/null || true)
+                if [[ "$actual_checksum" == "$expected_checksum" ]]; then
+                    printf "  [%d/%d] %-20s ${G}✅ %s${NC}\n" \
+                        "$i" "$total" "$label" "$human_cur"
+                    chmod 755 "$DOWNLOAD_TMP"
+                    mv -f "$DOWNLOAD_TMP" "$dest"
+                    DOWNLOAD_TMP=""
+                    return 0
+                fi
+                rm -f "$DOWNLOAD_TMP"
+                DOWNLOAD_TMP=""
+                printf "  [%d/%d] %-20s ${R}校验和不匹配${NC}\n" \
                     "$i" "$total" "$label"
+            else
+                rm -f "$DOWNLOAD_TMP"
+                DOWNLOAD_TMP=""
+                clear_download_line
+                printf "  [%d/%d] %-20s ${Y}下载失败 (curl %d)${NC}\n" \
+                    "$i" "$total" "$label" "$curl_rc"
             fi
         else
             # ── fallback: no Content-Length available ──
             printf "  [%d/%d] %-20s ... " "$i" "$total" "$label"
-            if curl -fsSL --connect-timeout 5 --max-time 60 "$url" -o "$dest" 2>/dev/null; then
+            DOWNLOAD_TMP=$(mktemp "$INSTALL_DIR/.sdwan.XXXXXX")
+            if curl -fsSL --connect-timeout 5 --max-time 60 "$url" -o "$DOWNLOAD_TMP" 2>/dev/null; then
                 local final_sz
-                final_sz=$(file_size "$dest" 2>/dev/null || echo 0)
+                final_sz=$(file_size "$DOWNLOAD_TMP" 2>/dev/null || echo 0)
                 local human_size
                 human_size=$(bytes_human "$final_sz")
-                echo -e "${G}✅ ${human_size}${NC}"
-                chmod +x "$dest"
-                return 0
+                local actual_checksum
+                actual_checksum=$(sha256_file "$DOWNLOAD_TMP" 2>/dev/null || true)
+                if [[ "$actual_checksum" == "$expected_checksum" ]]; then
+                    echo -e "${G}✅ ${human_size}${NC}"
+                    chmod 755 "$DOWNLOAD_TMP"
+                    mv -f "$DOWNLOAD_TMP" "$dest"
+                    DOWNLOAD_TMP=""
+                    return 0
+                fi
+                rm -f "$DOWNLOAD_TMP"
+                DOWNLOAD_TMP=""
+                echo -e "${R}校验和不匹配${NC}"
             else
-                rm -f "$dest"
-                echo -e "${Y}超时${NC}"
+                local curl_rc=$?
+                rm -f "$DOWNLOAD_TMP"
+                DOWNLOAD_TMP=""
+                echo -e "${Y}下载失败 (curl ${curl_rc})${NC}"
             fi
         fi
     done
+
+    cleanup_download_temp
 
     echo -e "${R}❌ 所有下载方式均失败，请检查网络${NC}"
     exit 1
@@ -376,10 +500,13 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-    # Capture timestamp before starting so verify_tunnel can filter current-attempt logs
-    SERVICE_START_TS=$(date +'%Y-%m-%d %H:%M:%S')
     systemctl daemon-reload
-    systemctl enable --now sdwan
+    systemctl enable sdwan
+    # Capture the journal boundary immediately before this restart. Records
+    # queried after this cursor belong to the current service attempt only.
+    SERVICE_JOURNAL_CURSOR=$(journalctl -u sdwan -n 0 --show-cursor --no-pager 2>/dev/null \
+        | awk '/^-- cursor: / { sub(/^-- cursor: /, ""); print; exit }' || true)
+    systemctl restart sdwan
     sleep 2
 
     if systemctl is-active --quiet sdwan; then
@@ -392,8 +519,47 @@ EOF
 # ────────────────────────────────────────────────────────────
 install_macos_service() {
     local plist="/Library/LaunchDaemons/com.minieye.sdwan.plist"
+    local label="com.minieye.sdwan"
+    local plist_tmp
 
-    cat > "$plist" <<EOF
+    bootout_macos_job
+
+    # The daemon creates its control token here. Keep the containing directory
+    # root-owned before launch so token creation cannot inherit unsafe access.
+    mkdir -p "$CONFIG_DIR"
+    chown root:wheel "$CONFIG_DIR"
+    chmod 700 "$CONFIG_DIR"
+
+    # Preserve prior records and inspect only bytes appended after this point.
+    touch /var/log/sdwan.log
+    MACOS_LOG_OFFSET=$(file_size /var/log/sdwan.log)
+
+    plist_tmp=$(mktemp "/Library/LaunchDaemons/.${label}.XXXXXX")
+    write_macos_plist "$plist_tmp"
+
+    chown root:wheel "$plist_tmp"
+    chmod 644 "$plist_tmp"
+    plutil -lint "$plist_tmp" >/dev/null
+    mv -f "$plist_tmp" "$plist"
+
+    launchctl bootstrap system "$plist"
+    launchctl print "system/$label" >/dev/null
+    echo -e "${G}✅ LaunchDaemon 已安装并启动${NC}"
+}
+
+# A loaded old job must be gone before replacing its executable or plist.
+bootout_macos_job() {
+    local label="com.minieye.sdwan"
+    launchctl bootout "system/$label" 2>/dev/null || true
+    if launchctl print "system/$label" >/dev/null 2>&1; then
+        echo -e "${R}❌ 旧 LaunchDaemon 仍在运行；拒绝替换二进制或 plist${NC}" >&2
+        return 1
+    fi
+}
+
+write_macos_plist() {
+    local destination="$1"
+    cat > "$destination" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -411,35 +577,38 @@ install_macos_service() {
     <true/>
     <key>KeepAlive</key>
     <true/>
-    <key>StandardOutPath</key>
-    <string>/var/log/sdwan.log</string>
     <key>StandardErrorPath</key>
     <string>/var/log/sdwan.log</string>
 </dict>
 </plist>
 EOF
-
-    # Truncate log before starting to avoid stale-log poisoning
-    : > /var/log/sdwan.log 2>/dev/null || true
-    launchctl bootstrap system "$plist" 2>/dev/null || launchctl load "$plist"
-    echo -e "${G}✅ LaunchDaemon 已安装并启动${NC}"
 }
 
 # ────────────────────────────────────────────────────────────
 # auth_rejected_current_attempt checks the service logs for an
-# AUTH REJECTED marker that appeared after the current attempt
-# started. Returns 0 if found, 1 otherwise.
+# AUTH REJECTED marker from the current attempt. Linux queries only records
+# after the pre-restart journal cursor; macOS reads only bytes appended after
+# the pre-bootstrap log boundary.
+# Returns 0 if found, 1 otherwise.
 auth_rejected_current_attempt() {
     local logs=""
     if [[ "$OS" == "linux" ]]; then
-        logs=$(journalctl -u sdwan --since "$SERVICE_START_TS" --no-pager 2>/dev/null || true)
+        # Without a cursor, do not inspect historical logs and risk reporting
+        # a stale authentication error as belonging to this installation.
+        [[ -n "$SERVICE_JOURNAL_CURSOR" ]] || return 1
+        logs=$(journalctl -u sdwan --after-cursor "$SERVICE_JOURNAL_CURSOR" --no-pager 2>/dev/null || true)
     else
-        logs=$(tail -n 80 /var/log/sdwan.log 2>/dev/null || true)
+        logs=$(tail -c "+$((MACOS_LOG_OFFSET + 1))" /var/log/sdwan.log 2>/dev/null || true)
     fi
-    if printf '%s\n' "$logs" | grep -qi "AUTH REJECTED"; then
-        return 0
+    printf '%s\n' "$logs" | awk 'BEGIN { found=0 } tolower($0) ~ /auth rejected/ { found=1 } END { exit !found }'
+}
+
+tunnel_routenet() {
+    local configured=""
+    if [[ -f "$CONFIG_FILE" ]]; then
+        configured=$(awk -F= '$1 == "routenet" { print $2; exit }' "$CONFIG_FILE")
     fi
-    return 1
+    printf '%s\n' "${configured:-$ROUTENET}"
 }
 
 # ────────────────────────────────────────────────────────────
@@ -447,20 +616,34 @@ auth_rejected_current_attempt() {
 # Linux tunnel. Returns 0 if iwan1 exists, has IPv4, and
 # route 192.168.0.0/16 points to dev iwan1.
 linux_tunnel_ready() {
+    local routenet
+    routenet=$(tunnel_routenet)
     ip link show iwan1 &>/dev/null || return 1
-    ip -4 addr show iwan1 2>/dev/null | grep -q "inet " || return 1
-    ip route 2>/dev/null | grep -q "192.168.0.0/16.*iwan1" || return 1
+    ip -4 addr show iwan1 2>/dev/null | awk 'BEGIN { found=0 } /inet / { found=1 } END { exit !found }' || return 1
+    ip route 2>/dev/null | awk -v routenet="$routenet" 'BEGIN { found=0 } $1 == routenet && $0 ~ /dev iwan1/ { found=1 } END { exit !found }' || return 1
 }
 
 # ────────────────────────────────────────────────────────────
 # darwin_tunnel_ready checks real network state for a ready
 # macOS tunnel. Returns 0 if a utun* interface has inet IPv4
 # and route to 192.168.0.0 uses utun.
+darwin_route_interface() {
+    local routenet
+    routenet=$(tunnel_routenet)
+    route -n get "${routenet%/*}" 2>/dev/null | awk '/interface:/{print $2; exit}'
+}
+
+darwin_interface_ipv4() {
+    local interface="$1"
+    ifconfig "$interface" 2>/dev/null | awk '/inet / { print $2; exit }'
+}
+
 darwin_tunnel_ready() {
-    local darwin_ip=""
-    darwin_ip=$(ifconfig 2>/dev/null | awk '/^utun[0-9]+:/{found=1; next} /^[a-z]+[0-9]+:/{found=0} found && /inet /{print $2; exit}' || true)
-    [[ -n "$darwin_ip" ]] || return 1
-    route -n get 192.168.0.0 2>/dev/null | grep -q 'interface: utun' || return 1
+    local interface darwin_ip
+    interface=$(darwin_route_interface)
+    [[ "$interface" =~ ^utun[0-9]+$ ]] || return 1
+    darwin_ip=$(darwin_interface_ipv4 "$interface")
+    [[ -n "$darwin_ip" ]]
 }
 
 # ────────────────────────────────────────────────────────────
@@ -494,6 +677,8 @@ verify_tunnel() {
     done
 
     # ── report results ──
+    local routenet
+    routenet=$(tunnel_routenet)
     if [[ "$OS" == "linux" ]]; then
         if ip link show iwan1 &>/dev/null; then
             echo -e "  虚拟网卡: ${G}iwan1 已创建${NC}"
@@ -501,24 +686,28 @@ verify_tunnel() {
         else
             echo -e "  虚拟网卡: ${Y}iwan1 未出现${NC}"
         fi
-        if ip route 2>/dev/null | grep -q "192.168.0.0/16.*iwan1"; then
-            echo -e "  路由:     ${G}192.168.0.0/16 → iwan1${NC}"
+        if ip route 2>/dev/null | awk -v routenet="$routenet" 'BEGIN { found=0 } $1 == routenet && $0 ~ /dev iwan1/ { found=1 } END { exit !found }'; then
+            echo -e "  路由:     ${G}${routenet} → iwan1${NC}"
         else
-            echo -e "  路由:     ${Y}未确认 192.168.0.0/16 → iwan1${NC}"
+            echo -e "  路由:     ${Y}未确认 ${routenet} → iwan1${NC}"
         fi
     else
-        local darwin_ip=""
-        darwin_ip=$(ifconfig 2>/dev/null | awk '/^utun[0-9]+:/{found=1; next} /^[a-z]+[0-9]+:/{found=0} found && /inet /{print $2; exit}' || true)
+        local interface darwin_ip
+        interface=$(darwin_route_interface)
+        darwin_ip=""
+        if [[ "$interface" =~ ^utun[0-9]+$ ]]; then
+            darwin_ip=$(darwin_interface_ipv4 "$interface")
+        fi
         if [[ -n "$darwin_ip" ]]; then
-            echo -e "  虚拟网卡: ${G}utun 已创建${NC}"
+            echo -e "  虚拟网卡: ${G}${interface} 已创建${NC}"
             echo "  └─ IP: $darwin_ip"
         else
-            echo -e "  虚拟网卡: ${Y}utun IP 未出现${NC}"
+            echo -e "  虚拟网卡: ${Y}路由对应 utun IP 未出现${NC}"
         fi
-        if route -n get 192.168.0.0 2>/dev/null | grep -q 'interface: utun'; then
-            echo -e "  路由:     ${G}192.168.0.0/16 → utun${NC}"
+        if [[ "$interface" =~ ^utun[0-9]+$ ]]; then
+            echo -e "  路由:     ${G}${routenet} → ${interface}${NC}"
         else
-            echo -e "  路由:     ${Y}未确认 192.168.0.0/16 → utun${NC}"
+            echo -e "  路由:     ${Y}未确认 ${routenet} → utun${NC}"
         fi
     fi
 
@@ -543,7 +732,12 @@ verify_tunnel() {
     local ping_ok=0
     for _ in 1 2 3; do
         sleep 1
-        if ping -c 1 -W 3 "$TEST_HOST" >/dev/null 2>&1; then
+        local -a ping_args=(-c 1)
+        case "$OS" in
+            linux) ping_args+=(-W 3) ;;
+            darwin) ping_args+=(-W 3000) ;;
+        esac
+        if ping "${ping_args[@]}" "$TEST_HOST" >/dev/null 2>&1; then
             ping_ok=1
             break
         fi
@@ -570,13 +764,25 @@ show_postinstall_help() {
     echo "   sudo journalctl -u sdwan -f       # 实时日志 (Linux)"
     echo "   tail -f /var/log/sdwan.log        # 实时日志 (macOS)"
     echo ""
-    echo -e "${Y}💡 修改配置: sudo vi /etc/sdwan/iwan.conf && sudo systemctl restart sdwan${NC}"
+    if [[ "$OS" == "linux" ]]; then
+        echo -e "${Y}💡 修改配置: sudo vi /etc/sdwan/iwan.conf && sudo systemctl restart sdwan${NC}"
+    else
+        echo -e "${Y}💡 修改配置: sudo vi /etc/sdwan/iwan.conf && sudo launchctl kickstart -k system/com.minieye.sdwan${NC}"
+    fi
 }
 
 main() {
     parse_args "$@"
     check_root
+    check_controlling_tty
     detect_platform
+
+    # Prove the old service is gone before download_binary atomically replaces
+    # the installed executable. install_macos_service repeats this before the
+    # plist is replaced and bootstrapped.
+    if [[ "$OS" == "darwin" ]]; then
+        bootout_macos_job
+    fi
 
     # Download binary first — if this fails, no point configuring
     download_binary "$BINARY"
@@ -607,12 +813,12 @@ main() {
     esac
 
     # Verify tunnel; report results.
-    # set -e would kill the script when verify_tunnel returns non-zero,
-    # so we temporarily disable it to capture the result.
-    set +e
-    verify_tunnel
-    local vresult=$?
-    set -e
+    local vresult=0
+    if verify_tunnel; then
+        vresult=0
+    else
+        vresult=$?
+    fi
 
     if [[ $vresult -eq 1 ]]; then
         echo ""
@@ -628,6 +834,7 @@ main() {
             echo "  sudo launchctl kickstart -k system/com.minieye.sdwan"
             echo "  tail -f /var/log/sdwan.log"
         fi
+        exit 1
     elif [[ $vresult -eq 0 ]]; then
         show_postinstall_help
     else
@@ -637,7 +844,10 @@ main() {
             linux)  echo "   sudo systemctl restart sdwan" ;;
             darwin) echo "   sudo launchctl kickstart -k system/com.minieye.sdwan" ;;
         esac
+        exit 1
     fi
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

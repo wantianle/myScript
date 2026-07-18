@@ -32,6 +32,7 @@ echo ""
 # [1/3] 密钥生成逻辑
 log_info "检查本地密钥..."
 mkdir -p "$HOME/.ssh"
+
 chmod 700 "$HOME/.ssh"
 if [ ! -f "$KEY_PATH" ]; then
     log_info "  未发现密钥，正在生成 ed25519 密钥对..."
@@ -43,56 +44,161 @@ else
     log_ok "  密钥已存在: $KEY_PATH"
 fi
 
-# 自动探测 SSH 密码（类似 deploy.sh 的 sudo_pass_discover）
-ssh_pass_discover() {
-    local target=$1 port=$2
-    local found=""
+# 公网模式下，在 SOC1 上配置 SOC 间免密、快捷登录和主机名。
+configure_vehicle() {
+    local port="$1"
+    local target="$USER_NAME@$WAN_DOMAIN"
+    local remote_script="/tmp/ssh-configure-${port}-$$.sh"
+    local soc1_ip_q soc2_ip_q user_name_q remote_script_q remote_command
 
-    # 1. 先试缓存的密码
-    if [[ -n "${SSH_PASS_CACHED:-}" ]]; then
-        if SSHPASS="$SSH_PASS_CACHED" sshpass -e ssh \
-            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o PreferredAuthentications=password -o PasswordAuthentication=yes \
-            -o ConnectTimeout=5 -o LogLevel=ERROR \
-            -p "$port" "$target" "exit" 2>/dev/null; then
-            echo -e "${GREEN}[OK]${NC}  密码匹配 (缓存)" >&2
-            echo "$SSH_PASS_CACHED"
+    printf -v soc1_ip_q '%q' "$SOC1_IP"
+    printf -v soc2_ip_q '%q' "$SOC2_IP"
+    printf -v user_name_q '%q' "$USER_NAME"
+    printf -v remote_script_q '%q' "$remote_script"
+
+    echo ""
+    log_info "正在配置端口 $port 对应车辆的 SOC1 <-> SOC2 免密与主机名..."
+
+    # 先通过非 TTY 会话上传脚本，避免脚本内容与后续交互提示共用同一个 PTY。
+    if ! ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        -p "$port" "$target" "cat > $remote_script_q" <<'REMOTE'
+set -e
+set +H
+
+SSH_PASSWORDS=('mini!@#123.com' 'nvidia')
+SUDO_PASS_CACHED=""
+SOC2_PASS_CACHED=""
+
+sudo_pass_discover() {
+    local password
+    if [[ -n "$SUDO_PASS_CACHED" ]] && printf '%s\n' "$SUDO_PASS_CACHED" | sudo -S -p '' -v 2>/dev/null; then
+        return 0
+    fi
+    for password in "${SSH_PASSWORDS[@]}"; do
+        if printf '%s\n' "$password" | sudo -S -p '' -v 2>/dev/null; then
+            SUDO_PASS_CACHED="$password"
             return 0
         fi
-        echo -e "${YELLOW}[WARNING]${NC}  缓存密码失效，重新探测..." >&2
-        SSH_PASS_CACHED=""
+    done
+    read -rsp "  请输入 SOC1 sudo 密码: " SUDO_PASS_CACHED </dev/tty
+    echo ""
+    [[ -n "$SUDO_PASS_CACHED" ]] && printf '%s\n' "$SUDO_PASS_CACHED" | sudo -S -p '' -v
+}
+
+copy_soc2_key() {
+    local password
+    local target="$USER_NAME@$SOC2_IP"
+    local copy_id=(ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i "$HOME/.ssh/id_ed25519.pub" "$target")
+
+    if ssh -n -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR soc2 exit 2>/dev/null; then
+        return 0
     fi
 
-    # 2. 遍历预设密码
-    for pw in "${SSH_PASSWORDS[@]}"; do
-        if SSHPASS="$pw" sshpass -e ssh \
-            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o PreferredAuthentications=password -o PasswordAuthentication=yes \
-            -o ConnectTimeout=5 -o LogLevel=ERROR \
-            -p "$port" "$target" "exit" 2>/dev/null; then
-            found="$pw"
-            break
+    if command -v sshpass &>/dev/null; then
+        if [[ -n "$SOC2_PASS_CACHED" ]] && SSHPASS="$SOC2_PASS_CACHED" sshpass -e "${copy_id[@]}"; then
+            return 0
+        fi
+        SOC2_PASS_CACHED=""
+
+        for password in "${SSH_PASSWORDS[@]}"; do
+            if SSHPASS="$password" sshpass -e "${copy_id[@]}"; then
+                SOC2_PASS_CACHED="$password"
+                return 0
+            fi
+        done
+    fi
+
+    ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i "$HOME/.ssh/id_ed25519.pub" "$target" || return 1
+    read -rsp "  请输入 SOC2 密码（用于 sudo）: " SOC2_PASS_CACHED </dev/tty
+    echo ""
+    [[ -n "$SOC2_PASS_CACHED" ]]
+}
+
+soc2_sudo_pass_discover() {
+    local password
+
+    if [[ -n "$SOC2_PASS_CACHED" ]] && printf '%s\n' "$SOC2_PASS_CACHED" | ssh -o LogLevel=ERROR soc2 "sudo -S -p '' -v"; then
+        return 0
+    fi
+
+    for password in "${SSH_PASSWORDS[@]}"; do
+        if printf '%s\n' "$password" | ssh -o LogLevel=ERROR soc2 "sudo -S -p '' -v"; then
+            SOC2_PASS_CACHED="$password"
+            return 0
         fi
     done
 
-    # 3. 命中则缓存并返回
-    if [[ -n "$found" ]]; then
-        SSH_PASS_CACHED="$found"
-        echo -e "${GREEN}[OK]${NC}  密码匹配" >&2
-        echo "$found"
-        return 0
+    read -rsp "  请输入 SOC2 sudo 密码: " SOC2_PASS_CACHED </dev/tty
+    echo ""
+    [[ -n "$SOC2_PASS_CACHED" ]] && printf '%s\n' "$SOC2_PASS_CACHED" | ssh -o LogLevel=ERROR soc2 "sudo -S -p '' -v"
+}
+
+sudo_pass_discover
+printf '%s\n' "$SUDO_PASS_CACHED" | sudo -S -p '' bash -c "mkdir -p /home/$USER_NAME/.ssh && chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.ssh && find /home/$USER_NAME/.ssh -type d -exec chmod 700 {} + && find /home/$USER_NAME/.ssh -type f -exec chmod 600 {} +"
+
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+if [[ ! -f "$HOME/.ssh/id_ed25519" ]]; then
+    ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N ""
+fi
+touch "$HOME/.ssh/config"
+if ! grep -q '^Host soc1$' "$HOME/.ssh/config"; then
+    cat >> "$HOME/.ssh/config" <<EOF
+Host soc1
+    HostName $SOC1_IP
+    User $USER_NAME
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+EOF
+fi
+if ! grep -q '^Host soc2$' "$HOME/.ssh/config"; then
+    cat >> "$HOME/.ssh/config" <<EOF
+Host soc2
+    HostName $SOC2_IP
+    User $USER_NAME
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+EOF
+fi
+chmod 600 "$HOME/.ssh/config"
+
+copy_soc2_key
+soc2_sudo_pass_discover
+
+printf '%s\n' "$SOC2_PASS_CACHED" | ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR soc2 "sudo -S -p '' bash -c 'mkdir -p /home/$USER_NAME/.ssh && chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.ssh && find /home/$USER_NAME/.ssh -type d -exec chmod 700 {} + && find /home/$USER_NAME/.ssh -type f -exec chmod 600 {} +'"
+
+printf '%s\n' "$SOC2_PASS_CACHED" | ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR soc2 "sudo -S -p '' bash -c 'config=/home/$USER_NAME/.ssh/config; touch \"\$config\"; if ! grep -q \"^Host soc1\$\" \"\$config\"; then printf \"%s\\n\" \"Host soc1\" \"    HostName $SOC1_IP\" \"    User $USER_NAME\" \"    StrictHostKeyChecking no\" \"    UserKnownHostsFile /dev/null\" \"    LogLevel ERROR\" >> \"\$config\"; fi; chown $USER_NAME:$USER_NAME \"\$config\"; chmod 600 \"\$config\"'"
+
+if [[ -f /mnt/ufs_data/project/.mdrive_vars.sh ]]; then
+    source /mnt/ufs_data/project/.mdrive_vars.sh
+fi
+[[ -n "${MDRIVE_VEHICLE_NAME:-}" ]] || { echo "未设置 MDRIVE_VEHICLE_NAME"; exit 1; }
+
+if [[ "$(hostname)" != "${MDRIVE_VEHICLE_NAME}-soc1" ]]; then
+    printf '%s\n' "$SUDO_PASS_CACHED" | sudo -S -p '' hostnamectl set-hostname "${MDRIVE_VEHICLE_NAME}-soc1"
+fi
+if [[ "$(ssh -n -o LogLevel=ERROR soc2 hostname)" != "${MDRIVE_VEHICLE_NAME}-soc2" ]]; then
+    printf '%s\n' "$SOC2_PASS_CACHED" | ssh -tt -o LogLevel=ERROR soc2 "sudo -S -p '' hostnamectl set-hostname '${MDRIVE_VEHICLE_NAME}-soc2'"
+fi
+REMOTE
+
+    then
+        ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            -p "$port" "$target" "rm -f -- $remote_script_q" >/dev/null 2>&1 || true
+        log_err "端口 $port 的车端 SOC 配置脚本上传失败"
+        return 1
     fi
 
-    # 4. 都不行则交互式问
-    echo -e "${YELLOW}[WARNING]${NC}  预设密码均不匹配" >&2
-    read -rsp "  请输入 $target 的密码: " found
-    echo ""
-    if [[ -n "$found" ]]; then
-        SSH_PASS_CACHED="$found"
-        echo "$found"
-        return 0
+    remote_command="SOC1_IP=$soc1_ip_q SOC2_IP=$soc2_ip_q USER_NAME=$user_name_q bash $remote_script_q; status=\$?; rm -f -- $remote_script_q; exit \$status"
+    if ! ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        -p "$port" "$target" "$remote_command"
+    then
+        log_err "端口 $port 的车端 SOC 配置失败"
+        return 1
     fi
-    return 1
+    log_ok "端口 $port 的 SOC 免密与主机名配置完成"
 }
 
 # sshpass 辅助分发函数：避免交互密码提示被终端屏蔽
@@ -117,26 +223,67 @@ copy_key() {
         return 1
     fi
 
-    if [ -n "${SSHPASS:-}" ]; then
-        # 使用 sshpass 非交互式分发
-        if sshpass -e ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${port_arg[@]}" -i "${KEY_PATH}.pub" "$target"; then
-            log_ok "$label 公钥分发成功"
-            return 0
-        else
-            log_err "$label sshpass 分发失败，尝试交互式..."
+    if command -v sshpass &>/dev/null; then
+        if [[ -n "$SSH_PASS_CACHED" ]]; then
+            if SSHPASS="$SSH_PASS_CACHED" sshpass -e ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${port_arg[@]}" -i "${KEY_PATH}.pub" "$target"; then
+                SSHPASS="$SSH_PASS_CACHED"
+                log_ok "$label 公钥分发成功"
+                return 0
+            fi
+            SSH_PASS_CACHED=""
         fi
+
+        local password
+        for password in "${SSH_PASSWORDS[@]}"; do
+            if SSHPASS="$password" sshpass -e ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${port_arg[@]}" -i "${KEY_PATH}.pub" "$target"; then
+                SSH_PASS_CACHED="$password"
+                SSHPASS="$password"
+                log_ok "$label 公钥分发成功"
+                return 0
+            fi
+        done
     fi
 
     # 交互式回退
     log_info "即将弹出 ssh-copy-id 密码提示，请输入远程用户密码"
     sleep 1
     if ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${port_arg[@]}" -i "${KEY_PATH}.pub" "$target"; then
+        read -rsp "  请输入 $label 的密码（用于 sudo）: " SSH_PASS_CACHED
+        echo ""
+        SSHPASS="$SSH_PASS_CACHED"
         log_ok "$label 公钥分发成功"
         return 0
     else
         log_err "$label 公钥分发失败，请检查密码或网络"
         return 1
     fi
+}
+
+# 远端 ~/.ssh 权限修复：owner -> USER_NAME，目录 700，文件 600
+repair_remote_ssh() {
+    local target="$1"
+    local port_arg=()
+    local label="$target"
+
+    if [ -n "${2:-}" ]; then
+        port_arg=(-p "$2")
+        label="$target (port $2)"
+    fi
+
+    local remote_cmd="sudo -S bash -c 'mkdir -p /home/${USER_NAME}/.ssh && chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}/.ssh && find /home/${USER_NAME}/.ssh -type d -exec chmod 700 {} + && find /home/${USER_NAME}/.ssh -type f -exec chmod 600 {} +'"
+
+    echo ""
+    log_info "正在修复 $label 的 ~/.ssh 权限与归属..."
+
+    if [ -n "${SSHPASS:-}" ]; then
+        if printf '%s\n' "$SSHPASS" | ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${port_arg[@]}" "$target" "$remote_cmd" >/dev/null 2>&1; then
+            log_ok "$label ~/.ssh 权限修复成功"
+            return 0
+        fi
+    fi
+
+    log_err "$label ~/.ssh 权限修复失败，请登录远端手动执行 sudo chown/chmod"
+    return 1
 }
 
 # [2/3] 配置 ~/.ssh/config
@@ -174,34 +321,17 @@ chmod 600 "$CONFIG_PATH"
 # [3/3] 分发公钥
 log_info "分发公钥..."
 
-# 自动探测密码（尝试预设密码列表 + 缓存命中）
-if command -v sshpass &>/dev/null; then
-    first_target=""
-    first_port=""
-    if [ "$MODE" == "1" ]; then
-        first_target="$USER_NAME@$SOC1_IP"
-        first_port=22
-    else
-        first_port=$(echo "$TARGET_WAN" | awk '{print $1}')
-        first_target="$USER_NAME@$WAN_DOMAIN"
-    fi
-
-    SSHPASS=$(ssh_pass_discover "$first_target" "$first_port")
-    if [[ -z "$SSHPASS" ]]; then
-        log_err "  未获取到密码，退出"
-        exit 1
-    fi
-else
+# 在最终 ssh-copy-id 操作中依次尝试缓存和预设密码。
+if ! command -v sshpass &>/dev/null; then
     log_info "  未安装 sshpass，将使用交互式 ssh-copy-id。"
 fi
-export SSHPASS
 
 fail_count=0
 if [ "$MODE" == "1" ]; then
     # 局域网分发
     for IP in $TARGET_IPS; do
         ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$IP" 2>/dev/null
-        if ! copy_key "$USER_NAME@$IP"; then
+        if ! copy_key "$USER_NAME@$IP" || ! repair_remote_ssh "$USER_NAME@$IP"; then
             ((fail_count++))
         fi
     done
@@ -209,7 +339,7 @@ else
     # 公网分发
     for PORT in $TARGET_WAN; do
         ssh-keygen -f "$HOME/.ssh/known_hosts" -R "[$WAN_DOMAIN]:$PORT" 2>/dev/null
-        if ! copy_key "$USER_NAME@$WAN_DOMAIN" "$PORT"; then
+        if ! copy_key "$USER_NAME@$WAN_DOMAIN" "$PORT" || ! repair_remote_ssh "$USER_NAME@$WAN_DOMAIN" "$PORT" || ! configure_vehicle "$PORT"; then
             ((fail_count++))
         fi
     done

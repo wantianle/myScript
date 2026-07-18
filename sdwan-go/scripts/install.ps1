@@ -2,7 +2,8 @@
 
 param(
     [string]$Version = "latest",
-    [string]$TestHost = "hfs.minieye.tech"
+    [string]$TestHost = "hfs.minieye.tech",
+    [switch]$SkipStaging
 )
 
 # Usage:
@@ -37,15 +38,9 @@ Write-Host "  Version: $Version" -ForegroundColor Cyan
 Write-Host ""
 
 # ────────────────────────────────────────────────────────────
-# 1. Create install directory
-# ────────────────────────────────────────────────────────────
-if (-not (Test-Path $INSTALL_DIR)) {
-    New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
-}
-Write-Host "[1/5] Install dir: $INSTALL_DIR" -ForegroundColor Green
-
-# ────────────────────────────────────────────────────────────
-# 2. Download binaries from GitHub Release
+# C1. Download and verify a release in an isolated staging directory.
+# This phase deliberately does not create, replace, or otherwise modify the
+# live installation. The later C2 commit phase will consume $stagedRelease.
 # ────────────────────────────────────────────────────────────
 function Download-File {
     param($Urls, $Dest)
@@ -168,66 +163,185 @@ function Download-File {
     throw "Download failed: $name"
 }
 
+function New-IsolatedStagingDirectory {
+    $root = Join-Path ([System.IO.Path]::GetTempPath()) "sdwan-install-staging"
+    $path = Join-Path $root ([Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $path -Force -ErrorAction Stop | Out-Null
+    return $path
+}
+
+function Get-ManifestSha256 {
+    param(
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][string]$ArtifactName
+    )
+
+    # SHA256SUMS validates downloaded content integrity; it is not a code-signing check.
+    # Accept only GNU sha256sum records: 64 hex characters, one separator space,
+    # then either a literal space or '*' mode marker, followed by the exact name.
+    $canonicalRecord = '^([A-Fa-f0-9]{64}) ([ *])(.+)$'
+    $matches = @()
+    foreach ($line in Get-Content -LiteralPath $ManifestPath -ErrorAction Stop) {
+        if ($line -match $canonicalRecord) {
+            if ($Matches[3] -eq $ArtifactName) {
+                $matches += [PSCustomObject]@{ Hash = $Matches[1].ToLowerInvariant(); Name = $Matches[3] }
+            }
+        } elseif ($line.EndsWith($ArtifactName, [System.StringComparison]::Ordinal)) {
+            throw "SHA256SUMS contains a malformed record for required artifact '$ArtifactName'."
+        }
+    }
+    if ($matches.Count -ne 1) {
+        throw "SHA256SUMS must contain exactly one valid SHA-256 entry for '$ArtifactName'."
+    }
+    return $matches[0].Hash
+}
+
+function Test-StagedArtifactHash {
+    param(
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][string]$ArtifactPath,
+        [Parameter(Mandatory = $true)][string]$ArtifactName
+    )
+
+    $expected = Get-ManifestSha256 -ManifestPath $ManifestPath -ArtifactName $ArtifactName
+    $actual = (Get-FileHash -LiteralPath $ArtifactPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+    if ($actual -ne $expected) {
+        throw "SHA-256 mismatch for '$ArtifactName' (expected $expected, got $actual)."
+    }
+    Write-Host "  Verified SHA-256: $ArtifactName" -ForegroundColor Green
+}
+
+function Redact-ConfigLine {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    if ($Line -match '^(\s*password\s*=).*') {
+        return "$($Matches[1])REDACTED"
+    }
+    return $Line
+}
+
+function Invoke-NativeChecked {
+    param([Parameter(Mandatory = $true)][string]$FilePath, [string[]]$Arguments = @())
+
+    & $FilePath @Arguments | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Native command failed ($FilePath), exit code $LASTEXITCODE."
+    }
+}
+
+function Get-ExecutableAclPolicy {
+    # Executables/directories: administrators and SYSTEM manage them; users execute only.
+    # Never grant the current user Modify on the executable directory.
+    return @{ "S-1-5-32-544" = "F"; "S-1-5-18" = "F"; "S-1-5-32-545" = "RX" }
+}
+
+function Get-CurrentUserIdentity {
+    return [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+}
+
+function Get-SecretAclPolicy {
+    # Config/token files may be writable by their designated interactive user.
+    return @{ "S-1-5-32-544" = "F"; "S-1-5-18" = "F"; (Get-CurrentUserIdentity) = "M" }
+}
+
+function ConvertFrom-IcaclsRights {
+    param([Parameter(Mandatory = $true)][string]$Rights)
+
+    switch ($Rights) {
+        "F"  { return [System.Security.AccessControl.FileSystemRights]::FullControl }
+        "M"  { return [System.Security.AccessControl.FileSystemRights]::Modify }
+        "RX" { return [System.Security.AccessControl.FileSystemRights]::ReadAndExecute }
+        default { throw "Unsupported icacls rights abbreviation '$Rights'." }
+    }
+}
+
+function Test-AclPolicyApplied {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][hashtable]$ExpectedPolicy
+    )
+
+    # This verifies only required allow rules. It does not prove inherited or other
+    # rules deny extra privileges; C2 must evaluate that separately. No ACL is applied by C1.
+    $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+    foreach ($identity in $ExpectedPolicy.Keys) {
+        $required = ConvertFrom-IcaclsRights -Rights $ExpectedPolicy[$identity]
+        $matchingRule = @($acl.Access | Where-Object {
+            $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+            $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -eq $identity -and
+            ($_.FileSystemRights -band $required) -eq $required
+        })
+        if ($matchingRule.Count -eq 0) {
+            throw "ACL verification failed for '$identity' on '$Path'."
+        }
+    }
+    return $true
+}
+
+function Set-AclPolicy {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][hashtable]$Policy
+    )
+
+    # C2 may call this on a specifically selected path, then call
+    # Test-AclPolicyApplied to verify it. C1 must not apply it to live files.
+    foreach ($identity in $Policy.Keys) {
+        Invoke-NativeChecked -FilePath "icacls.exe" -Arguments @($Path, "/grant:r", "*$identity`:$($Policy[$identity])")
+    }
+    [void](Test-AclPolicyApplied -Path $Path -ExpectedPolicy $Policy)
+}
+
+function Stage-ReleaseArtifacts {
+    param([Parameter(Mandatory = $true)][string]$ReleaseUrl)
+
+    $stagingDir = New-IsolatedStagingDirectory
+    $artifacts = @("panel.exe", "sdwan-windows-amd64.exe", "wintun.dll")
+    Write-Host "[1/5] Staging release in: $stagingDir" -ForegroundColor Cyan
+    try {
+        Download-File -Urls @("$ReleaseUrl/SHA256SUMS") -Dest (Join-Path $stagingDir "SHA256SUMS")
+        foreach ($artifact in $artifacts) {
+            # Wintun must be the release DLL covered by this manifest; ZIP fallbacks are not accepted.
+            Download-File -Urls @("$ReleaseUrl/$artifact") -Dest (Join-Path $stagingDir $artifact)
+        }
+        foreach ($artifact in $artifacts) {
+            Test-StagedArtifactHash -ManifestPath (Join-Path $stagingDir "SHA256SUMS") -ArtifactPath (Join-Path $stagingDir $artifact) -ArtifactName $artifact
+        }
+    } catch {
+        Write-Host "  Staging failed; no installed files were changed." -ForegroundColor Red
+        Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+        throw
+    }
+
+    Write-Host "  Staging integrity verification succeeded. SHA-256 verifies integrity, not publisher signing." -ForegroundColor Green
+    return $stagingDir
+}
+
+function Invoke-StagedCommit {
+    param([Parameter(Mandatory = $true)][string]$StagingDirectory)
+
+    # C2 placeholder: atomically replace only verified artifacts while preserving
+    # configuration and token files. Intentionally no live-file operation in C1.
+    Write-Host "  C2 commit is not implemented; existing installation, config, and token remain unchanged." -ForegroundColor Yellow
+}
+
 if ($Version -eq "latest") {
     $releaseUrl = "https://github.com/$REPO_OWNER/$REPO_NAME/releases/latest/download"
 } else {
     $releaseUrl = "https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$Version"
 }
 
-Write-Host "[2/5] Download components..."
-Write-Host "  Release version: $Version"
-
-# Release only. dist/ is not committed to git.
-$coreUrls  = @("$releaseUrl/sdwan-windows-amd64.exe")
-$panelUrls = @("$releaseUrl/panel.exe")
-$wintunUrls = @(
-    "$releaseUrl/wintun.dll",
-    "https://www.wintun.net/builds/wintun-0.14.1.zip"
-)
-
-Download-File -Urls $coreUrls  -Dest "$INSTALL_DIR\sdwan-windows-amd64.exe"
-Download-File -Urls $panelUrls -Dest "$INSTALL_DIR\panel.exe"
-
-# wintun.dll: bundled in Release, or downloaded from wintun.net (zip -> extract)
+if ($SkipStaging) { return }
+$stagedRelease = $null
 try {
-    if (Test-Path "$INSTALL_DIR\wintun.dll") {
-        Write-Host "  wintun.dll already exists, skip" -ForegroundColor Green
-    } else {
-        Download-File -Urls @($wintunUrls[0]) -Dest "$INSTALL_DIR\wintun.dll"
-        if (-not (Test-Path "$INSTALL_DIR\wintun.dll")) {
-            throw "wintun.dll not found after download"
-        }
-    }
-} catch {
-    Write-Host "  Release wintun.dll unavailable, fallback to official wintun zip..." -ForegroundColor Yellow
-    try {
-        $zipPath = "$env:TEMP\wintun.zip"
-        Download-File -Urls @($wintunUrls[1]) -Dest $zipPath
-        $extractDir = "$env:TEMP\wintun_extract"
-        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
-        $dll = Get-ChildItem -Path $extractDir -Recurse -Filter "wintun.dll" | Where-Object { $_.Directory.Name -eq "amd64" } | Select-Object -First 1
-        if ($dll) {
-            Copy-Item $dll.FullName "$INSTALL_DIR\wintun.dll" -Force
-            Write-Host "  wintun.dll OK (official zip)" -ForegroundColor Green
-        } else {
-            throw "wintun.dll not found inside zip"
-        }
-        Remove-Item $zipPath, $extractDir -Recurse -Force -ErrorAction SilentlyContinue
-    } catch {
-        Write-Host "  Hint: download wintun.dll manually from https://www.wintun.net/ and put it into $INSTALL_DIR" -ForegroundColor Yellow
+    $stagedRelease = Stage-ReleaseArtifacts -ReleaseUrl $releaseUrl
+    Invoke-StagedCommit -StagingDirectory $stagedRelease
+} finally {
+    if ($stagedRelease) {
+        Remove-Item -LiteralPath $stagedRelease -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-
-# Download tray icon for Start Menu shortcut
-$trayIconPath = "$INSTALL_DIR\tray.ico"
-if (-not (Test-Path $trayIconPath)) {
-    $repoRawUrl = "https://raw.githubusercontent.com/wantianle/sdwan-go/master"
-    try {
-        Download-File -Urls @("$repoRawUrl/panel/frontend/tray.ico") -Dest $trayIconPath
-    } catch {
-        Write-Host "  tray.ico download failed, shortcut will use panel.exe icon fallback" -ForegroundColor Yellow
-    }
-}
+return
 
 # ────────────────────────────────────────────────────────────
 # Probe-MTU: binary search (548..1472) the largest IPv4 ICMP
@@ -267,20 +381,6 @@ function Probe-MTU {
     return $candidate
 }
 
-function Grant-ConfigAccess {
-    param([string]$Path)
-
-    if (-not (Test-Path $Path)) { return }
-
-    $user = if ($env:USERDOMAIN) { "$($env:USERDOMAIN)\$($env:USERNAME)" } else { $env:USERNAME }
-    try {
-        & icacls.exe $Path /grant:r "$user`:(M)" | Out-Null
-        Write-Host "  Config writable for current user: $user" -ForegroundColor Green
-    } catch {
-        Write-Host "  Warning: could not grant config write access automatically" -ForegroundColor Yellow
-    }
-}
-
 # ────────────────────────────────────────────────────────────
 # 3. Server selection
 # ────────────────────────────────────────────────────────────
@@ -297,7 +397,7 @@ if (Test-Path $configPath) {
             "v" {
                 Write-Host ""
                 Write-Host "  Existing iwan.conf:" -ForegroundColor Cyan
-                Get-Content -Path $configPath | ForEach-Object { Write-Host "    $_" }
+                Get-Content -Path $configPath | ForEach-Object { Write-Host "    $(Redact-ConfigLine -Line $_)" }
                 Write-Host ""
             }
             "u" {
@@ -361,8 +461,6 @@ routenet=192.168.0.0/16
     Set-Content -Path $configPath -Value $configContent
     Write-Host "  Config saved: $configPath" -ForegroundColor Green
 }
-
-Grant-ConfigAccess -Path $configPath
 
 # ────────────────────────────────────────────────────────────
 # 5. Auto-start & launch
