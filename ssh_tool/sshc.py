@@ -582,17 +582,28 @@ def run(args: argparse.Namespace, settings: Settings) -> int:
         f"frpc_connected={format_scalar(mapping.frpc_connected)})"
     )
 
-    print("[INFO] 分发本机公钥，按提示输入车端密码...", flush=True)
+    print("[INFO] 检查公钥...", flush=True)
     ensure_local_key(settings.keyfile)
-    copy_ssh_key(
+    ssh_host = mapping.server_ip or lookup.env.ssh_host
+    if check_key_login(
         keyfile=settings.keyfile,
         ssh_user=DEFAULT_SSH_USER,
-        ssh_host=mapping.server_ip or lookup.env.ssh_host,
+        ssh_host=ssh_host,
         server_port=mapping.server_port,
         ssh_opts=DEFAULT_SSH_OPTS,
-    )
+    ):
+        print("      公钥已就绪，跳过上传", flush=True)
+    else:
+        print("[INFO] 分发本机公钥，按提示输入车端密码...", flush=True)
+        copy_ssh_key(
+            keyfile=settings.keyfile,
+            ssh_user=DEFAULT_SSH_USER,
+            ssh_host=ssh_host,
+            server_port=mapping.server_port,
+            ssh_opts=DEFAULT_SSH_OPTS,
+        )
 
-    target = f"{DEFAULT_SSH_USER}@{mapping.server_ip or lookup.env.ssh_host}"
+    target = f"{DEFAULT_SSH_USER}@{ssh_host}"
     ssh_command = [
         "ssh",
         *DEFAULT_SSH_OPTS,
@@ -1143,6 +1154,32 @@ def copy_ssh_key(
     result = subprocess.run(command)
     if result.returncode != 0:
         raise SshcError("ssh-copy-id failed")
+
+
+def check_key_login(
+    *,
+    keyfile: Path,
+    ssh_user: str,
+    ssh_host: str,
+    server_port: int,
+    ssh_opts: list[str],
+) -> bool:
+    """Try SSH with key auth only. Returns True if the key already works."""
+    result = subprocess.run(
+        [
+            "ssh",
+            *ssh_opts,
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=5",
+            "-i", str(keyfile.expanduser()),
+            "-p", str(server_port),
+            f"{ssh_user}@{ssh_host}",
+            "echo ok",
+        ],
+        capture_output=True,
+        timeout=10,
+    )
+    return result.returncode == 0 and b"ok" in result.stdout
 
 
 def public_key_path(private_key: Path) -> Path:
