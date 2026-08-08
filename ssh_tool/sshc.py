@@ -1170,14 +1170,14 @@ def check_key_login(
             "ssh",
             *ssh_opts,
             "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=5",
+            "-o", "ConnectTimeout=3",
             "-i", str(keyfile.expanduser()),
             "-p", str(server_port),
             f"{ssh_user}@{ssh_host}",
             "echo ok",
         ],
         capture_output=True,
-        timeout=10,
+        timeout=5,
     )
     return result.returncode == 0 and b"ok" in result.stdout
 

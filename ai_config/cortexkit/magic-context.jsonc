@@ -1,0 +1,6 @@
+{
+  "historian": {
+    "model": "minieye/gpt-5.6-terra",
+    "variant": "medium"
+  }
+}

@@ -3,6 +3,7 @@
 USER_NAME="nvidia"
 SOC1_IP="192.168.10.2"
 SOC2_IP="192.168.10.3"
+# WAN_DOMAIN="192.168.16.104"
 WAN_DOMAIN="ad.minieye.tech"
 KEY_PATH="$HOME/.ssh/id_ed25519"
 CONFIG_PATH="$HOME/.ssh/config"
@@ -24,7 +25,7 @@ log_err()  { echo -e "${RED}[ERROR]${NC} $1"; }
 
 echo -e "${BLUE}===============================================${NC}"
 echo -e "  ${GREEN}1)${NC} 局域网免密  (SOC1: ${YELLOW}.10.2${NC}, SOC2: ${YELLOW}.10.3${NC})"
-echo -e "  ${GREEN}2)${NC} 公网批量免密 (域名: ${YELLOW}ad.minieye.tech${NC})"
+echo -e "  ${GREEN}2)${NC} 公网批量免密 (域名: ${YELLOW}${WAN_DOMAIN}${NC})"
 echo -e "${BLUE}===============================================${NC}"
 read -rp "  请选择模式 [1/2]: " MODE
 echo ""
@@ -142,16 +143,6 @@ if [[ ! -f "$HOME/.ssh/id_ed25519" ]]; then
     ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N ""
 fi
 touch "$HOME/.ssh/config"
-if ! grep -q '^Host soc1$' "$HOME/.ssh/config"; then
-    cat >> "$HOME/.ssh/config" <<EOF
-Host soc1
-    HostName $SOC1_IP
-    User $USER_NAME
-    StrictHostKeyChecking no
-    UserKnownHostsFile /dev/null
-    LogLevel ERROR
-EOF
-fi
 if ! grep -q '^Host soc2$' "$HOME/.ssh/config"; then
     cat >> "$HOME/.ssh/config" <<EOF
 Host soc2

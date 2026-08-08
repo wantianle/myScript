@@ -4,6 +4,7 @@
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOC1_IP="192.168.10.2"
 SOC2_IP="192.168.10.3"
+# WAN_DOMAIN="192.168.16.104"
 WAN_DOMAIN="ad.minieye.tech"
 REMOTE_USER="nvidia"
 # 备选 sudo 密码（按顺序尝试，都失败则交互式输入）
@@ -198,7 +199,7 @@ deploy_all() {
 # ============================================================
 echo -e "${BLUE}===============================================${NC}"
 echo -e "  ${GREEN}1)${NC} 局域网部署 (SOC1: ${YELLOW}.10.2${NC}, SOC2: ${YELLOW}.10.3${NC})"
-echo -e "  ${GREEN}2)${NC} 公网部署     (域名: ${YELLOW}ad.minieye.tech${NC})"
+echo -e "  ${GREEN}2)${NC} 公网部署     (域名: ${YELLOW}${WAN_DOMAIN}${NC})"
 echo -e "${BLUE}===============================================${NC}"
 read -rp "  请选择模式 [1/2]: " MODE
 echo ""

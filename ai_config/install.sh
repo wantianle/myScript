@@ -39,7 +39,7 @@ export MINIEYE_API_KEY CLAUDE_API_KEY OPENAI_API_KEY
 export ANTHROPIC_BASE_URL INTRANET_ACCESS_KEY_ID INTRANET_ACCESS_KEY_SECRET
 export USERNAME
 
-for tool in opencode codex claude cc-switch; do
+for tool in opencode codex claude cc-switch cortexkit; do
     if [ -f "$SCRIPT_DIR/$tool/install.sh" ]; then
         echo ">>> [$tool] 配置..."
         bash "$SCRIPT_DIR/$tool/install.sh"

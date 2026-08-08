@@ -53,6 +53,11 @@ def _usd(n: Union[int, float]) -> str:
     return f"${float(n):,.2f}"
 
 
+def _tokens_millions(n: Union[int, float]) -> str:
+    """Format token usage in millions with 2 decimal places."""
+    return f"{float(n) / 1_000_000:.2f}M"
+
+
 def _pct(part: Union[int, float], whole: Union[int, float]) -> str:
     """Return percentage string."""
     if whole == 0:
@@ -275,7 +280,7 @@ def _render_daily_chart(daily_usage: list, plan_suffix: str = "") -> List[str]:
             f'<div class="chart-row">'
             f'<span class="chart-label">{escape(date_label)}</span>'
             f'<div class="chart-track"><span class="chart-bar" style="width:{w:.1f}%"></span></div>'
-            f'<span class="chart-val">{_usd(cost)}</span>'
+            f'<span class="chart-val">{_tokens_millions(entry.get("total_tokens", 0))}</span>'
             f'</div>'
         )
     lines.append("</div>")

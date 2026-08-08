@@ -12,6 +12,7 @@ usage() {
 
 同步内容:
   ~/.config/opencode/
+  ~/.config/cortexkit/magic-context.jsonc
   ~/.cc-switch/cc-switch.db
   ~/.cc-switch/settings.json
 USAGE
@@ -26,10 +27,10 @@ do_sync() {
 
     if [ "$direction" = "pull" ]; then
         # 确保本地目录
-        mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.config/opencode" "$HOME/.cc-switch" "$HOME/.ai-forge"
+        mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.config/opencode" "$HOME/.config/cortexkit" "$HOME/.cc-switch" "$HOME/.ai-forge"
     else
         # 确保远端目录
-        ssh "$host" "mkdir -p ~/.claude ~/.codex ~/.config/opencode ~/.cc-switch ~/.ai-forge"
+        ssh "$host" "mkdir -p ~/.claude ~/.codex ~/.config/opencode ~/.config/cortexkit ~/.cc-switch ~/.ai-forge"
     fi
 
     transfer() {
@@ -52,6 +53,9 @@ do_sync() {
     do
         transfer "$f"
     done
+
+    # Magic Context 用户级配置（不包含密钥，按文件同步）
+    transfer ".config/cortexkit/magic-context.jsonc"
 
     echo "  .config/opencode/"
     if [ "$direction" = "pull" ]; then
