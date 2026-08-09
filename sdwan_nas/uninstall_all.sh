@@ -10,6 +10,7 @@ remove_nas() {
     systemctl disable nasmount 2>/dev/null
     rm -f /etc/systemd/system/nasmount.service
     rm -f /usr/local/bin/nasmount_helper.sh
+    rm -f /usr/local/bin/nasmount_cleanup.sh
     for mount_point in /media/nas /media/doc /media/www /media/pnc; do
         umount -l "$mount_point"
     done

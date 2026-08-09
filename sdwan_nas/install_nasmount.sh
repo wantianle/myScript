@@ -59,43 +59,100 @@ echo "  1) 数据服务器 //hfs.minieye.tech/ad-data -> /media/nas"
 echo "  2) 文档服务器 //hfs.minieye.tech/ad-doc  -> /media/doc"
 echo "  3) WWW 服务器 //hfs.minieye.tech/ad-www -> /media/www"
 echo "  4) PNC 规划服务器 //hfs.minieye.tech/department-pnc_team-planning_algo-driving -> /media/pnc"
-echo "  5) 全部挂载"
-read -p "请输入选项 (1/2/3/4/5，直接回车默认 1): " nas_choice
+echo "可输入多个选项，以空格分隔（例如：1 3 4）"
 
-case "$nas_choice" in
-    2)
-        MOUNT_ITEMS='"doc|//hfs.minieye.tech/ad-doc|/media/doc"'
-        MOUNT_POINTS="/media/doc"
-        ;;
-    3)
-        MOUNT_ITEMS='"www|//hfs.minieye.tech/ad-www|/media/www"'
-        MOUNT_POINTS="/media/www"
-        ;;
-    4)
-        MOUNT_ITEMS='"pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc"'
-        MOUNT_POINTS="/media/pnc"
-        ;;
-    5)
-        MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas" "doc|//hfs.minieye.tech/ad-doc|/media/doc" "www|//hfs.minieye.tech/ad-www|/media/www" "pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc"'
-        MOUNT_POINTS="/media/nas /media/doc /media/www /media/pnc"
-        ;;
-    *)
-        MOUNT_ITEMS='"data|//hfs.minieye.tech/ad-data|/media/nas"'
-        MOUNT_POINTS="/media/nas"
-        ;;
-esac
+while true; do
+    read -r -a nas_choices -p "请输入选项 (1/2/3/4): "
+    if (( ${#nas_choices[@]} == 0 )); then
+        echo -e "${R}❌ 请至少选择一个 NAS${NC}"
+        continue
+    fi
+
+    declare -A selected_options=()
+    selected_options=()
+    selected_choices=()
+    valid_choices=1
+    for nas_choice in "${nas_choices[@]}"; do
+        if [[ ! "$nas_choice" =~ ^[1-4]$ ]]; then
+            echo -e "${R}❌ 无效选项: $nas_choice（仅支持 1、2、3、4）${NC}"
+            valid_choices=0
+            break
+        fi
+        if [[ -z ${selected_options[$nas_choice]+x} ]]; then
+            selected_options[$nas_choice]=1
+            selected_choices+=("$nas_choice")
+        fi
+    done
+
+    (( valid_choices == 1 )) && break
+done
+
+MOUNT_ITEMS=""
+MOUNT_POINTS=""
+for nas_choice in "${selected_choices[@]}"; do
+    case "$nas_choice" in
+        1)
+            MOUNT_ITEMS+='"data|//hfs.minieye.tech/ad-data|/media/nas" '
+            MOUNT_POINTS+="/media/nas "
+            ;;
+        2)
+            MOUNT_ITEMS+='"doc|//hfs.minieye.tech/ad-doc|/media/doc" '
+            MOUNT_POINTS+="/media/doc "
+            ;;
+        3)
+            MOUNT_ITEMS+='"www|//hfs.minieye.tech/ad-www|/media/www" '
+            MOUNT_POINTS+="/media/www "
+            ;;
+        4)
+            MOUNT_ITEMS+='"pnc|//hfs.minieye.tech/department-pnc_team-planning_algo-driving|/media/pnc" '
+            MOUNT_POINTS+="/media/pnc "
+            ;;
+    esac
+done
+MOUNT_ITEMS=${MOUNT_ITEMS% }
+MOUNT_POINTS=${MOUNT_POINTS% }
 
 for mount_point in $MOUNT_POINTS; do
     mkdir -p "$mount_point"
 done
 
 HELPER="/usr/local/bin/nasmount_helper.sh"
+Cleanup="/usr/local/bin/nasmount_cleanup.sh"
+
+# Generate selection-specific cleanup rather than relying on a unit file with
+# hard-coded mount points.  Reinstalling replaces this file with the current
+# selection.
+cat <<EOL > "$Cleanup"
+#!/bin/bash
+
+# Do not use errexit here: an unmounted path is an expected shutdown state.
+set -u -o pipefail
+
+MOUNT_ITEMS=($MOUNT_ITEMS)
+
+cleanup_mounts() {
+    local item name share mount_point
+
+    for item in "\${MOUNT_ITEMS[@]}"; do
+        IFS="|" read -r name share mount_point <<< "\$item"
+        [[ -n "\$mount_point" ]] || continue
+
+        # Do not probe CIFS mounts here: those checks can block during shutdown.
+        umount -l -- "\$mount_point" >/dev/null 2>&1 || true
+    done
+}
+
+cleanup_mounts
+EOL
+chmod +x "$Cleanup"
+
 cat <<EOL > "$HELPER"
 #!/bin/bash
 
 # --- 配置区 ---
 NAS="hfs.minieye.tech"
 CRED="/etc/creds/nas.cred"
+CLEANUP="$Cleanup"
 MOUNT_ITEMS=($MOUNT_ITEMS)
 
 # noserverino: inode 编号由本地生成，提高兼容性和响应速度
@@ -130,15 +187,22 @@ mount_share() {
     fi
 }
 
-unmount_share() {
-    local name="\$1"
-    local mount_point="\$2"
-
-    if grep -qs " \$mount_point " /proc/mounts; then
-        echo "❌ 连续 \$FAIL_COUNT 次重连失败，请检查网络状态，正在卸载 \$name..."
-        umount -l "\$mount_point"
-    fi
+cleanup() {
+    "\$CLEANUP" || echo "⚠️ NAS cleanup reported an error." >&2
 }
+
+# Exit cleanly after releasing mounts when systemd sends its normal stop
+# signal; Restart=on-failure below therefore will not restart this exit.
+stopping=0
+stop_and_cleanup() {
+    # Ignore repeated stop signals while cleanup is in progress.
+    (( stopping )) && exit 0
+    stopping=1
+    trap '' TERM INT
+    cleanup
+    exit 0
+}
+trap 'stop_and_cleanup' TERM INT
 
 while true; do
     ONLINE=1 # 默认离线
@@ -158,10 +222,10 @@ while true; do
     else
         ((FAIL_COUNT++))
         if (( FAIL_COUNT >= MAX_FAILURES )); then
-            for item in "\${MOUNT_ITEMS[@]}"; do
-                IFS="|" read -r name share mount_point <<< "\$item"
-                unmount_share "\$name" "\$mount_point"
-            done
+            if (( FLAG != 1 )); then
+                echo "❌ 连续 \$FAIL_COUNT 次重连失败，请检查网络状态，正在卸载 NAS..."
+                cleanup
+            fi
             FLAG=1
         else
             has_mount=0
@@ -185,6 +249,7 @@ done
 EOL
 chmod +x "$HELPER"
 
+# The helper owns shutdown cleanup so systemd signals it before any remount work.
 # 创建 Systemd 服务
 cat <<EOL > /etc/systemd/system/nasmount.service
 [Unit]
@@ -195,7 +260,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=$HELPER
-Restart=always
+TimeoutStopSec=10s
+Restart=on-failure
 RestartSec=10
 
 [Install]
