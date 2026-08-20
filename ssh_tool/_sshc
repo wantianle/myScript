@@ -4,6 +4,10 @@ local -a vehicles
 local message_file
 local output
 
+_sshc_remote_paths() {
+  return 0
+}
+
 if [[ "$words[2]" == "config" || "$words[2]" == "cfg" ]]; then
   _arguments \
     '-u[set prod XiaoZhu username]:username:' \
@@ -19,15 +23,44 @@ if [[ "$words[2]" == "config" || "$words[2]" == "cfg" ]]; then
   return
 fi
 
-if [[ CURRENT -eq 2 ]]; then
+if [[ "$words[3]" == "push" ]]; then
+  if [[ CURRENT -eq 4 ]]; then
+    _files
+  elif [[ CURRENT -eq 5 ]]; then
+    _sshc_remote_paths
+  fi
+  return
+fi
+
+if [[ "$words[3]" == "pull" ]]; then
+  if [[ CURRENT -eq 4 ]]; then
+    _sshc_remote_paths
+  elif [[ CURRENT -eq 5 ]]; then
+    _files
+  fi
+  return
+fi
+
+if [[ CURRENT -eq 3 && "$words[2]" != "-v" && "$words[2]" != "--versions" ]]; then
+  compadd push pull add a -v --versions
+  return
+fi
+
+if [[ "$words[2]" == ./* || "$words[2]" == ../* || "$words[2]" == /* || "$words[2]" == \~/* ]]; then
+  _files
+  return
+fi
+
+if [[ CURRENT -eq 2 || ( ( "$words[2]" == "-v" || "$words[2]" == "--versions" ) && CURRENT -eq 3 ) ]]; then
   message_file="$(mktemp)"
-  output="$(_call_program sshc-vehicles sshc --complete-vehicles "$words[CURRENT]" 2>"$message_file")"
+  output="$(_call_program sshc-vehicles sshc --complete-vehicles "$PREFIX" 2>"$message_file")"
   if [[ -n "$output" ]]; then
     vehicles=("${(@f)output}")
   fi
   if (( ${#vehicles[@]} > 0 )); then
     rm -f "$message_file"
     compstate[insert]=menu
+    compadd config cfg push pull add a -v --versions
     compadd -Q -U -a vehicles
   else
     local message
@@ -36,6 +69,7 @@ if [[ CURRENT -eq 2 ]]; then
     if [[ -n "$message" ]]; then
       _message -r "$message"
     fi
+    compadd config cfg push pull add a -v --versions
   fi
   return
 fi

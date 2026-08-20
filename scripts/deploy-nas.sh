@@ -15,7 +15,7 @@ SSH_USER="nvidia"
 SSH_PASS="mini!@#123.com"
 SUDO_PASS="mini!@#123.com"
 BASE_IP_START=51
-BASE_IP_END=57
+BASE_IP_END=58
 SOC1_PORT=222
 SOC2_PORT=322
 TIMEOUT=20
@@ -65,11 +65,11 @@ gen_helper() {
 set -e
 export LC_ALL=C
 
-echo "  [1/6] Lazy-unmount hung /media/nas (if any)..."
+echo "  [1/7] Lazy-unmount hung /media/nas (if any)..."
 umount -l /media/nas 2>/dev/null || true
 echo "    Clean"
 
-echo "  [2/6] Deploying systemd service..."
+echo "  [2/7] Deploying systemd service..."
 cat > /etc/systemd/system/add-nas-route.service << 'UNITEOF'
 [Unit]
 Description=Add persistent route to NAS (192.168.2.118)
@@ -79,23 +79,35 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/sh -c '\
+ExecStart=/bin/bash -c '\
   if ip -4 addr show mgbe3_0 | grep -q -E "172\\\\.168\\\\.16\\\\.101|192\\\\.168\\\\.1\\\\.100"; then \
-    ip route replace 192.168.2.118/32 via ${gateway} dev mgbe3_0 src ${src_soc1}; \
-    echo "NAS route added (soc1: via ${gateway} src ${src_soc1})"; \
+    soc=soc1; src=${src_soc1}; \
   elif ip -4 addr show mgbe3_0 | grep -q -E "172\\\\.168\\\\.16\\\\.103|192\\\\.168\\\\.1\\\\.101"; then \
-    ip route replace 192.168.2.118/32 via ${gateway} dev mgbe3_0 src ${src_soc2}; \
-    echo "NAS route added (soc2: via ${gateway} src ${src_soc2})"; \
+    soc=soc2; src=${src_soc2}; \
   else \
-    echo "Unknown SoC, skipping route"; \
-  fi'
+    echo "Unknown SoC on mgbe3_0; cannot determine NAS route" >&2; exit 1; \
+  fi; \
+  found=0; attempt=0; \
+  while [ "\$\${attempt}" -lt 60 ]; do \
+    if ip -4 addr show dev mgbe3_0 | grep -q -F " \$\${src}/"; then \
+      found=1; break; \
+    fi; \
+    attempt=\$\$((attempt + 1)); sleep 1; \
+  done; \
+  if [ "\$\${found}" -ne 1 ]; then \
+    echo "Timed out after 60s waiting for source IPv4 \$\${src} on mgbe3_0" >&2; exit 1; \
+  fi; \
+  if ! ip route replace 192.168.2.118/32 via ${gateway} dev mgbe3_0 src "\$\${src}"; then \
+    echo "Failed to add NAS route via ${gateway} src \$\${src}" >&2; exit 1; \
+  fi; \
+  echo "NAS route added (\$\${soc}: via ${gateway} src \$\${src})"'
 
 [Install]
 WantedBy=multi-user.target
 UNITEOF
 echo "    Service file written"
 
-echo "  [3/6] Configuring /etc/fstab..."
+echo "  [3/7] Configuring /etc/fstab..."
 if ! grep -q "192.168.2.118/ad-data" /etc/fstab 2>/dev/null; then
   echo "//192.168.2.118/ad-data /media/nas cifs username=wantl,password=Mm20000430,_netdev,file_mode=0755,dir_mode=0755 0 0" >> /etc/fstab
   echo "    fstab entry added"

@@ -5,9 +5,18 @@ _sshc_completion() {
   previous="${COMP_WORDS[COMP_CWORD-1]}"
   command="${COMP_WORDS[1]}"
 
+  _sshc_remote_paths() {
+    return 0
+  }
+
+  _sshc_complete_files() {
+    mapfile -t COMPREPLY < <(compgen -f -- "${current}")
+    compopt -o filenames 2>/dev/null || true
+  }
+
   if [[ "${command}" == "config" || "${command}" == "cfg" ]]; then
     if [[ "${previous}" == "-k" || "${previous}" == "--keyfile" ]]; then
-      COMPREPLY=($(compgen -f -- "${current}"))
+      _sshc_complete_files
       return 0
     fi
     if [[ "${previous}" == "-u" || "${previous}" == "--username" || "${previous}" == "-p" || "${previous}" == "--password" || "${previous}" == "--prod-username" || "${previous}" == "--prod-password" || "${previous}" == "--test-username" || "${previous}" == "--test-password" ]]; then
@@ -17,17 +26,63 @@ _sshc_completion() {
     return 0
   fi
 
+  if [[ "${command}" == "-v" || "${command}" == "--versions" ]]; then
+    if [[ "${COMP_CWORD}" -eq 2 ]]; then
+      local message_file message
+      message_file="$(mktemp)"
+      mapfile -t COMPREPLY < <(sshc --complete-vehicles "${current}" 2>"${message_file}")
+      if [[ "${#COMPREPLY[@]}" -eq 0 ]]; then
+        message="$(<"${message_file}")"
+        if [[ -n "${message}" ]]; then
+          printf "\n%s\n" "${message}" > /dev/tty
+        fi
+      fi
+      rm -f "${message_file}"
+      compopt -o nosort 2>/dev/null || true
+    fi
+    return 0
+  fi
+
+  if [[ "${COMP_WORDS[2]}" == "push" ]]; then
+    if [[ "${COMP_CWORD}" -eq 3 ]]; then
+      _sshc_complete_files
+    elif [[ "${COMP_CWORD}" -eq 4 ]]; then
+      _sshc_remote_paths
+    fi
+    return 0
+  fi
+
+  if [[ "${COMP_WORDS[2]}" == "pull" ]]; then
+    if [[ "${COMP_CWORD}" -eq 3 ]]; then
+      _sshc_remote_paths
+    elif [[ "${COMP_CWORD}" -eq 4 ]]; then
+      _sshc_complete_files
+    fi
+    return 0
+  fi
+
+  if [[ "${COMP_CWORD}" -eq 2 ]]; then
+    COMPREPLY=($(compgen -W "push pull add a -v --versions" -- "${current}"))
+    return 0
+  fi
+
   if [[ "${current}" == -* ]]; then
     COMPREPLY=($(compgen -W "-v --versions -h --help" -- "${current}"))
     return 0
   fi
 
   if [[ "${COMP_CWORD}" -eq 1 ]]; then
+    if [[ "${current}" == ./* || "${current}" == ../* || "${current}" == /* || "${current}" == \~/* ]]; then
+      _sshc_complete_files
+      return 0
+    fi
+    local -a commands
+    mapfile -t commands < <(compgen -W "config cfg push pull add a -v --versions" -- "${current}")
     local -a vehicles
     local message_file message
     message_file="$(mktemp)"
     mapfile -t vehicles < <(sshc --complete-vehicles "${current}" 2>"${message_file}")
-    COMPREPLY=("${vehicles[@]}")
+    COMPREPLY=("${commands[@]}" "${vehicles[@]}")
     if [[ "${#COMPREPLY[@]}" -eq 0 ]]; then
       message="$(<"${message_file}")"
       if [[ -n "${message}" ]]; then

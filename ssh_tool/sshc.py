@@ -9,8 +9,8 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -19,6 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,10 @@ DEFAULT_LOGIN_PATH = "/xz-server/v1/session"
 DEFAULT_VEHICLES_PATH = "/xz-server/v1/fleet/vehicles"
 DEFAULT_PORT_MAPPINGS_PATH = "/xz-server/httpproxy/frp-manage-server/port-mappings"
 DEFAULT_SSH_USER = "nvidia"
+T5P_SSH_USER = "root"
+T5P_ROOT_PASSWORD = "MiniEye@Root1201PassWd.."
+NVIDIA_PRIMARY_PASSWORD = "mini!@#123.com"
+NVIDIA_FALLBACK_PASSWORD = "nvidia"
 DEFAULT_SSH_HOST = "ad.minieye.tech"
 DEFAULT_TARGET_PORT = 22
 DEFAULT_KEYFILE = "~/.ssh/id_ed25519"
@@ -38,7 +43,7 @@ HTTP_TIMEOUT = 15.0
 VEHICLE_PAGE_SIZE = 20
 COMPLETION_PAGE_SIZE = 50
 PORT_WAIT_SECONDS = 10.0
-PORT_INITIAL_DELAY_SECONDS = 5.0
+PORT_INITIAL_DELAY_SECONDS = 3.0
 PORT_POLL_INTERVAL = 2.0
 PORT_CONNECT_TIMEOUT_SECONDS = 2.0
 DEFAULT_SSH_OPTS = [
@@ -121,6 +126,25 @@ class SshcError(RuntimeError):
     """A user-facing error."""
 
 
+class KeyLoginStatus(Enum):
+    OK = "ok"
+    AUTH_FAILED = "auth_failed"
+    NETWORK_FAILED = "network_failed"
+    SSH_ERROR = "ssh_error"
+    LOCAL_ERROR = "local_error"
+
+
+@dataclass(frozen=True)
+class KeyLoginResult:
+    status: KeyLoginStatus
+    message: str = ""
+    returncode: int | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.status == KeyLoginStatus.OK
+
+
 @dataclass(frozen=True)
 class HttpResult:
     status: int
@@ -137,6 +161,7 @@ class Settings:
     test_username: str
     test_password_md5: str
     keyfile: Path
+    ssh_password_cache: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -161,6 +186,16 @@ class VehicleLookup:
     device_id: str
     c4_online: bool
     mapping: PortMapping | None
+
+
+@dataclass(frozen=True)
+class SshEndpoint:
+    vehicle_name: str
+    ssh_user: str
+    ssh_host: str
+    server_port: int
+    keyfile: Path
+    ssh_opts: list[str]
 
 
 @dataclass(frozen=True)
@@ -330,6 +365,33 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
             return 130
 
+    if len(raw_args) >= 2 and raw_args[1] in {"push", "pull"}:
+        transfer_parser = build_vehicle_transfer_parser(raw_args[1])
+        transfer_args = transfer_parser.parse_args(raw_args[2:])
+        try:
+            settings = load_settings()
+            if raw_args[1] == "push":
+                return cmd_push(
+                    raw_args[0],
+                    transfer_args.local,
+                    transfer_args.remote,
+                    settings,
+                    debug=transfer_args.debug,
+                )
+            return cmd_pull(
+                raw_args[0],
+                transfer_args.remote,
+                transfer_args.local,
+                settings,
+                debug=transfer_args.debug,
+            )
+        except SshcError as exc:
+            print(f"{yellow('[WARNING]')} {exc}", file=sys.stderr)
+            return 1
+        except KeyboardInterrupt:
+            print(f"\n{yellow('[WARNING]')} interrupted", file=sys.stderr)
+            return 130
+
     parser = build_parser()
     args = parser.parse_args(raw_args)
 
@@ -367,6 +429,8 @@ def build_parser() -> argparse.ArgumentParser:
         usage=(
             "sshc [-h] [-v] vehicle\n"
             "       sshc [-h] vehicle add <port>\n"
+            "       sshc [-h] vehicle push <local> <remote>\n"
+            "       sshc [-h] vehicle pull <remote> <local>\n"
             "       sshc config [-h] [--prod-username USERNAME] "
             "[--prod-password PASSWORD] [--test-username USERNAME] "
             "[--test-password PASSWORD] [-k KEYFILE]"
@@ -384,6 +448,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--complete-vehicles", help=argparse.SUPPRESS)
+    return parser
+
+
+def build_vehicle_transfer_parser(action: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog=f"sshc <vehicle> {action}",
+        description="Copy files between the local machine and a vehicle.",
+    )
+    if action == "push":
+        parser.add_argument("local", help="local source path")
+        parser.add_argument("remote", help="remote destination path")
+    else:
+        parser.add_argument("remote", help="remote source path")
+        parser.add_argument("local", help="local destination path")
+    parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
@@ -424,6 +503,7 @@ def load_settings() -> Settings:
         test_username=str(config["test_username"]).strip(),
         test_password_md5=str(config["test_password_md5"]).strip(),
         keyfile=Path(str(config["keyfile"])).expanduser(),
+        ssh_password_cache=dict(config.get("ssh_password_cache", {})),
     )
 
 
@@ -461,7 +541,7 @@ def configure(args: argparse.Namespace) -> None:
     print_config(config)
 
 
-def read_config() -> dict[str, str]:
+def read_config() -> dict[str, Any]:
     if not CONFIG_PATH.exists():
         config = default_config()
         write_config(config)
@@ -477,7 +557,10 @@ def read_config() -> dict[str, str]:
     config = default_config()
     for key in config:
         if key in data:
-            config[key] = str(data[key])
+            if key == "ssh_password_cache":
+                config[key] = normalize_password_cache(data[key])
+            else:
+                config[key] = str(data[key])
     if "username" in data and not config["prod_username"]:
         config["prod_username"] = str(data["username"])
     if "password_md5" in data and not config["prod_password_md5"]:
@@ -485,7 +568,7 @@ def read_config() -> dict[str, str]:
     return config
 
 
-def write_config(config: dict[str, str]) -> None:
+def write_config(config: dict[str, Any]) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(
         json.dumps(config, ensure_ascii=False, indent=2) + "\n",
@@ -497,23 +580,84 @@ def write_config(config: dict[str, str]) -> None:
         pass
 
 
-def default_config() -> dict[str, str]:
+def default_config() -> dict[str, Any]:
     return {
         "prod_username": "",
         "prod_password_md5": "",
         "test_username": "",
         "test_password_md5": "",
         "keyfile": DEFAULT_KEYFILE,
+        "ssh_password_cache": {},
     }
 
 
-def print_config(config: dict[str, str]) -> None:
+def print_config(config: dict[str, Any]) -> None:
     print(f"config: {CONFIG_PATH}")
     print(f"prod_username: {config['prod_username'] or '-'}")
     print(f"prod_password_md5: {config['prod_password_md5'] or '-'}")
     print(f"test_username: {config['test_username'] or '-'}")
     print(f"test_password_md5: {config['test_password_md5'] or '-'}")
     print(f"keyfile: {config['keyfile'] or '-'}")
+    cache = config.get("ssh_password_cache", {})
+    cache_keys = sorted(cache) if isinstance(cache, dict) else []
+    print(f"ssh_password_cache: {', '.join(cache_keys) if cache_keys else '-'}")
+
+
+def normalize_password_cache(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): str(password)
+        for key, password in value.items()
+        if str(key) and isinstance(password, str) and password
+    }
+
+
+def ssh_user_for_vehicle(vehicle_name: str) -> str:
+    if vehicle_name.upper().startswith("T5P"):
+        return T5P_SSH_USER
+    return DEFAULT_SSH_USER
+
+
+def password_cache_key(ssh_user: str, vehicle_name: str) -> str:
+    return f"{ssh_user}@{vehicle_name.upper()}"
+
+
+def ssh_password_candidates(
+    settings: Settings,
+    *,
+    ssh_user: str,
+    vehicle_name: str,
+) -> list[str]:
+    if ssh_user == T5P_SSH_USER:
+        return [T5P_ROOT_PASSWORD]
+    candidates: list[str] = []
+    cached = settings.ssh_password_cache.get(password_cache_key(ssh_user, vehicle_name))
+    if cached:
+        candidates.append(cached)
+    candidates.extend([NVIDIA_PRIMARY_PASSWORD, NVIDIA_FALLBACK_PASSWORD])
+    return dedupe_passwords(candidates)
+
+
+def dedupe_passwords(passwords: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for password in passwords:
+        if not password or password in seen:
+            continue
+        seen.add(password)
+        result.append(password)
+    return result
+
+
+def remember_ssh_password(ssh_user: str, vehicle_name: str, password: str) -> None:
+    if ssh_user == T5P_SSH_USER:
+        return
+    config = read_config()
+    cache = normalize_password_cache(config.get("ssh_password_cache", {}))
+    cache[password_cache_key(ssh_user, vehicle_name)] = password
+    config["ssh_password_cache"] = cache
+    write_config(config)
 
 
 def md5_password(password: str) -> str:
@@ -545,78 +689,212 @@ def run(args: argparse.Namespace, settings: Settings) -> int:
             '--prod-password "password"'
         )
 
-    print("[INFO] 登录并查询车辆状态...", flush=True)
-    lookup = resolve_vehicle_lookup(
-        args.vehicle,
-        settings,
-        debug=args.debug,
-        require_online=not args.versions,
-    )
-    client = lookup.client
-    vehicle = lookup.vehicle
-    if args.debug:
-        print_json("vehicle", vehicle)
-
-    device_id = lookup.device_id
     if args.versions:
-        show_vehicle_info(client, args.vehicle, vehicle, device_id)
+        print("[INFO] 登录并查询车辆状态...", flush=True)
+        lookup = resolve_vehicle_lookup(
+            args.vehicle,
+            settings,
+            debug=args.debug,
+            require_online=False,
+        )
+        if args.debug:
+            print_json("vehicle", lookup.vehicle)
+        show_vehicle_info(lookup.client, args.vehicle, lookup.vehicle, lookup.device_id)
         if not lookup.c4_online:
             print(f"{yellow('[WARNING]')} {args.vehicle} c4 is offline")
         return 0
 
-    if not lookup.c4_online:
-        raise SshcError(f"{args.vehicle} c4 is offline")
-
-    print(f"[INFO] 检查 {DEFAULT_TARGET_PORT} 端口映射...", flush=True)
-    mapping = ensure_port_mapping(
-        client=client,
-        device_id=device_id,
-        target_port=DEFAULT_TARGET_PORT,
-    )
-    if mapping is None or mapping.server_port is None:
-        raise SshcError("cannot resolve public SSH server port")
-
-    print(
-        f"      {DEFAULT_TARGET_PORT} -> {format_host_port(mapping.server_ip or lookup.env.ssh_host, mapping.server_port)} "
-        f"(status={_colour_status(mapping.status)}, "
-        f"frpc_connected={format_scalar(mapping.frpc_connected)})"
-    )
-
-    print("[INFO] 检查公钥...", flush=True)
-    ensure_local_key(settings.keyfile)
-    ssh_host = mapping.server_ip or lookup.env.ssh_host
-    if check_key_login(
-        keyfile=settings.keyfile,
-        ssh_user=DEFAULT_SSH_USER,
-        ssh_host=ssh_host,
-        server_port=mapping.server_port,
-        ssh_opts=DEFAULT_SSH_OPTS,
-    ):
-        print("      公钥已就绪，跳过上传", flush=True)
-    else:
-        print("[INFO] 分发本机公钥，按提示输入车端密码...", flush=True)
-        copy_ssh_key(
-            keyfile=settings.keyfile,
-            ssh_user=DEFAULT_SSH_USER,
-            ssh_host=ssh_host,
-            server_port=mapping.server_port,
-            ssh_opts=DEFAULT_SSH_OPTS,
-        )
-
-    target = f"{DEFAULT_SSH_USER}@{ssh_host}"
+    endpoint = prepare_ssh_endpoint(args.vehicle, settings, debug=args.debug)
     ssh_command = [
         "ssh",
-        *DEFAULT_SSH_OPTS,
+        *endpoint.ssh_opts,
         "-i",
-        str(settings.keyfile),
+        str(endpoint.keyfile),
         "-p",
-        str(mapping.server_port),
-        target,
+        str(endpoint.server_port),
+        f"{endpoint.ssh_user}@{endpoint.ssh_host}",
     ]
 
     print("[INFO] SSH 登录...", flush=True)
     print(green(shell_join(ssh_command)))
     return subprocess.run(ssh_command).returncode
+
+
+def prepare_ssh_endpoint(
+    vehicle_name: str,
+    settings: Settings,
+    *,
+    debug: bool = False,
+) -> SshEndpoint:
+    if not has_any_environment_config(settings):
+        raise SshcError(
+            'missing XiaoZhu config; run: sshc config --prod-username "username" '
+            '--prod-password "password"'
+        )
+
+    print("[INFO] 登录并查询车辆状态...", flush=True)
+    lookup = resolve_vehicle_lookup(
+        vehicle_name,
+        settings,
+        debug=debug,
+        require_online=True,
+    )
+    if debug:
+        print_json("vehicle", lookup.vehicle)
+    if not lookup.c4_online:
+        raise SshcError(f"{vehicle_name} c4 is offline")
+
+    print(f"[INFO] 检查 {DEFAULT_TARGET_PORT} 端口映射...", flush=True)
+    mapping = ensure_port_mapping(
+        client=lookup.client,
+        device_id=lookup.device_id,
+        target_port=DEFAULT_TARGET_PORT,
+    )
+    if mapping is None or mapping.server_port is None:
+        raise SshcError("cannot resolve public SSH server port")
+    ssh_host = mapping.server_ip or lookup.env.ssh_host
+    print(
+        f"      {DEFAULT_TARGET_PORT} -> {format_host_port(ssh_host, mapping.server_port)} "
+        f"(status={_colour_status(mapping.status)}, "
+        f"frpc_connected={format_scalar(mapping.frpc_connected)})"
+    )
+
+    ensure_local_key(settings.keyfile)
+    actual_vehicle_name = str(lookup.vehicle.get("name") or vehicle_name)
+    ssh_user = ssh_user_for_vehicle(actual_vehicle_name)
+    print(
+        f"[INFO] 检查 {ssh_user} 公钥: "
+        f"{ssh_user}@{ssh_host}:{mapping.server_port}",
+        flush=True,
+    )
+    key_result = check_key_login_with_retries(
+        keyfile=settings.keyfile,
+        ssh_user=ssh_user,
+        ssh_host=ssh_host,
+        server_port=mapping.server_port,
+        ssh_opts=DEFAULT_SSH_OPTS,
+    )
+    if key_result.ok:
+        print("      公钥已就绪，跳过密码认证", flush=True)
+    elif key_result.status == KeyLoginStatus.AUTH_FAILED:
+        print(f"      公钥认证失败: {key_result.message or '-'}", flush=True)
+        if not try_copy_ssh_key_with_passwords(
+            keyfile=settings.keyfile,
+            ssh_user=ssh_user,
+            vehicle_name=actual_vehicle_name,
+            ssh_host=ssh_host,
+            server_port=mapping.server_port,
+            ssh_opts=DEFAULT_SSH_OPTS,
+            settings=settings,
+        ):
+            print("[INFO] 自动认证失败，分发本机公钥，按提示输入车端密码...", flush=True)
+            copy_ssh_key(
+                keyfile=settings.keyfile,
+                ssh_user=ssh_user,
+                ssh_host=ssh_host,
+                server_port=mapping.server_port,
+                ssh_opts=DEFAULT_SSH_OPTS,
+            )
+    else:
+        raise SshcError(format_key_login_failure("key login failed", key_result))
+    return SshEndpoint(
+        vehicle_name=actual_vehicle_name,
+        ssh_user=ssh_user,
+        ssh_host=ssh_host,
+        server_port=mapping.server_port,
+        keyfile=settings.keyfile,
+        ssh_opts=DEFAULT_SSH_OPTS,
+    )
+
+
+def validate_remote_path(remote_path: str) -> str:
+    if not remote_path:
+        raise SshcError("remote path cannot be empty")
+    remote_path = restore_remote_home_path(remote_path)
+    if remote_path.startswith(("./", "../")):
+        raise SshcError("remote path must not look like a local relative path")
+    return remote_path
+
+
+def validate_local_scp_path(local_path: str) -> str:
+    if local_path.startswith("-"):
+        raise SshcError(
+            f"local path starts with '-': {local_path}; prefix it with ./ to avoid scp option parsing"
+        )
+    return local_path
+
+
+def restore_remote_home_path(remote_path: str) -> str:
+    """Undo local shell expansion of ~/ for remote path arguments."""
+    local_home = str(Path.home())
+    if remote_path == local_home:
+        return "~"
+    if remote_path.startswith(local_home + "/"):
+        return "~" + remote_path[len(local_home):]
+    return remote_path
+
+
+def cmd_push(
+    vehicle_name: str,
+    local_path: str,
+    remote_path: str,
+    settings: Settings,
+    *,
+    debug: bool = False,
+) -> int:
+    remote_path = validate_remote_path(remote_path)
+    local_path = validate_local_scp_path(local_path)
+    endpoint = prepare_ssh_endpoint(vehicle_name, settings, debug=debug)
+    return run_scp_transfer(
+        endpoint,
+        local_path,
+        build_remote_scp_target(endpoint, remote_path),
+    )
+
+
+def cmd_pull(
+    vehicle_name: str,
+    remote_path: str,
+    local_path: str,
+    settings: Settings,
+    *,
+    debug: bool = False,
+) -> int:
+    remote_path = validate_remote_path(remote_path)
+    local_path = validate_local_scp_path(local_path)
+    endpoint = prepare_ssh_endpoint(vehicle_name, settings, debug=debug)
+    return run_scp_transfer(
+        endpoint,
+        build_remote_scp_target(endpoint, remote_path),
+        local_path,
+    )
+
+
+def build_remote_scp_target(endpoint: SshEndpoint, remote_path: str) -> str:
+    return f"{endpoint.ssh_user}@{endpoint.ssh_host}:{remote_path}"
+
+
+def run_scp_transfer(
+    endpoint: SshEndpoint,
+    source: str,
+    target: str,
+    *,
+    recursive: bool = True,
+) -> int:
+    scp_command = [
+        "scp",
+        *endpoint.ssh_opts,
+        "-i",
+        str(endpoint.keyfile),
+        "-P",
+        str(endpoint.server_port),
+    ]
+    if recursive:
+        scp_command.append("-r")
+    scp_command.extend([source, target])
+    print("[INFO] 文件传输...", flush=True)
+    print(green(shell_join(scp_command)))
+    return subprocess.run(scp_command).returncode
 
 
 def cmd_add(vehicle_name: str, port: int, settings: Settings, *, debug: bool = False) -> None:
@@ -895,6 +1173,7 @@ def show_vehicle_info(
     device_id: str,
 ) -> None:
     name = vehicle.get("name") or vehicle_name
+    ssh_user = ssh_user_for_vehicle(str(name))
     print("[INFO] 车辆信息:", flush=True)
     print(f"vehicle: {name}")
 
@@ -927,7 +1206,7 @@ def show_vehicle_info(
         if mapping.device_port == DEFAULT_TARGET_PORT and mapping.server_port:
             ssh_host = mapping.server_ip or DEFAULT_SSH_HOST
             print(
-                f"    ssh: {cyan(f'ssh {DEFAULT_SSH_USER}@{ssh_host} -p {mapping.server_port}')}"
+                f"    ssh: {cyan(f'ssh {ssh_user}@{ssh_host} -p {mapping.server_port}')}"
             )
         if mapping.device_port in {9000, 8765} and mapping.server_port and (mapping.status or "").strip().lower() == "active":
             ws_host = mapping.server_ip or DEFAULT_SSH_HOST
@@ -945,7 +1224,7 @@ def ensure_port_mapping(
     mappings = list_port_mappings(client, device_id)
     mapping = find_device_port_mapping(mappings, target_port)
 
-    if mapping and mapping.is_ready and port_is_connectable(mapping):
+    if mapping_is_connectable_ready(mapping):
         return mapping
 
     if mapping and mapping.needs_recreate:
@@ -963,8 +1242,13 @@ def ensure_port_mapping(
         create_port_mapping(client, device_id, target_port)
 
     mapping = wait_for_connectable_mapping(client, device_id, target_port)
-    if mapping and mapping.is_ready:
+    if mapping_is_connectable_ready(mapping):
         return mapping
+    if mapping and mapping.is_ready:
+        raise SshcError(
+            f"port mapping is ready but TCP is not connectable after {PORT_WAIT_SECONDS:.0f}s "
+            f"({format_mapping_endpoint(mapping)})"
+        )
     status = mapping.status if mapping else "missing"
     connected = format_scalar(mapping.frpc_connected) if mapping else "-"
     raise SshcError(
@@ -1067,7 +1351,7 @@ def wait_for_connectable_mapping(
             deadline = time.monotonic() + PORT_WAIT_SECONDS
             wait_until_next_check(deadline, PORT_INITIAL_DELAY_SECONDS)
             continue
-        elif mapping and mapping.is_ready and port_is_connectable(mapping):
+        elif mapping_is_connectable_ready(mapping):
             return mapping
         if time.monotonic() >= deadline:
             return mapping
@@ -1095,6 +1379,17 @@ def port_is_connectable(mapping: PortMapping) -> bool:
             return True
     except OSError:
         return False
+
+
+def mapping_is_connectable_ready(mapping: PortMapping | None) -> bool:
+    return bool(mapping and mapping.is_ready and port_is_connectable(mapping))
+
+
+def format_mapping_endpoint(mapping: PortMapping) -> str:
+    host = mapping.server_ip or DEFAULT_SSH_HOST
+    if mapping.server_port is None:
+        return f"{host}:-"
+    return format_host_port(host, mapping.server_port)
 
 
 def ensure_local_key(keyfile: Path) -> None:
@@ -1156,6 +1451,101 @@ def copy_ssh_key(
         raise SshcError("ssh-copy-id failed")
 
 
+def try_copy_ssh_key_with_passwords(
+    *,
+    keyfile: Path,
+    ssh_user: str,
+    vehicle_name: str,
+    ssh_host: str,
+    server_port: int,
+    ssh_opts: list[str],
+    settings: Settings,
+) -> bool:
+    passwords = ssh_password_candidates(
+        settings,
+        ssh_user=ssh_user,
+        vehicle_name=vehicle_name,
+    )
+    if not passwords:
+        return False
+    if shutil.which("sshpass") is None:
+        print(
+            f"{yellow('[WARNING]')} 未安装 sshpass，跳过自动密码认证并进入交互式 fallback",
+            file=sys.stderr,
+        )
+        return False
+
+    print("[INFO] 尝试分发公钥...", flush=True)
+    for password in passwords:
+        if not copy_ssh_key_with_password(
+            keyfile=keyfile,
+            ssh_user=ssh_user,
+            ssh_host=ssh_host,
+            server_port=server_port,
+            ssh_opts=ssh_opts,
+            password=password,
+        ):
+            continue
+        key_result = check_key_login_with_retries(
+            keyfile=keyfile,
+            ssh_user=ssh_user,
+            ssh_host=ssh_host,
+            server_port=server_port,
+            ssh_opts=ssh_opts,
+        )
+        if key_result.ok:
+            remember_ssh_password(ssh_user, vehicle_name, password)
+            print("      公钥上传并验证成功", flush=True)
+            return True
+        if key_result.status == KeyLoginStatus.AUTH_FAILED:
+            print("      公钥验证未通过，继续尝试下一个密码", flush=True)
+            continue
+        print(
+            f"      公钥验证异常: {format_key_login_failure('key login failed', key_result)}",
+            flush=True,
+        )
+        return False
+    return False
+
+
+def copy_ssh_key_with_password(
+    *,
+    keyfile: Path,
+    ssh_user: str,
+    ssh_host: str,
+    server_port: int,
+    ssh_opts: list[str],
+    password: str,
+) -> bool:
+    target = f"{ssh_user}@{ssh_host}"
+    command = [
+        "sshpass",
+        "-e",
+        "ssh-copy-id",
+        *ssh_opts,
+        "-o",
+        "BatchMode=no",
+        "-p",
+        str(server_port),
+        "-i",
+        str(public_key_path(keyfile.expanduser())),
+        target,
+    ]
+    env = os.environ.copy()
+    env["SSHPASS"] = password
+    try:
+        result = subprocess.run(
+            command,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
 def check_key_login(
     *,
     keyfile: Path,
@@ -1163,23 +1553,125 @@ def check_key_login(
     ssh_host: str,
     server_port: int,
     ssh_opts: list[str],
-) -> bool:
-    """Try SSH with key auth only. Returns True if the key already works."""
-    result = subprocess.run(
-        [
-            "ssh",
-            *ssh_opts,
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=3",
-            "-i", str(keyfile.expanduser()),
-            "-p", str(server_port),
-            f"{ssh_user}@{ssh_host}",
-            "echo ok",
-        ],
-        capture_output=True,
-        timeout=5,
+) -> KeyLoginResult:
+    """Try SSH with key auth only and classify the result."""
+    try:
+        result = subprocess.run(
+            [
+                "ssh",
+                *ssh_opts,
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=3",
+                "-i", str(keyfile.expanduser()),
+                "-p", str(server_port),
+                f"{ssh_user}@{ssh_host}",
+                "echo ok",
+            ],
+            capture_output=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return KeyLoginResult(
+            KeyLoginStatus.NETWORK_FAILED,
+            summarize_process_text(str(exc)),
+        )
+    except OSError as exc:
+        return KeyLoginResult(KeyLoginStatus.LOCAL_ERROR, str(exc))
+    stdout = decode_process_text(result.stdout)
+    stderr = decode_process_text(result.stderr)
+    message = summarize_process_text(stderr or stdout)
+    if result.returncode == 0 and "ok" in stdout:
+        return KeyLoginResult(KeyLoginStatus.OK, "ok", result.returncode)
+    status = classify_key_login_failure(stderr, stdout)
+    return KeyLoginResult(status, message, result.returncode)
+
+
+def check_key_login_with_retries(
+    *,
+    keyfile: Path,
+    ssh_user: str,
+    ssh_host: str,
+    server_port: int,
+    ssh_opts: list[str],
+    delays: tuple[float, ...] = (1.0, 2.0),
+) -> KeyLoginResult:
+    result = check_key_login(
+        keyfile=keyfile,
+        ssh_user=ssh_user,
+        ssh_host=ssh_host,
+        server_port=server_port,
+        ssh_opts=ssh_opts,
     )
-    return result.returncode == 0 and b"ok" in result.stdout
+    for delay in delays:
+        if result.status != KeyLoginStatus.NETWORK_FAILED:
+            return result
+        print(
+            f"      SSH 网络检查失败，{delay:g}s 后重试: {result.message or '-'}",
+            flush=True,
+        )
+        time.sleep(delay)
+        result = check_key_login(
+            keyfile=keyfile,
+            ssh_user=ssh_user,
+            ssh_host=ssh_host,
+            server_port=server_port,
+            ssh_opts=ssh_opts,
+        )
+    return result
+
+
+def classify_key_login_failure(stderr: str, stdout: str = "") -> KeyLoginStatus:
+    text = f"{stderr}\n{stdout}".lower()
+    auth_markers = (
+        "permission denied",
+        "authentications that can continue",
+        "publickey",
+        "no supported authentication methods available",
+    )
+    if any(marker in text for marker in auth_markers):
+        return KeyLoginStatus.AUTH_FAILED
+    network_markers = (
+        "connection timed out",
+        "operation timed out",
+        "connection refused",
+        "connection reset",
+        "no route to host",
+        "network is unreachable",
+        "kex_exchange_identification",
+        "connection closed by remote host",
+        "connection closed",
+        "could not resolve hostname",
+        "temporary failure in name resolution",
+        "name or service not known",
+        "banner exchange",
+    )
+    if any(marker in text for marker in network_markers):
+        return KeyLoginStatus.NETWORK_FAILED
+    return KeyLoginStatus.SSH_ERROR
+
+
+def decode_process_text(value: bytes | str | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def summarize_process_text(text: str, *, limit: int = 180) -> str:
+    summary = " ".join(text.strip().split())
+    if len(summary) > limit:
+        return summary[: limit - 3] + "..."
+    return summary
+
+
+def format_key_login_failure(prefix: str, result: KeyLoginResult) -> str:
+    parts = [f"{prefix}: {result.status.value}"]
+    if result.returncode is not None:
+        parts.append(f"returncode={result.returncode}")
+    if result.message:
+        parts.append(result.message)
+    return "; ".join(parts)
 
 
 def public_key_path(private_key: Path) -> Path:

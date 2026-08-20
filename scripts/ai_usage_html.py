@@ -81,13 +81,32 @@ def _parse_iso_date(date_str: str) -> str:
         return date_str
 
 
-# ── local cost estimation for non-GPT plans ──────────────────────────────────
+# ── local cost estimation ────────────────────────────────────────────────────
 
-DEEPSEEK_MULTIPLIER = 1.5
+RAW_MODEL_PRICING = {
+    "deepseek-v4-pro": {"input": 0.057, "output": 3.857},
+    "deepseek-v4-flash": {"input": 0.019, "output": 1.286},
+    "gpt-5.4": {"input": 0.50, "output": 3.00},
+    "gpt-5.5": {"input": 0.50, "output": 3.00},
+    "gpt-5.6-luna": {"input": 0.02, "output": 0.12},
+    "gpt-5.6-sol": {"input": 0.50, "output": 3.00},
+    "gpt-5.6-terra": {"input": 0.20, "output": 1.20},
+}
 
-P_DEEPSEEK = {"input": 0.435, "output": 0.87, "cache": 0.003625}
-P_KIMI = {"input": 0.95, "output": 4.00, "cache": 0.16}
+MODEL_PRICING = {
+    name: {"input": price["input"], "output": price["output"], "cache": price["input"] / 30}
+    for name, price in RAW_MODEL_PRICING.items()
+}
 
+PLAN_FALLBACK_MODEL = {
+    "deepseek": "deepseek-v4-pro",
+    "kimi": "deepseek-v4-pro",
+}
+
+# Aggregate usage rows have token counts but no model split. For GPT/codex plans,
+# use the current default model as a documented estimate rather than fabricating a
+# per-model daily split.
+AGGREGATE_FALLBACK_MODEL = "gpt-5.6-terra"
 LOCAL_COST_PLANS = {"deepseek", "kimi"}
 
 
@@ -97,32 +116,99 @@ def _plan_suffix(data: dict) -> str:
     return plan.rsplit("-", 1)[-1].lower() if "-" in plan else ""
 
 
-def _get_pricing(model_name: str, plan_suffix: str) -> Optional[Dict]:
-    """Return pricing dict for a model under *plan_suffix*, or None for server cost."""
-    if plan_suffix == "kimi":
-        return P_KIMI
-    if plan_suffix == "deepseek":
-        return P_DEEPSEEK
-    return None  # use server cost
+def _fallback_model(plan_suffix: str, aggregate: bool = False) -> str:
+    """Return fallback model for rows without a model name."""
+    if plan_suffix in PLAN_FALLBACK_MODEL:
+        return PLAN_FALLBACK_MODEL[plan_suffix]
+    return AGGREGATE_FALLBACK_MODEL if aggregate else ""
+
+
+def _get_pricing(model_name: str, plan_suffix: str = "", aggregate: bool = False) -> Optional[Dict[str, float]]:
+    """Return script-local pricing for exact model or documented fallback."""
+    if model_name in MODEL_PRICING:
+        return MODEL_PRICING[model_name]
+    fallback = _fallback_model(plan_suffix, aggregate)
+    return MODEL_PRICING.get(fallback) if fallback else None
+
+
+def _local_cost_note(plan_suffix: str) -> str:
+    """Return a short UI note describing aggregate fallback pricing."""
+    fallback = _fallback_model(plan_suffix, aggregate=True)
+    if not fallback:
+        return ""
+    if plan_suffix in LOCAL_COST_PLANS:
+        return f"Aggregate rows without model names use {fallback} pricing."
+    return f"Aggregate rows without model names use {fallback} pricing."
 
 
 def _compute_local_cost(input_tok: int, output_tok: int, cache_tok: int,
-                        pricing: dict, plan_suffix: str = "") -> float:
+                        pricing: dict) -> float:
     """Compute local estimated cost from token counts and pricing dict."""
-    cost = (input_tok * pricing["input"]
+    return (input_tok * pricing["input"]
             + output_tok * pricing["output"]
             + cache_tok * pricing["cache"]) / 1_000_000
-    if plan_suffix == "deepseek":
-        cost *= DEEPSEEK_MULTIPLIER
-    return cost
 
 
-def _card(icon: str, title: str, value: str, sub: str) -> List[str]:
+def _estimate_local_cost(src: dict, plan_suffix: str = "", model_name: str = "",
+                         aggregate: bool = False) -> Optional[float]:
+    """Estimate local cost for one usage row, or None when no pricing applies."""
+    pricing = _get_pricing(model_name, plan_suffix, aggregate)
+    if not pricing:
+        return None
+    return _compute_local_cost(
+        int(src.get("input_tokens", 0)),
+        int(src.get("output_tokens", 0)),
+        int(src.get("cache_read_tokens", 0)),
+        pricing,
+    )
+
+
+def _backend_cost(src: dict) -> float:
+    """Return the backend-reported billing value for a usage row."""
+    return float(src.get("actual_cost", src.get("cost", 0)))
+
+
+def _cache_hit_from(src: dict) -> str:
+    """Return cache hit rate from input and cache-read token counts."""
+    cache_tokens = int(src.get("cache_read_tokens", 0))
+    input_tokens = int(src.get("input_tokens", 0))
+    return _pct(cache_tokens, input_tokens + cache_tokens)
+
+
+def _estimate_model_stats_cost(model_stats: list, plan_suffix: str) -> Optional[float]:
+    """Estimate total cost from per-model usage rows when all rows have pricing."""
+    if not model_stats:
+        return None
+    total = 0.0
+    for row in model_stats:
+        cost = _estimate_local_cost(row, plan_suffix, row.get("model", ""))
+        if cost is None:
+            return None
+        total += cost
+    return total
+
+
+def _has_local_model_pricing(model_stats: list, plan_suffix: str) -> bool:
+    """Return True when any model row or aggregate fallback can price locally."""
+    for row in model_stats:
+        if _get_pricing(row.get("model", ""), plan_suffix):
+            return True
+    return _get_pricing("", plan_suffix, aggregate=True) is not None
+
+
+def _aggregate_fallback_label(plan_suffix: str) -> str:
+    """Return the model label used for aggregate rows without model names."""
+    return _fallback_model(plan_suffix, aggregate=True)
+
+
+def _card(icon: str, title: str, value: str, sub: str, class_name: str = "") -> List[str]:
     """Return HTML for a single summary card."""
     sub_html = f'<span class="card-sub">{escape(sub)}</span>' if sub else ""
+    icon_html = f'<div class="card-icon">{escape(icon)}</div>' if icon else ""
+    class_attr = f' class="card {escape(class_name)}"' if class_name else ' class="card"'
     return [
-        f'<div class="card">'
-        f'<div class="card-icon">{escape(icon)}</div>'
+        f'<div{class_attr}>'
+        f'{icon_html}'
         f'<div class="card-title">{escape(title)}</div>'
         f'<div class="card-value">{escape(value)}</div>'
         f'{sub_html}'
@@ -131,32 +217,28 @@ def _card(icon: str, title: str, value: str, sub: str) -> List[str]:
 
 
 def _extract_totals(data: dict, plan_suffix: str = "") -> dict:
-    """Extract key numeric totals. Uses local cost for non-GPT plans."""
+    """Extract key numeric totals. Cost fields use local estimates when available."""
     usage = data.get("usage", {})
     today = usage.get("today", {})
     total = usage.get("total", {})
     sub = data.get("subscription", {})
 
-    use_local = plan_suffix in LOCAL_COST_PLANS
+    model_stats_cost = _estimate_model_stats_cost(data.get("model_stats", []), plan_suffix)
 
-    def _cost(src: dict) -> float:
-        if use_local:
-            pricing = _get_pricing("default", plan_suffix)
-            if pricing:
-                return _compute_local_cost(
-                    int(src.get("input_tokens", 0)),
-                    int(src.get("output_tokens", 0)),
-                    int(src.get("cache_read_tokens", 0)),
-                    pricing, plan_suffix,
-                )
-        return float(src.get("actual_cost", src.get("cost", 0)))
+    today_backend = _backend_cost(today)
+    total_backend = _backend_cost(total)
+    today_estimate = _estimate_local_cost(today, plan_suffix, aggregate=True)
+    aggregate_total_estimate = _estimate_local_cost(total, plan_suffix, aggregate=True)
+    total_estimate = model_stats_cost if model_stats_cost is not None else aggregate_total_estimate
 
     raw_rem = data.get("remaining")
     remaining = None if raw_rem is None or (isinstance(raw_rem, (int, float)) and raw_rem < 0) else raw_rem
 
     return {
-        "today_cost": _cost(today),
-        "total_cost": _cost(total),
+        "today_cost": today_estimate if today_estimate is not None else today_backend,
+        "total_cost": total_estimate if total_estimate is not None else total_backend,
+        "today_backend_cost": today_backend,
+        "total_backend_cost": total_backend,
         "today_reqs": int(today.get("requests", 0)),
         "total_reqs": int(total.get("requests", 0)),
         "today_in": int(today.get("input_tokens", 0)),
@@ -212,31 +294,20 @@ def _render_subscription(sub: dict) -> List[str]:
 
 
 def _render_model_table(model_stats: list, plan_suffix: str = "") -> List[str]:
-    """Return HTML for the model breakdown table. Local cost for non-GPT plans."""
+    """Return HTML for the model breakdown table."""
     if not model_stats:
         return []
-    use_local = plan_suffix in LOCAL_COST_PLANS
     lines = [
         '<div class="table-wrap">',
         '<table class="data-table">',
         '<thead><tr><th>Model</th><th>Requests</th><th>Input Tokens</th>'
-        '<th>Output Tokens</th><th>Cache Tokens</th><th>Total Tokens</th>'
+        '<th>Output Tokens</th><th>Cache Tokens</th><th>Cache Hit</th><th>Total Tokens</th>'
         '<th>Cost</th></tr></thead><tbody>',
     ]
     for m in model_stats:
-        if use_local:
-            pricing = _get_pricing(m.get("model", ""), plan_suffix)
-            if pricing:
-                cost = _compute_local_cost(
-                    int(m.get("input_tokens", 0)),
-                    int(m.get("output_tokens", 0)),
-                    int(m.get("cache_read_tokens", 0)),
-                    pricing, plan_suffix,
-                )
-            else:
-                cost = float(m.get("actual_cost", m.get("cost", 0)))
-        else:
-            cost = float(m.get("actual_cost", m.get("cost", 0)))
+        local_cost = _estimate_local_cost(m, plan_suffix, m.get("model", ""))
+        cost = local_cost if local_cost is not None else _backend_cost(m)
+        cache_hit = _cache_hit_from(m)
         lines.append(
             f"<tr>"
             f"<td><strong>{escape(m.get('model', '?'))}</strong></td>"
@@ -244,6 +315,7 @@ def _render_model_table(model_stats: list, plan_suffix: str = "") -> List[str]:
             f"<td>{_num(m.get('input_tokens', 0))}</td>"
             f"<td>{_num(m.get('output_tokens', 0))}</td>"
             f"<td>{_num(m.get('cache_read_tokens', 0))}</td>"
+            f"<td>{escape(cache_hit)}</td>"
             f"<td>{_num(m.get('total_tokens', 0))}</td>"
             f"<td class='cost-cell'>{_usd(cost)}</td>"
             f"</tr>"
@@ -253,34 +325,43 @@ def _render_model_table(model_stats: list, plan_suffix: str = "") -> List[str]:
 
 
 def _render_daily_chart(daily_usage: list, plan_suffix: str = "") -> List[str]:
-    """Return HTML for daily usage bar chart + detail table. Local cost for non-GPT."""
+    """Return HTML for daily usage bar chart + detail table."""
     if not daily_usage:
         return []
-    use_local = plan_suffix in LOCAL_COST_PLANS
+
+    def _day_blended(entry: dict, cost: float) -> str:
+        total_tokens = float(entry.get("total_tokens", 0))
+        if total_tokens <= 0:
+            return "—"
+        return f"${cost / total_tokens * 1_000_000:,.2f}/M"
 
     def _day_cost(entry: dict) -> float:
-        if use_local:
-            pricing = _get_pricing("default", plan_suffix)
-            if pricing:
-                return _compute_local_cost(
-                    int(entry.get("input_tokens", 0)),
-                    int(entry.get("output_tokens", 0)),
-                    int(entry.get("cache_read_tokens", 0)),
-                    pricing, plan_suffix,
-                )
-        return float(entry.get("actual_cost", entry.get("cost", 0)))
+        local_cost = _estimate_local_cost(entry, plan_suffix, aggregate=True)
+        return local_cost if local_cost is not None else _backend_cost(entry)
 
     max_cost = max(_day_cost(d) for d in daily_usage) or 1
-    lines = ['<div class="chart">']
+    lines = [
+        '<div class="chart">',
+        '<div class="chart-legend">Cost-scaled bars with token volume and blended efficiency</div>',
+    ]
     for entry in daily_usage:
         cost = _day_cost(entry)
         w = _bar_width(cost, max_cost)
         date_label = _parse_iso_date(entry.get("date", ""))
+        tokens_m = _tokens_millions(entry.get("total_tokens", 0))
+        blended = _day_blended(entry, cost)
+        cache_hit = _cache_hit_from(entry)
+        details = [f"{tokens_m} tokens", blended]
+        if cache_hit:
+            details.append(f"cache {cache_hit}")
         lines.append(
             f'<div class="chart-row">'
+            f'<div class="chart-top">'
             f'<span class="chart-label">{escape(date_label)}</span>'
             f'<div class="chart-track"><span class="chart-bar" style="width:{w:.1f}%"></span></div>'
-            f'<span class="chart-val">{_tokens_millions(entry.get("total_tokens", 0))}</span>'
+            f'<span class="chart-val">{_usd(cost)}</span>'
+            f'</div>'
+            f'<div class="chart-meta">{escape(" | ".join(details))}</div>'
             f'</div>'
         )
     lines.append("</div>")
@@ -289,10 +370,12 @@ def _render_daily_chart(daily_usage: list, plan_suffix: str = "") -> List[str]:
     lines.append('<table class="data-table">')
     lines.append(
         '<thead><tr><th>Date</th><th>Req</th><th>Input</th><th>Output</th>'
-        '<th>Cache</th><th>Total Tokens</th><th>Cost</th></tr></thead><tbody>'
+        '<th>Cache</th><th>Cache Hit</th><th>Total Tokens</th>'
+        '<th>Cost</th></tr></thead><tbody>'
     )
     for entry in daily_usage:
         cost = _day_cost(entry)
+        cache_hit = _cache_hit_from(entry)
         lines.append(
             f"<tr>"
             f"<td><strong>{escape(entry.get('date', '?'))}</strong></td>"
@@ -300,6 +383,7 @@ def _render_daily_chart(daily_usage: list, plan_suffix: str = "") -> List[str]:
             f"<td>{_num(entry.get('input_tokens', 0))}</td>"
             f"<td>{_num(entry.get('output_tokens', 0))}</td>"
             f"<td>{_num(entry.get('cache_read_tokens', 0))}</td>"
+            f"<td>{escape(cache_hit)}</td>"
             f"<td>{_num(entry.get('total_tokens', 0))}</td>"
             f"<td class='cost-cell'>{_usd(cost)}</td>"
             f"</tr>"
@@ -310,8 +394,6 @@ def _render_daily_chart(daily_usage: list, plan_suffix: str = "") -> List[str]:
 
 def _render_combined_cards(all_totals: List[Dict]) -> List[str]:
     """Return HTML for combined summary cards across all providers."""
-    tc = sum(t["today_cost"] for t in all_totals)
-    tot = sum(t["total_cost"] for t in all_totals)
     tr = sum(t["today_reqs"] for t in all_totals)
     tor = sum(t["total_reqs"] for t in all_totals)
     ti = sum(t["today_in"] for t in all_totals)
@@ -325,13 +407,17 @@ def _render_combined_cards(all_totals: List[Dict]) -> List[str]:
     combined_rem = sum(t["remaining"] for t in all_totals
                        if t["remaining"] is not None and t["remaining"] > 0)
     cache_hit = _pct(tcache, tcache + ti) if (tcache + ti) > 0 else "—"
+    today_backend = sum(t["today_backend_cost"] for t in all_totals)
+    total_backend = sum(t["total_backend_cost"] for t in all_totals)
 
     lines = [
         '<div class="section combined-section">',
         '<h2>🏢 Combined Summary</h2>',
         '<div class="cards">',
-        *_card("💰", "Today Cost", _usd(tc), ""),
-        *_card("🧾", "Total Cost", _usd(tot), ""),
+        *_card("💰", "Today Cost", _usd(sum(t["today_cost"] for t in all_totals)), ""),
+        *_card("🧾", "Total Cost", _usd(sum(t["total_cost"] for t in all_totals)), ""),
+        *_card("🖥️", "Backend Today", _usd(today_backend), "server returned today cost", "card-backend"),
+        *_card("🖥️", "Backend Total", _usd(total_backend), "server returned total cost", "card-backend"),
         *_card("📊", "Today Req", _num(tr), ""),
         *_card("📁", "Total Req", _num(tor), ""),
         *_card("⚡", "Cache Hit", cache_hit, "input tokens from cache today"),
@@ -343,7 +429,7 @@ def _render_combined_cards(all_totals: List[Dict]) -> List[str]:
     if combined_rem > 0:
         all_limits = sum(t["daily_limit"] for t in all_totals if t["daily_limit"])
         sub_text = f"of {_usd(all_limits)} limit" if all_limits else ""
-        lines.extend(_card("💵", "Daily Rem", _usd(combined_rem), sub_text))
+        lines.extend(_card("💵", "Daily Limit Left", _usd(combined_rem), sub_text))
     lines.append("</div></div>")
     return lines
 
@@ -357,12 +443,19 @@ def _render_one_provider(data: dict, label: str, tag_class: str) -> List[str]:
 
     pages = []
     pages.append(f'<div class="section provider-section {tag_class}">')
-    pages.append(f'<h2>{escape(title)}</h2>')
+    pages.append(f'<h2>📍 {escape(title)}</h2>')
     pages.append(f'<p class="subtitle">Plan: {escape(d["plan"])} &nbsp;|&nbsp; '
-                 f'Models: {escape(d["model_names"])}')
-    if plan_suffix in LOCAL_COST_PLANS:
+                  f'Models: {escape(d["model_names"])}')
+    if _has_local_model_pricing(d["model_stats"], plan_suffix):
         pages[-1] += ' &nbsp;|&nbsp; <span class="muted">Cost: local estimate</span>'
     pages[-1] += '</p>'
+    note = _local_cost_note(plan_suffix)
+    if note:
+        pages.append(
+            '<p class="subtitle" style="font-size:12px;margin-top:-8px">'
+            f'{escape(note)}'
+            '</p>'
+        )
 
     # summary cards
     t = _extract_totals(data, plan_suffix)
@@ -370,6 +463,8 @@ def _render_one_provider(data: dict, label: str, tag_class: str) -> List[str]:
     pages.append('<div class="cards">')
     pages.extend(_card("💰", "Today Cost", _usd(t["today_cost"]), ""))
     pages.extend(_card("🧾", "Total Cost", _usd(t["total_cost"]), ""))
+    pages.extend(_card("🖥️", "Backend Today", _usd(t["today_backend_cost"]), "server returned today cost", "card-backend"))
+    pages.extend(_card("🖥️", "Backend Total", _usd(t["total_backend_cost"]), "server returned total cost", "card-backend"))
     pages.extend(_card("📊", "Today Req", _num(t["today_reqs"]), ""))
     pages.extend(_card("📁", "Total Req", _num(t["total_reqs"]), ""))
     pages.extend(_card("⚡", "Cache Hit", cache_hit, "input tokens from cache today"))
@@ -377,14 +472,11 @@ def _render_one_provider(data: dict, label: str, tag_class: str) -> List[str]:
                         f"in={_num(t['today_in'])}  out={_num(t['today_out'])}"))
     pages.extend(_card("📦", "Total Tok", _num(t["total_tokens"]),
                         f"in={_num(t['total_in'])}  out={_num(t['total_out'])}  cache={_num(t['total_cache'])}"))
-    if t["total_tokens"] > 0:
-        unit = t["total_cost"] / t["total_tokens"] * 1_000_000
-        pages.extend(_card("💲", "Unit Cost", f"${unit:.3f}/M", ""))
     if t["remaining"] is not None and t["remaining"] > 0:
         sub_text = f"of {_usd(t['daily_limit'])} limit" if t["daily_limit"] else ""
-        pages.extend(_card("💵", "Daily Rem", _usd(t["remaining"]), sub_text))
+        pages.extend(_card("💵", "Daily Limit Left", _usd(t["remaining"]), sub_text))
     elif t["daily_limit"] == 0:
-        pages.extend(_card("💵", "Daily Rem", "∞", "Unlimited"))
+        pages.extend(_card("💵", "Daily Limit Left", "∞", "Unlimited"))
     if t["expires"]:
         pages.extend(_card("📅", "Expires", _parse_iso_date(t["expires"]), escape(t["expires"])))
     pages.append("</div>")
@@ -401,8 +493,8 @@ def _render_one_provider(data: dict, label: str, tag_class: str) -> List[str]:
 
     # daily usage
     if d["daily_usage"]:
-        pages.append(f'<h3 style="margin-top:24px">📅 Daily Usage '
-                     f'<span class="muted">(last {len(d["daily_usage"])} days)</span></h3>')
+        pages.append(f'<h3 style="margin-top:24px">📅 Daily Cost Usage '
+                      f'<span class="muted">(last {len(d["daily_usage"])} days)</span></h3>')
         pages.extend(_render_daily_chart(d["daily_usage"], plan_suffix))
 
     pages.append("</div>")  # .provider-section
@@ -498,6 +590,13 @@ def _css() -> str:
     }
     .card:hover { border-color: #58a6ff; }
     .card-icon { font-size: 24px; margin-bottom: 8px; }
+    .card-backend {
+      background: #121720; border-color: #2d333b;
+    }
+    .card-backend .card-value { color: #c9d1d9; }
+    .card-backend .card-title,
+    .card-backend .card-sub { color: #8b949e; }
+    .card-backend:hover { border-color: #6e7681; }
     .card-title {
       font-size: 12px; text-transform: uppercase;
       letter-spacing: 0.5px; color: #8b949e; margin-bottom: 4px;
@@ -554,8 +653,14 @@ def _css() -> str:
     .sub-val { font-size: 13px; color: #c9d1d9; text-align: right; }
     .sub-pct { font-size: 13px; color: #8b949e; text-align: right; }
     .chart { margin-bottom: 8px; }
+    .chart-legend {
+      font-size: 12px; color: #8b949e; margin-bottom: 8px;
+    }
     .chart-row {
-      display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+      display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px;
+    }
+    .chart-top {
+      display: flex; align-items: center; gap: 10px;
     }
     .chart-label {
       width: 56px; text-align: right; font-size: 12px;
@@ -571,8 +676,13 @@ def _css() -> str:
       transition: width 0.3s;
     }
     .chart-val {
-      font-size: 12px; color: #c9d1d9; font-variant-numeric: tabular-nums;
+      width: 72px; text-align: right;
+      font-size: 12px; color: #f0f6fc; font-variant-numeric: tabular-nums;
       flex-shrink: 0;
+    }
+    .chart-meta {
+      margin-left: 66px; font-size: 11px; color: #8b949e;
+      font-variant-numeric: tabular-nums;
     }
     .table-wrap { overflow-x: auto; }
     .data-table {

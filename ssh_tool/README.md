@@ -35,6 +35,13 @@ sshc xzt500021 -v
 sshc xzt500021 add 8765
 ```
 
+上传/下载文件：
+
+```bash
+sshc xzt500021 push ./local.txt ~/test/
+sshc xzt500021 pull ~/test/log.txt ./
+```
+
 安装脚本会自动安装命令入口、zsh/bash 补全，并创建默认配置文件 `~/.sshc_config`。安装后如果当前 shell 还没有识别 `sshc` 或补全，重新加载 shell 配置：
 
 ```bash
@@ -47,35 +54,40 @@ source ~/.bashrc
 
 ### `sshc <vehicle>`
 
-默认连接流程：
+默认连接流程会自动完成：查询车辆状态、选择正式/测试环境、确保车端 `22/tcp` 映射可用、检查或分发本机公钥，然后执行 SSH 登录。
 
-1. 登录正式环境 `https://xiaozhu.minieye.cc` 和测试环境 `https://xz-test.minieye.cc`。测试环境页面入口是 `https://xz-test.minieye.cc/navigation`。
-2. 在两个环境查询车辆，车名匹配忽略大小写。
-3. 检查 `c4Online == true`，不在线则退出。
-4. 查询两个环境的车端 `22/tcp` 端口映射。
-5. 默认优先正式环境；只有正式环境没有 22 映射，并且测试环境已有 `status=active`、`frpc_connected=true` 的 22 映射时，才复用测试环境。
-6. 在选中的环境里，无映射时创建 `{ "device_port": 22, "protocol": "tcp", "device_id": "..." }`。
-7. 映射为 `inactive`、`fail` 或 `failed` 时先删除再重建。
-8. 等待映射初始化 5 秒，然后检查状态并探测公网 TCP 端口。
-9. 最多等待 10 秒；只有 `status=active`、`frpc_connected=true` 且公网端口可连接才继续。
-10. 执行 `ssh-copy-id` 上传配置私钥对应的 `.pub` 公钥，按提示输入车端密码。
-11. 执行 `ssh nvidia@<server_ip> -p <server_port>`。
+连接规则：
 
-终端输出会自动着色：`active` / `true` 为绿色，`inactive` / `failed` 为红色，`pending` 为黄色，端口地址中的数字为青色，`[INFO]` / `[WARNING]` 带颜色前缀。管道重定向或设置 `NO_COLOR` 环境变量时自动关闭颜色。
+- 车名匹配忽略大小写。
+- 默认优先正式环境；只有正式环境没有可用 22 映射、测试环境已有可用 22 映射时，才复用测试环境。
+- 没有 22 映射时会自动创建；`inactive`、`fail` 或 `failed` 映射会删除后重建。
+- 等待映射初始化 3 秒，最多等待 10 秒；只有 `status=active`、`frpc_connected=true` 且公网 TCP 端口可连接才继续。
+- 车名大写后以 `T5P` 开头时使用 `root` 登录，其他车辆使用 `nvidia`。
+- 先检查本机密钥是否已可登录；只有明确的公钥认证失败才会尝试密码分发公钥，网络或 SSH 错误不会误进入密码流程。
 
-### `sshc <vehicle> -v`
+密码候选按 SSH 用户区分：T5P/root 只尝试 `MiniEye@Root1201PassWd..`，且不使用密码缓存；普通车辆/nvidia 会优先尝试缓存密码，再依次尝试 `mini!@#123.com` 和 `nvidia`。命令输出不会打印明文密码。
+
+`sshpass` 是可选依赖；未安装时会打印中文 warning，不会报错退出，只会跳过自动密码轮询并进入交互式 fallback。安装示例：
+
+```bash
+sudo apt install sshpass
+```
+
+终端输出会自动着色：`active` / `true` 为绿色，`inactive` / `failed` 为红色，`pending` 为黄色，`[WARNING]` 为黄色；部分可复制命令和地址会使用青色。管道重定向或设置 `NO_COLOR` 环境变量时自动关闭颜色。
+
+### `sshc <vehicle> -v` / `sshc <vehicle> --versions`
 
 只查看信息，不创建映射，不执行 SSH。即使车辆当前离线，也会尽量展示最近一次上报的车辆信息。输出内容包括：
 
 - 车辆名称。
 - 车辆版本信息，例如 `c4`、`mdrive`、`mdrive_conf`。
 - 已有端口映射（格式 `port/proto -> host:port`）、状态和 `frpc_connected` 标记。
-- 22 端口映射下方显示可复制的 `ssh` 命令。
+- 22 端口映射下方显示可复制的 `ssh` 命令，用户规则同连接流程：T5P 使用 `root`，其他车辆使用 `nvidia`。
 - 9000 / 8765 端口映射下方显示 `websocket` 连接地址。
 
 ### `sshc <vehicle> add <port>`
 
-为指定车辆创建或检查端口映射，不执行 SSH：
+为指定车辆创建或检查端口映射，不执行 SSH。端口范围必须是 `1-65535`：
 
 ```bash
 sshc xzt500021 add 8765
@@ -88,12 +100,37 @@ sshc xzt500021 add 8765
 3. 已存在且正常 → 直接返回映射信息。
 4. 映射为 `inactive`、`fail` 或 `failed` → 删除旧映射后重建。
 5. 无映射 → 创建新映射并等待就绪。
-6. 等待超时（10 秒 → `PORT_WAIT_SECONDS`）后仍未就绪则报错退出。
+6. 等待超时后仍未就绪或 TCP 不可连接则报错退出。
 
 支持短写 `a` 替代 `add`：
 
 ```bash
 sshc xzt500021 a 22
+```
+
+### `sshc <vehicle> push <local> <remote>` / `sshc <vehicle> pull <remote> <local>`
+
+在本地和车辆之间传输文件。`push` 表示本地到车端，`pull` 表示车端到本地。
+远端路径直接使用普通路径字符串，例如 `~/test/` 或 `/tmp/a.log`：
+
+```bash
+# 上传文件
+sshc XZT500021 push ./local.txt ~/test/
+
+# 下载文件
+sshc XZT500021 pull ~/test/log.txt ./
+
+# 目录默认使用 scp -r 递归传输
+sshc XZT500021 push ./logs ~/test/
+```
+
+传输前会复用登录流程，查询车辆、确保车端 `22/tcp` 映射可用并完成公钥认证，
+然后执行带 `-r` 的 `scp`。
+远端路径不能写成 `./xxx` 或 `../xxx` 这种本地相对路径形式。`~/...` 如果被本地 shell 展开，`sshc` 会在远端参数位置尽量还原为车端 home。远端 glob 会交给 `scp` 处理；为了避免本地 shell 提前展开 glob，请用引号包住远端路径，例如：
+
+```bash
+sshc XZT500021 push './logs/*.txt' '~/test/'
+sshc XZT500021 pull '~/test/*.log' ./
 ```
 
 ### `sshc config`
@@ -125,6 +162,7 @@ sshc cfg -u "正式账号" -p "正式密码"
 - `-u/--username` 与 `-p/--password` 是正式环境的缩略写法。
 - 密码保存 MD5，不保存明文密码；登录接口使用 `PASSWORD_MD5`。
 - `keyfile` 是私钥路径，默认 `~/.ssh/id_ed25519`。
+- `ssh_password_cache` 是 SSH 车端密码缓存对象，key 形如 `USER@VEHICLE_NAME`，value 是上次自动上传公钥并验证成功的明文密码。该字段用于下次优先尝试成功密码，不影响现有小竹账号配置字段。
 - 如果配置的私钥不存在，会自动创建 ed25519 密钥对。
 - 分发密钥时上传的是同名 `.pub` 公钥。
 
@@ -143,6 +181,15 @@ sshc 21<Tab>
 - 不限制车辆名前缀。
 - 候选只保留 `c4Online == true` 的车辆。
 - 无在线候选时会提示 `[WARNING] no online vehicle candidates for ...`。
+- `push` 的本地路径参数和 `pull` 的本地路径参数支持本地文件补全。
+
+### 远端路径补全
+
+目前不对车端路径执行 Tab 补全，只对本地路径使用 shell 文件补全。
+
+车端路径补全需要先登录小竹平台、查询已有 SSH 端口映射，并使用本机公钥登录车辆。为避免按 Tab 时创建端口映射、分发公钥、尝试密码或长时间阻塞终端，`sshc` 不会在补全阶段执行这些操作。
+
+远端路径请直接输入，例如 `~/test/` 或 `/tmp/a.log`。远端路径中的 `~` 和 glob 模式由最终的 `scp` 命令处理；包含 glob 的路径请使用引号，避免被本地 shell 提前展开。
 
 Bash 多候选时通常先显示列表或补公共部分。想用 Tab 在候选间切换，可以在 `~/.inputrc` 增加：
 
