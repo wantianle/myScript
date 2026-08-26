@@ -11,6 +11,17 @@ remove_nas() {
     rm -f /etc/systemd/system/nasmount.service
     rm -f /usr/local/bin/nasmount_helper.sh
     rm -f /usr/local/bin/nasmount_cleanup.sh
+    # 移除本安装器生成的 drop-in（media-*.mount.d/nasmount.conf）。
+    # 只删 nasmount.conf，且仅当目录为空时才 rmdir —— 不触碰用户其它 drop-in。
+    for mount_point in /media/nas /media/doc /media/www /media/pnc; do
+        mount_unit=$(systemd-escape --path --suffix=mount "$mount_point" 2>/dev/null)
+        if [[ -z "$mount_unit" ]]; then
+            mount_unit="$(printf '%s' "${mount_point#/}" | tr '/' '-').mount"
+        fi
+        dropin_dir="/etc/systemd/system/${mount_unit}.d"
+        rm -f "$dropin_dir/nasmount.conf"
+        rmdir "$dropin_dir" 2>/dev/null || true
+    done
     for mount_point in /media/nas /media/doc /media/www /media/pnc; do
         umount -l "$mount_point"
     done

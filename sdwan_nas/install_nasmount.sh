@@ -5,8 +5,11 @@ G='\033[0;32m'
 R='\033[0;31m'
 B='\033[0;34m'
 NC='\033[0m'
-CRED_DIR="/etc/creds"
+# 可覆盖路径（生产默认；仅用于测试隔离目录，切勿在生产设置）
+CRED_DIR="${CRED_DIR:-/etc/creds}"
 CRED_FILE="$CRED_DIR/nas.cred"
+SYSTEMD_UNIT_DIR="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
+LOCAL_BIN_DIR="${LOCAL_BIN_DIR:-/usr/local/bin}"
 reconfig=""
 
 if [[ $EUID -ne 0 ]]; then
@@ -112,12 +115,21 @@ done
 MOUNT_ITEMS=${MOUNT_ITEMS% }
 MOUNT_POINTS=${MOUNT_POINTS% }
 
+# 重装场景：若旧实例仍在运行，先停止再覆盖，确保新选择/新脚本立即生效，
+# 且不会新旧代码混跑（属正常安装行为，仅当服务确实在运行时才停止）。
+if systemctl is-active --quiet nasmount 2>/dev/null; then
+    echo -e "${B}⏹️  检测到旧版 nasmount 正在运行，先停止以应用新配置...${NC}"
+    systemctl stop nasmount 2>/dev/null || true
+fi
+
 for mount_point in $MOUNT_POINTS; do
     mkdir -p "$mount_point"
 done
 
-HELPER="/usr/local/bin/nasmount_helper.sh"
-Cleanup="/usr/local/bin/nasmount_cleanup.sh"
+mkdir -p "$LOCAL_BIN_DIR"
+
+HELPER="$LOCAL_BIN_DIR/nasmount_helper.sh"
+Cleanup="$LOCAL_BIN_DIR/nasmount_cleanup.sh"
 
 # Generate selection-specific cleanup rather than relying on a unit file with
 # hard-coded mount points.  Reinstalling replaces this file with the current
@@ -131,14 +143,25 @@ set -u -o pipefail
 MOUNT_ITEMS=($MOUNT_ITEMS)
 
 cleanup_mounts() {
-    local item name share mount_point
+    local item name share mount_point pids pid
+    pids=()
 
+    # 并发执行 lazy umount（umount -l 只做 detach，不阻塞在 session logoff）。
+    # 每个任务用 timeout 尽力而为地保护；注意：若 umount 卡在内核不可中断
+    # （D-state）调用中，timeout 无法保证结束它 —— 这里只是有界的努力，
+    # 不能声称能终止内核调用。
     for item in "\${MOUNT_ITEMS[@]}"; do
         IFS="|" read -r name share mount_point <<< "\$item"
         [[ -n "\$mount_point" ]] || continue
 
         # Do not probe CIFS mounts here: those checks can block during shutdown.
-        umount -l -- "\$mount_point" >/dev/null 2>&1 || true
+        timeout 10s umount -l -- "\$mount_point" >/dev/null 2>&1 &
+        pids+=("\$!")
+    done
+
+    # 等待全部并发任务结束；每个任务受 timeout 约束，不会引入无界等待。
+    for pid in "\${pids[@]}"; do
+        wait "\$pid" 2>/dev/null || true
     done
 }
 
@@ -251,16 +274,28 @@ chmod +x "$HELPER"
 
 # The helper owns shutdown cleanup so systemd signals it before any remount work.
 # 创建 Systemd 服务
-cat <<EOL > /etc/systemd/system/nasmount.service
+# 关机停止顺序（逆序）说明：systemd 关机时按启动顺序的逆序停止单元
+# （见 systemd.unit(5) 中 Before=/After= 的说明）。本服务 After=sdwan.service
+# （启动时在 sdwan 之后），因此关机时会在 sdwan.service 之前停止 —— CIFS 清理
+# （umount -l）执行时 iwan1 传输仍存活，session logoff 不会因传输先断而阻塞。
+# 原配置（无 After=sdwan.service）导致 sdwan 与 nasmount 并行停止，传输先死，
+# CIFS umount 卡住。注意：不要使用 Before=shutdown.target/umount.target —— 那是错误做法。
+cat <<EOL > "$SYSTEMD_UNIT_DIR/nasmount.service"
 [Unit]
 Description=NAS Auto Mount Guardian
-After=network-online.target
+# Shutdown ordering: this unit starts after sdwan.service, so systemd stops it
+# BEFORE sdwan.service (shutdown reverses start order). NAS cleanup therefore
+# runs while the iwan1 transport is still up. Do NOT use Before=shutdown.target
+# / Before=umount.target here.
+After=network-online.target sdwan.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 ExecStart=$HELPER
-TimeoutStopSec=10s
+# Must exceed the per-mount cleanup timeout (10s, run concurrently), so
+# systemd never SIGKILLs the cleanup before it finishes; normal stop ~1s.
+TimeoutStopSec=20s
 Restart=on-failure
 RestartSec=10
 
@@ -268,7 +303,49 @@ RestartSec=10
 WantedBy=multi-user.target
 EOL
 
-# 启动服务
+# 为每个选中的挂载点生成 selection-specific drop-in，并先清理本安装器此前
+# 生成的过期 drop-in。所有权用标记注释标识，绝不删除用户自己的 drop-in。
+DROPIN_MARKER="# Managed by install_nasmount.sh"
+for drop in "$SYSTEMD_UNIT_DIR"/media-*.mount.d/nasmount.conf; do
+    [[ -e "$drop" ]] || continue
+    if grep -qsF "$DROPIN_MARKER" "$drop" 2>/dev/null; then
+        rm -f -- "$drop"
+        rmdir "$(dirname "$drop")" 2>/dev/null || true
+    fi
+done
+
+mount_unit_name() {
+    # e.g. /media/nas -> media-nas.mount
+    if command -v systemd-escape >/dev/null 2>&1; then
+        systemd-escape --path --suffix=mount "$1"
+    else
+        printf '%s.mount' "$(printf '%s' "${1#/}" | tr '/' '-')"
+    fi
+}
+
+for mount_point in $MOUNT_POINTS; do
+    mount_unit=$(mount_unit_name "$mount_point")
+    dropin_dir="$SYSTEMD_UNIT_DIR/${mount_unit}.d"
+    mkdir -p "$dropin_dir"
+    cat > "$dropin_dir/nasmount.conf" <<EOD
+$DROPIN_MARKER
+# 关机逆序：本挂载单元 After=sdwan.service（启动在其后），关机时先于
+# sdwan.service 停止，CIFS umount 时 iwan1 传输仍在线，避免 session logoff
+# 阻塞（与 nasmount.service 同样的逆序原理）。
+[Unit]
+After=sdwan.service
+
+[Mount]
+# LazyUnmount=yes 对应 umount -l：只 detach，不等待内核完成会话登出。
+LazyUnmount=yes
+# 有界停止超时：TimeoutStopSec 不是 [Mount] 的合法键（systemd 255），
+# TimeoutSec 同时约束挂载与卸载；默认 90s 会让卡死的 CIFS umount 拖慢关机。
+TimeoutSec=10s
+EOD
+    echo -e "${G}✅ 已生成 drop-in: ${dropin_dir}/nasmount.conf${NC}"
+done
+
+# 部署顺序：先 daemon-reload 让新单元与 drop-in 生效，再 enable --now。
 systemctl daemon-reload
 systemctl enable --now nasmount
 echo "------------------------------------------------"
@@ -286,4 +363,7 @@ echo "   sudo systemctl enable --now nasmount   # 立即启用并开机自启"
 echo "------------------------------------------------"
 echo -e "✅ 正在挂载 Nas，稍候查看日志确认状态..."
 sleep 4
-journalctl -u nasmount -f
+# NASMOUNT_NO_FOLLOW=1 时跳过日志跟随（自动化/测试场景）。
+if [[ -z "${NASMOUNT_NO_FOLLOW:-}" ]]; then
+    journalctl -u nasmount -f
+fi
