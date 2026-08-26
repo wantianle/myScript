@@ -429,8 +429,8 @@ def build_parser() -> argparse.ArgumentParser:
         usage=(
             "sshc [-h] [-v] vehicle\n"
             "       sshc [-h] vehicle add <port>\n"
-            "       sshc [-h] vehicle push <local> <remote>\n"
-            "       sshc [-h] vehicle pull <remote> <local>\n"
+            "       sshc [-h] vehicle push <local>... <remote>\n"
+            "       sshc [-h] vehicle pull <remote>... <local>\n"
             "       sshc config [-h] [--prod-username USERNAME] "
             "[--prod-password PASSWORD] [--test-username USERNAME] "
             "[--test-password PASSWORD] [-k KEYFILE]"
@@ -457,10 +457,20 @@ def build_vehicle_transfer_parser(action: str) -> argparse.ArgumentParser:
         description="Copy files between the local machine and a vehicle.",
     )
     if action == "push":
-        parser.add_argument("local", help="local source path")
+        parser.add_argument(
+            "local",
+            nargs="+",
+            metavar="local",
+            help="local source path(s); multiple paths or a shell-expanded glob are allowed",
+        )
         parser.add_argument("remote", help="remote destination path")
     else:
-        parser.add_argument("remote", help="remote source path")
+        parser.add_argument(
+            "remote",
+            nargs="+",
+            metavar="remote",
+            help="remote source path(s); quote remote globs to defer expansion to the vehicle",
+        )
         parser.add_argument("local", help="local destination path")
     parser.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
     return parser
@@ -836,36 +846,36 @@ def restore_remote_home_path(remote_path: str) -> str:
 
 def cmd_push(
     vehicle_name: str,
-    local_path: str,
+    local_paths: list[str],
     remote_path: str,
     settings: Settings,
     *,
     debug: bool = False,
 ) -> int:
     remote_path = validate_remote_path(remote_path)
-    local_path = validate_local_scp_path(local_path)
+    local_paths = [validate_local_scp_path(path) for path in local_paths]
     endpoint = prepare_ssh_endpoint(vehicle_name, settings, debug=debug)
     return run_scp_transfer(
         endpoint,
-        local_path,
+        local_paths,
         build_remote_scp_target(endpoint, remote_path),
     )
 
 
 def cmd_pull(
     vehicle_name: str,
-    remote_path: str,
+    remote_paths: list[str],
     local_path: str,
     settings: Settings,
     *,
     debug: bool = False,
 ) -> int:
-    remote_path = validate_remote_path(remote_path)
+    remote_paths = [validate_remote_path(path) for path in remote_paths]
     local_path = validate_local_scp_path(local_path)
     endpoint = prepare_ssh_endpoint(vehicle_name, settings, debug=debug)
     return run_scp_transfer(
         endpoint,
-        build_remote_scp_target(endpoint, remote_path),
+        [build_remote_scp_target(endpoint, path) for path in remote_paths],
         local_path,
     )
 
@@ -876,7 +886,7 @@ def build_remote_scp_target(endpoint: SshEndpoint, remote_path: str) -> str:
 
 def run_scp_transfer(
     endpoint: SshEndpoint,
-    source: str,
+    sources: list[str],
     target: str,
     *,
     recursive: bool = True,
@@ -891,7 +901,8 @@ def run_scp_transfer(
     ]
     if recursive:
         scp_command.append("-r")
-    scp_command.extend([source, target])
+    scp_command.extend(sources)
+    scp_command.append(target)
     print("[INFO] 文件传输...", flush=True)
     print(green(shell_join(scp_command)))
     return subprocess.run(scp_command).returncode
@@ -1174,8 +1185,15 @@ def show_vehicle_info(
 ) -> None:
     name = vehicle.get("name") or vehicle_name
     ssh_user = ssh_user_for_vehicle(str(name))
+    ssh_password = (
+        T5P_ROOT_PASSWORD
+        if ssh_user == T5P_SSH_USER
+        else NVIDIA_PRIMARY_PASSWORD
+    )
     print("[INFO] 车辆信息:", flush=True)
     print(f"vehicle: {name}")
+    print(f"ssh user: {ssh_user}")
+    print(f"ssh password: {ssh_password}")
 
     print("versions:")
     versions = vehicle.get("versions") or {}

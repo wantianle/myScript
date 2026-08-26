@@ -94,7 +94,8 @@ usage() {
     printf "  %-45s  %s\n" "stop/start/restart/status [1(soc1)|2(soc2)]" "同时管理 soc1&2 服务，也可以通过参数指定单端"
     printf "  %-45s  %s\n" "log <1(soc1)|2(soc)>"                        "查看 5 分钟内 soc1/soc2 服务日志"
     printf "  %-45s  %s\n" "c(channel) [1(soc1)|2(soc2)]"                "查看 soc1/soc2 DDS 消息"
-    printf "  %-45s  %s\n" "m(module)"                                   "管理 soc1&2 模块，查看对应模块日志和开发日志"
+    printf "  %-45s  %s\n" "m(module) [action soc 模块...]"                 "无参数: fzf 管理模块; 有参数: 单端单/多模块启停，如 md m restart 2 Perception-Groundline"
+    printf "  %-45s  %s\n" "mod <start|stop|restart> <1|2> <模块名>"        "同 m 的命令形态，仅用于直接启停单个模块"
     printf "  %-45s  %s\n" "record [on]|<off>"                           "开启关闭 soc2 的 Recorder"
     printf "  %-45s  %s\n" "tag info [message]"                          "记录打点信息；不带 message 时先锁定时间再输入描述"
     printf "  %-45s  %s\n" "tag list"                                    "按日期列出已记录的打点信息"
@@ -1512,6 +1513,38 @@ svc::_run_module_action() {
 }
 
 
+# 用法: md m <start|stop|restart> <1(soc1)|2(soc2)> <模块名...>
+svc::mod_ctl() {
+    local action=$1 soc_arg=$2
+    shift 2
+    if [[ -z "$action" || -z "$soc_arg" || $# -eq 0 ]]; then
+        log_err "用法: md m <start|stop|restart> <1(soc1)|2(soc2)> <模块名...>"
+        return 1
+    fi
+    case "$action" in
+        start|stop|restart) ;;
+        *)
+            log_err "无效操作: $action (仅支持 start/stop/restart)"
+            return 1
+            ;;
+    esac
+    local soc
+    case "$soc_arg" in
+        soc1|1) soc=soc1 ;;
+        soc2|2) soc=soc2 ;;
+        *)
+            log_err "无效 SOC: $soc_arg (1=soc1, 2=soc2)"
+            return 1
+            ;;
+    esac
+    local mod fail_count=0
+    for mod in "$@"; do
+        svc::_run_module_action "$soc" "$mod" "$action" || ((fail_count++))
+    done
+    return "$fail_count"
+}
+
+
 # 打开模块日志
 svc::_open_module_log() {
     local soc=$1 mod=$2 log_type=$3
@@ -2420,11 +2453,15 @@ _md_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # 一级命令
-    opts="init check umount upgrade install rollback rb stop start restart status log c channel m module record tag remote export e"
+    opts="init check umount upgrade install rollback rb stop start restart status log c channel m module mod record tag remote export e"
 
     case "$prev" in
         stop|start|restart|status|log|c|channel)
             COMPREPLY=( $(compgen -W "soc1 soc2 1 2" -- "$cur") )
+            return 0
+            ;;
+        mod|m|module)
+            COMPREPLY=( $(compgen -W "start stop restart" -- "$cur") )
             return 0
             ;;
         remote)
@@ -2507,7 +2544,14 @@ dispatch() {
             svc::log "$@"
             ;;
         "module"|"m")
-            svc::module
+            if (( $# == 0 )); then
+                svc::module
+            else
+                svc::mod_ctl "$@"
+            fi
+            ;;
+        "mod")
+            svc::mod_ctl "$@"
             ;;
         "channel"|"c")
             svc::channel "$@"

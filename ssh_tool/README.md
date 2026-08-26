@@ -39,6 +39,8 @@ sshc xzt500021 add 8765
 
 ```bash
 sshc xzt500021 push ./local.txt ~/test/
+sshc xzt500021 push ./a.txt ./b.txt ~/test/
+sshc xzt500021 push ./conf/*.yaml ~/test/
 sshc xzt500021 pull ~/test/log.txt ./
 ```
 
@@ -108,28 +110,42 @@ sshc xzt500021 add 8765
 sshc xzt500021 a 22
 ```
 
-### `sshc <vehicle> push <local> <remote>` / `sshc <vehicle> pull <remote> <local>`
+### `sshc <vehicle> push <local>... <remote>` / `sshc <vehicle> pull <remote>... <local>`
 
 在本地和车辆之间传输文件。`push` 表示本地到车端，`pull` 表示车端到本地。
 远端路径直接使用普通路径字符串，例如 `~/test/` 或 `/tmp/a.log`：
 
 ```bash
-# 上传文件
+# 上传单个文件
 sshc XZT500021 push ./local.txt ~/test/
+
+# 上传多个本地源，最后一个参数是远端目标目录
+sshc XZT500021 push ./a.txt ./b.txt ./logs ~/test/
+
+# 本地 glob 由 shell 展开成多个源，不用加引号
+sshc XZT500021 push ./conf/*.yaml ~/test/
+sshc XZT500021 push ./* /mdrive/mdrive_conf/modules/MFDI
 
 # 下载文件
 sshc XZT500021 pull ~/test/log.txt ./
 
+# 下载多个车端源；远端 glob 请加引号，避免本地 shell 提前展开
+sshc XZT500021 pull '~/a.log' '~/b/*.txt' ./
+
 # 目录默认使用 scp -r 递归传输
 sshc XZT500021 push ./logs ~/test/
 ```
+
+`push` 支持一个或多个本地源（最后一个参数是远端目标），因此多个源时远端目标必须是一个目录，建议以 `/` 结尾，例如 `~/test/` 或 `/mdrive/mdrive_conf/modules/MFDI/`。本地 glob 不要加引号，让 shell 展开成多个源后逐个校验。
+
+`pull` 同样支持一个或多个车端源（最后一个参数是本地目标）。多个源下载时，本地目标必须是已存在的目录，例如 `./`；远端 glob 建议加引号，交给车端 shell 展开。
 
 传输前会复用登录流程，查询车辆、确保车端 `22/tcp` 映射可用并完成公钥认证，
 然后执行带 `-r` 的 `scp`。
 远端路径不能写成 `./xxx` 或 `../xxx` 这种本地相对路径形式。`~/...` 如果被本地 shell 展开，`sshc` 会在远端参数位置尽量还原为车端 home。远端 glob 会交给 `scp` 处理；为了避免本地 shell 提前展开 glob，请用引号包住远端路径，例如：
 
 ```bash
-sshc XZT500021 push './logs/*.txt' '~/test/'
+sshc XZT500021 push ./logs/*.txt '~/test/'
 sshc XZT500021 pull '~/test/*.log' ./
 ```
 
