@@ -125,7 +125,8 @@ Cmnd_Alias MDRIVE_LOG = /usr/bin/journalctl -eu mdrive.service *
 Cmnd_Alias MDRIVE_SUPERVISOR = /usr/bin/supervisorctl status, /usr/bin/supervisorctl start *, /usr/bin/supervisorctl stop *, /usr/bin/supervisorctl restart *, /usr/local/bin/supervisorctl status, /usr/local/bin/supervisorctl start *, /usr/local/bin/supervisorctl stop *, /usr/local/bin/supervisorctl restart *
 Cmnd_Alias MDRIVE_DISK = /usr/bin/umount -l /media/data, /bin/umount -l /media/data, /usr/bin/mount /dev/* /media/data, /bin/mount /dev/* /media/data, /usr/sbin/e2fsck -yf /dev/*, /sbin/e2fsck -yf /dev/*
 Cmnd_Alias MDRIVE_INSTALL = /usr/bin/dpkg -i /tmp/md-tool/*.deb, /bin/rm /tmp/md-tool/*.deb
-nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIVE_DISK, MDRIVE_INSTALL
+Cmnd_Alias MDRIVE_VMC = /usr/bin/chown -R nvidia:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /bin/chown -R nvidia:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /usr/bin/chown -R nvidia:nvidia /mdrive/.vmc/softwares/*, /bin/chown -R nvidia:nvidia /mdrive/.vmc/softwares/*
+nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIVE_DISK, MDRIVE_INSTALL, MDRIVE_VMC
 EOF
 }
 
@@ -1431,10 +1432,10 @@ svc::manage(){
 svc::log(){
     case "$1" in
         "soc1"|"1"|"")
-            sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys"
+            sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys|mdrive_driver_camera"
             ;;
         "soc2"|"2")
-            ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys"'
+            ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys|mdrive_driver_camera"'
             ;;
     esac
 }
@@ -2021,10 +2022,41 @@ vmc::check_updates() {
 }
 
 
+# 安装前回收包目录属主：旧包目录内若有 root 残留文件，vmc 删旧换新会 permission denied
+vmc::_prep_pkg_dir() {
+    local pkg_name=$1
+    local user
+    user=$(id -un 2>/dev/null || echo nvidia)
+    local candidate real
+    [[ -n "$pkg_name" ]] || return 0
+    for candidate in \
+        "${VMC_HOME:-$HOME/.vmc}/softwares/$pkg_name" \
+        "$HOME/.vmc/softwares/$pkg_name" \
+        "/mnt/ufs_data/project/.vmc/softwares/$pkg_name" \
+        "/mdrive/.vmc/softwares/$pkg_name"; do
+        real=$(readlink -f "$candidate" 2>/dev/null)
+        if [[ -n "$real" && -d "$real" ]]; then
+            if sudo chown -R "$user:$user" "$real" 2>/dev/null; then
+                log_info "[$pkg_name] 已回收包目录属主: $real"
+            else
+                log_warn "[$pkg_name] 包目录属主回收失败(可能不在免密白名单)，将以交互方式执行"
+                sudo chown -R "$user:$user" "$real" || return 1
+            fi
+            return 0
+        fi
+    done
+    # 目录不存在 = 全新安装，无需回收
+    return 0
+}
+
+
 vmc::_install_pkg() {
     local pkg_name=$1
     local version=$2
     local rc
+
+    # 旧包目录可能有 root 残留文件，先回收属主避免 vmc 删旧失败
+    vmc::_prep_pkg_dir "$pkg_name"
 
     if [[ $pkg_name == "mdrive_map" ]]; then
         vmc install -n "$pkg_name" -v "$version" --deps
@@ -2266,11 +2298,15 @@ vmc::rollback() {
         /^\[Index:/ {
             if (version) print time " | " version " | " platform " | " name;
             name=""; version=""; time=""; platform="";
-            # 从 Index 行提取包名 (可能在行内也可能单独一行)
-            tmp=$0; sub(/^.*[Nn]ame:[ ]*/, "", tmp); sub(/[,}].*$/, "", tmp); name=tmp
+            # 仅当 Index 行内直接带有 name: 时才就地提取包名，否则交给下面的 Name: 行填充
+            if ($0 ~ /[Nn]ame:/) {
+                tmp=$0; sub(/^.*[Nn]ame:[ ]*/, "", tmp); sub(/[,}].*$/, "", tmp); name=tmp
+            }
         }
         /^[ \t]*[Nn]ame:/ {
-            if (name == "") { $1=""; sub(/^[ \t]+/, "", $0); name=$0 }
+            if (name == "") {
+                tmp=$0; sub(/^[ \t]*[Nn]ame:[ \t]*/, "", tmp); sub(/[,}].*$/, "", tmp); name=tmp
+            }
         }
         /Platform:/ {
             $1=""; sub(/^[ \t]+/, "", $0); platform=$0
@@ -2297,7 +2333,7 @@ vmc::rollback() {
     local selected_line
     selected_line=$(echo "$versions_list" | grep -E "$VMC_PLATFORM|any" | fzf \
         --ansi \
-        --header "发布时间            |  远程版本号 (搜索关键字: $search_v)" \
+        --header "发布时间            |  远程版本号          |  平台      |  包名 (搜索关键字: $search_v)" \
         --layout=reverse \
         --height=100%)
 
