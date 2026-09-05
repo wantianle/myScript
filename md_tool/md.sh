@@ -72,6 +72,7 @@ md::_ensure_ssh_opts() {
         -o StrictHostKeyChecking=no
         -o UserKnownHostsFile=/dev/null
         -o LogLevel=ERROR
+        -i "$KEY_PATH"
     )
 }
 
@@ -566,7 +567,7 @@ sys::_clean_cache_contents() {
 sys::clean(){
     local avail cache_root
     cache_root=$(sys::_safe_cache_root "$MDRIVE_CACHE") || return 1
-    avail=$(df -BG "$cache_root" | awk 'NR==2 {print $4}' | tr -d 'G')
+    avail=$(disk_free_gb "$cache_root")
     if [[ "$avail" -lt 5 ]]; then
         log_warn "系统剩余空间不足 5GB (当前: ${avail}GB)，过低会影响 OTA 版本升级，是否需要清理？(Y/n)"
         read -r confirm
@@ -1663,8 +1664,8 @@ fetch_combined() {
     done
 }
 
-export -f md::_ensure_ssh_opts fetch_combined svc::mod_handler svc::_run_module_action svc::_open_module_log log_get_path
-export CONF_DIR_SOC1 CONF_DIR_SOC2 SOC2_IP RED GREEN YELLOW BLUE NC
+export -f md::_ensure_ssh_opts fetch_combined
+export SOC2_IP RED GREEN YELLOW BLUE NC KEY_PATH
 
 svc::module() {
     if ! command -v fzf &> /dev/null; then
@@ -1731,11 +1732,23 @@ disk::_get_mnt_dev() {
 }
 
 
+# 取路径可用空间 (GB)，失败返回空
+disk_free_gb() {
+    df -BG "$1" 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G'
+}
+
+
+# 取路径已用百分比，失败返回空
+disk_used_pct() {
+    df -h "$1" 2>/dev/null | awk 'NR==2 {print $5}' | tr -d '%'
+}
+
+
 disk::usage() {
     local name=$1
     local path=$2
     local disk_usage
-    disk_usage=$(df -h "$path" | awk 'NR==2 {print $5}' | tr -d '%')
+    disk_usage=$(disk_used_pct "$path")
     printf "%-41s" "[硬盘] $name:"
     if [[ ! "$disk_usage" =~ ^[0-9]+$ ]]; then
             log_err "读取失败"
@@ -1823,7 +1836,7 @@ disk::diagnose(){
     fi
 
     local avail
-    avail=$(df -BG "$MDRIVE_CACHE" | awk 'NR==2 {print $4}' | tr -d 'G')
+    avail=$(disk_free_gb "$MDRIVE_CACHE")
     if [[ "$avail" -lt 5 ]]; then
         log_warn "$MDRIVE_CACHE 剩余空间不足 5GB (当前: ${avail}GB)，过低会影响 OTA 版本升级"
         return 7
@@ -1915,6 +1928,16 @@ vmc::remote() {
             echo "       md remote del <name>"
             ;;
     esac
+}
+
+
+# 询问确认，回车/Y 继续返回0，n/N 取消返回1
+vmc::_confirm() {
+    local msg=$1
+    local confirm
+    read -r -p "$msg [Y/n]: " confirm
+    [[ "$confirm" == "n" || "$confirm" == "N" ]] && return 1
+    return 0
 }
 
 
@@ -2092,8 +2115,7 @@ vmc::upgrade() {
 
     # 安装
     [[ ${#final_queue[@]} -eq 0 ]] && { log_warn "未选择任何安装项"; return 0; }
-    read -r -p "确定执行升级? [Y/n]: " confirm
-    [[ "$confirm" == "n" || "$confirm" == "N" ]] && return 0
+    vmc::_confirm "确定执行升级" || return 0
     svc::manage stop soc1
     svc::manage stop soc2
     local failed=false
@@ -2299,8 +2321,7 @@ vmc::rollback() {
     selected_pkg=$(echo "$selected_line" | awk -F ' \| ' '{print $4}' | tr -d '[:space:]')
 
     log_warn "确定回滚 [$selected_pkg] 到版本: $selected_ver ?"
-    read -r -p "确认执行? [Y/n]: " confirm
-    [[ "$confirm" == "n" || "$confirm" == "N" ]] && return
+    vmc::_confirm "确认执行" || return
 
     # 停止服务
     svc::manage stop soc1

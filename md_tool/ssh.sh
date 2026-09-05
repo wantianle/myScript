@@ -50,23 +50,26 @@ configure_vehicle() {
     local port="$1"
     local target="$USER_NAME@$WAN_DOMAIN"
     local remote_script="/tmp/ssh-configure-${port}-$$.sh"
-    local soc1_ip_q soc2_ip_q user_name_q remote_script_q remote_command
+    local soc1_ip_q soc2_ip_q user_name_q remote_script_q ssh_passwords_q remote_command
 
     printf -v soc1_ip_q '%q' "$SOC1_IP"
     printf -v soc2_ip_q '%q' "$SOC2_IP"
     printf -v user_name_q '%q' "$USER_NAME"
     printf -v remote_script_q '%q' "$remote_script"
+    printf -v ssh_passwords_q '%q ' "${SSH_PASSWORDS[@]}"
 
     echo ""
     log_info "正在配置端口 $port 对应车辆的 SOC1 <-> SOC2 免密与主机名..."
 
     # 先通过非 TTY 会话上传脚本，避免脚本内容与后续交互提示共用同一个 PTY。
-    if ! ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        -p "$port" "$target" "cat > $remote_script_q" <<'REMOTE'
+    # SSH_PASSWORDS 密码表由本地 printf %q 序列化后注入脚本头部，远端脚本不再硬编码密码。
+    if ! { printf 'SSH_PASSWORDS=(%s)\n' "${ssh_passwords_q% }"
+           cat
+         } <<'REMOTE' | ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            -p "$port" "$target" "cat > $remote_script_q"
 set -e
 set +H
 
-SSH_PASSWORDS=('mini!@#123.com' 'nvidia')
 SUDO_PASS_CACHED=""
 SOC2_PASS_CACHED=""
 
@@ -158,9 +161,9 @@ chmod 600 "$HOME/.ssh/config"
 copy_soc2_key
 soc2_sudo_pass_discover
 
-printf '%s\n' "$SOC2_PASS_CACHED" | ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR soc2 "sudo -S -p '' bash -c 'mkdir -p /home/$USER_NAME/.ssh && chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.ssh && find /home/$USER_NAME/.ssh -type d -exec chmod 700 {} + && find /home/$USER_NAME/.ssh -type f -exec chmod 600 {} +'"
+printf '%s\n' "$SOC2_PASS_CACHED" | ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR soc2 "sudo -S -p '' bash -c 'mkdir -p /home/$USER_NAME/.ssh && chown -R $USER_NAME:$USER_NAME /home/$USER_NAME/.ssh && find /home/$USER_NAME/.ssh -type d -exec chmod 700 {} + && find /home/$USER_NAME/.ssh -type f -exec chmod 600 {} +'"
 
-printf '%s\n' "$SOC2_PASS_CACHED" | ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR soc2 "sudo -S -p '' bash -c 'config=/home/$USER_NAME/.ssh/config; touch \"\$config\"; if ! grep -q \"^Host soc1\$\" \"\$config\"; then printf \"%s\\n\" \"Host soc1\" \"    HostName $SOC1_IP\" \"    User $USER_NAME\" \"    StrictHostKeyChecking no\" \"    UserKnownHostsFile /dev/null\" \"    LogLevel ERROR\" >> \"\$config\"; fi; chown $USER_NAME:$USER_NAME \"\$config\"; chmod 600 \"\$config\"'"
+printf '%s\n' "$SOC2_PASS_CACHED" | ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR soc2 "sudo -S -p '' bash -c 'config=/home/$USER_NAME/.ssh/config; touch \"\$config\"; if ! grep -q \"^Host soc1\$\" \"\$config\"; then printf \"%s\\n\" \"Host soc1\" \"    HostName $SOC1_IP\" \"    User $USER_NAME\" \"    StrictHostKeyChecking no\" \"    UserKnownHostsFile /dev/null\" \"    LogLevel ERROR\" >> \"\$config\"; fi; chown $USER_NAME:$USER_NAME \"\$config\"; chmod 600 \"\$config\"'"
 
 if [[ -f /mnt/ufs_data/project/.mdrive_vars.sh ]]; then
     source /mnt/ufs_data/project/.mdrive_vars.sh
@@ -171,7 +174,7 @@ if [[ "$(hostname)" != "${MDRIVE_VEHICLE_NAME}-soc1" ]]; then
     printf '%s\n' "$SUDO_PASS_CACHED" | sudo -S -p '' hostnamectl set-hostname "${MDRIVE_VEHICLE_NAME}-soc1"
 fi
 if [[ "$(ssh -n -o LogLevel=ERROR soc2 hostname)" != "${MDRIVE_VEHICLE_NAME}-soc2" ]]; then
-    printf '%s\n' "$SOC2_PASS_CACHED" | ssh -tt -o LogLevel=ERROR soc2 "sudo -S -p '' hostnamectl set-hostname '${MDRIVE_VEHICLE_NAME}-soc2'"
+    printf '%s\n' "$SOC2_PASS_CACHED" | ssh -T -o LogLevel=ERROR soc2 "sudo -S -p '' hostnamectl set-hostname '${MDRIVE_VEHICLE_NAME}-soc2'"
 fi
 REMOTE
 
@@ -267,7 +270,7 @@ repair_remote_ssh() {
     log_info "正在修复 $label 的 ~/.ssh 权限与归属..."
 
     if [ -n "${SSHPASS:-}" ]; then
-        if printf '%s\n' "$SSHPASS" | ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${port_arg[@]}" "$target" "$remote_cmd" >/dev/null 2>&1; then
+        if printf '%s\n' "$SSHPASS" | ssh -T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "${port_arg[@]}" "$target" "$remote_cmd" >/dev/null 2>&1; then
             log_ok "$label ~/.ssh 权限修复成功"
             return 0
         fi

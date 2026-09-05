@@ -117,8 +117,8 @@ remote_run_init() {
     local host=$1 port=$2 sudo_pass=$3
     echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
         "cat > /tmp/md-tool/.soc2_pass && chmod 600 /tmp/md-tool/.soc2_pass" || true
-    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" -t "${REMOTE_USER}@${host}" \
-        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && rm -f /tmp/md-tool/.soc2_pass'" || return 1
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
+        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init; rc=\$?; rm -f /tmp/md-tool/.soc2_pass; exit \$rc'" || return 1
 }
 
 # ============================================================
@@ -140,7 +140,7 @@ deploy_software() {
     for deb in "${DEB_FILES[@]}"; do
         deb_paths+=("/tmp/md-tool/$deb")
     done
-    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" -t "${REMOTE_USER}@${host}" \
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
         "sudo -S bash -c 'dpkg -i ${deb_paths[*]} && rm ${deb_paths[*]}'" || return 1
 
     return 0
@@ -188,8 +188,8 @@ deploy_all() {
     for deb in "${DEB_FILES[@]}"; do
         deb_paths+=("/tmp/md-tool/$deb")
     done
-    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" -t "${REMOTE_USER}@${host}" \
-        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && dpkg -i ${deb_paths[*]} && rm -f ${deb_paths[*]} /tmp/md-tool/.soc2_pass'" || return 1
+    echo "$sudo_pass" | ssh "${SSH_OPTS[@]}" -p "$port" "${REMOTE_USER}@${host}" \
+        "sudo -S bash -c 'chmod +x /tmp/md-tool/md.sh && HOME=/home/nvidia USER=nvidia MDRIVE_SOC2_PASS_FILE=/tmp/md-tool/.soc2_pass /tmp/md-tool/md.sh init && dpkg -i ${deb_paths[*]} && rm -f ${deb_paths[*]}; rc=\$?; rm -f /tmp/md-tool/.soc2_pass; exit \$rc'" || return 1
 
     return 0
 }
