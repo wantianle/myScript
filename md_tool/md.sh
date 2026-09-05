@@ -125,7 +125,7 @@ Cmnd_Alias MDRIVE_LOG = /usr/bin/journalctl -eu mdrive.service *
 Cmnd_Alias MDRIVE_SUPERVISOR = /usr/bin/supervisorctl status, /usr/bin/supervisorctl start *, /usr/bin/supervisorctl stop *, /usr/bin/supervisorctl restart *, /usr/local/bin/supervisorctl status, /usr/local/bin/supervisorctl start *, /usr/local/bin/supervisorctl stop *, /usr/local/bin/supervisorctl restart *
 Cmnd_Alias MDRIVE_DISK = /usr/bin/umount -l /media/data, /bin/umount -l /media/data, /usr/bin/mount /dev/* /media/data, /bin/mount /dev/* /media/data, /usr/sbin/e2fsck -yf /dev/*, /sbin/e2fsck -yf /dev/*
 Cmnd_Alias MDRIVE_INSTALL = /usr/bin/dpkg -i /tmp/md-tool/*.deb, /bin/rm /tmp/md-tool/*.deb
-Cmnd_Alias MDRIVE_VMC = /usr/bin/chown -R nvidia:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /bin/chown -R nvidia:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /usr/bin/chown -R nvidia:nvidia /mdrive/.vmc/softwares/*, /bin/chown -R nvidia:nvidia /mdrive/.vmc/softwares/*
+Cmnd_Alias MDRIVE_VMC = /usr/bin/chown -R nvidia\:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /bin/chown -R nvidia\:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /usr/bin/chown -R nvidia\:nvidia /mdrive/.vmc/softwares/*, /bin/chown -R nvidia\:nvidia /mdrive/.vmc/softwares/*
 nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIVE_DISK, MDRIVE_INSTALL, MDRIVE_VMC
 EOF
 }
@@ -2240,23 +2240,28 @@ vmc::install(){
 
 
 # 模糊更新单个包版本
+# 用法: vmc::finstall <version> [pkg_name]
+#  pkg_name 可选：由调用方明确指定包名时直接使用（如 rollback 从 fzf 选中行带出），
+#  避免多个包同名版本时按 version 反查命错包。
 vmc::finstall() {
     local version=$1
-    local pkg_name
-    # 优先匹配 version 字段以搜索词开头的行（避免 mdrive 误匹配 mdrive_conf）
-    pkg_name=$(vmc fsearch -v "$version" | awk -F', ' -v v="$version" '
-        /^name:/ {
-            n=""; r=""
-            for (i=1; i<=NF; i++) {
-                if ($i ~ /^name: /) { sub(/^name: /, "", $i); n=$i }
-                if ($i ~ /^version:/) { sub(/^version:[ ]*/, "", $i); r=$i }
+    local pkg_name=${2:-}
+    if [[ -z "$pkg_name" ]]; then
+        # 优先匹配 version 字段以搜索词开头的行（避免 mdrive 误匹配 mdrive_conf）
+        pkg_name=$(vmc fsearch -v "$version" | awk -F', ' -v v="$version" '
+            /^name:/ {
+                n=""; r=""
+                for (i=1; i<=NF; i++) {
+                    if ($i ~ /^name: /) { sub(/^name: /, "", $i); n=$i }
+                    if ($i ~ /^version:/) { sub(/^version:[ ]*/, "", $i); r=$i }
+                }
+                if (r == v) { print n; exact=1; exit }
+                if (index(r, v "-") == 1 || index(r, v ".") == 1) { if (!pref) { pref=n } }
+                if (!last) { last=n }
             }
-            if (r == v) { print n; exact=1; exit }
-            if (index(r, v "-") == 1 || index(r, v ".") == 1) { if (!pref) { pref=n } }
-            if (!last) { last=n }
-        }
-        END { if (!exact) { if (pref) print pref; else if (last) print last } }
-    ')
+            END { if (!exact) { if (pref) print pref; else if (last) print last } }
+        ')
+    fi
     if [[ -n "$pkg_name" ]]; then
         log_info "下载安装 [${pkg_name}] ${version}..."
         if vmc::_install_pkg "$pkg_name" "$version"; then
@@ -2338,10 +2343,13 @@ vmc::rollback() {
         --height=100%)
 
     [[ -z "$selected_line" ]] && { log_warn "取消回滚"; return; }
-    local selected_ver
+    # 从选中行提取 版本 和 真实包名(第4列)，包名必须透传给 finstall，
+    # 否则同名版本(如 mdrive_cve/mdrive_dep 都有 1.1.2)会按 version 反查命错包
+    local selected_ver selected_pkg
     selected_ver=$(echo "$selected_line" | awk -F ' \| ' '{print $2}' | tr -d '[:space:]')
+    selected_pkg=$(echo "$selected_line" | awk -F ' \| ' '{print $4}' | tr -d '[:space:]')
 
-    log_warn "确定回滚 [$pkg_name] 到版本: $selected_ver ?"
+    log_warn "确定回滚 [$selected_pkg] 到版本: $selected_ver ?"
     read -r -p "确认执行? [Y/n]: " confirm
     [[ "$confirm" == "n" || "$confirm" == "N" ]] && return
 
@@ -2349,7 +2357,7 @@ vmc::rollback() {
     svc::manage stop soc1
     svc::manage stop soc2
     sys::clean
-    vmc::finstall "$selected_ver"
+    vmc::finstall "$selected_ver" "$selected_pkg"
 }
 
 #endregion
