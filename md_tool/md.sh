@@ -77,11 +77,7 @@ md::_ensure_ssh_opts() {
 
 
 usage() {
-    if [[ "$INSIDE_MD" == "true" ]]; then
-        local prefix=""
-    else
-        local prefix="md "
-    fi
+    local prefix="md "
     echo -e "${BLUE}Usage:${NC}"
     echo -e "  $prefix<c(command)> [a(arguments)] <>代表必选 []代表可选 ()代表可简写"
     echo -e "${BLUE}Commands:${NC}"
@@ -105,8 +101,6 @@ usage() {
     printf "  %-45s  %s\n" ""                                            "  remote add <name> [branch|'-'] [platform]"
     printf "  %-45s  %s\n" ""                                            "  remote del <name>"
 
-    # printf "  %-45s | %s\n" "push <src> [dst]"          "推送文件到宿主机 (默认 $DEST_ROOT)"
-    # printf "  %-45s | %s\n" "pull <src> [dst]"          "从宿主机拉取文件到指定路径 (默认 $DEST_ROOT)"
     echo ""
 }
 
@@ -124,9 +118,8 @@ Cmnd_Alias MDRIVE_SERVICE = /usr/bin/systemctl start mdrive.service, /usr/bin/sy
 Cmnd_Alias MDRIVE_LOG = /usr/bin/journalctl -eu mdrive.service *
 Cmnd_Alias MDRIVE_SUPERVISOR = /usr/bin/supervisorctl status, /usr/bin/supervisorctl start *, /usr/bin/supervisorctl stop *, /usr/bin/supervisorctl restart *, /usr/local/bin/supervisorctl status, /usr/local/bin/supervisorctl start *, /usr/local/bin/supervisorctl stop *, /usr/local/bin/supervisorctl restart *
 Cmnd_Alias MDRIVE_DISK = /usr/bin/umount -l /media/data, /bin/umount -l /media/data, /usr/bin/mount /dev/* /media/data, /bin/mount /dev/* /media/data, /usr/sbin/e2fsck -yf /dev/*, /sbin/e2fsck -yf /dev/*
-Cmnd_Alias MDRIVE_INSTALL = /usr/bin/dpkg -i /tmp/md-tool/*.deb, /bin/rm /tmp/md-tool/*.deb
 Cmnd_Alias MDRIVE_VMC = /usr/bin/chown -R nvidia\:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /bin/chown -R nvidia\:nvidia /mnt/ufs_data/project/.vmc/softwares/*, /usr/bin/chown -R nvidia\:nvidia /mdrive/.vmc/softwares/*, /bin/chown -R nvidia\:nvidia /mdrive/.vmc/softwares/*
-nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIVE_DISK, MDRIVE_INSTALL, MDRIVE_VMC
+nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIVE_DISK, MDRIVE_VMC
 EOF
 }
 
@@ -310,14 +303,6 @@ sys::init(){
 
     log_ok "初始化完成！请执行 'source $completion_file' 或重启终端生效。"
     echo -e "试试输入: ${GREEN}md [TAB][TAB]${NC}"
-}
-
-
-sys::date(){
-    echo -n "[soc1]date: "
-    date
-    echo -n "[soc2]date: "
-    ssh "${SSH_OPTS[@]}" "$SOC2_IP" "date"
 }
 
 
@@ -1588,14 +1573,10 @@ svc::mod_handler() {
     line=$(echo "$raw_line" | sed 's/\x1b\[[0-9;]*m//g')
 
     local soc mod state tail
-    if [[ "$line" == *'|'* ]]; then
-        IFS='|' read -r soc mod state tail <<< "$line"
-    else
-        # Backward compat: space format
-        line=$(echo "$line" | tr -s ' ')
-        read -r soc mod state tail <<< "$line"
-        soc="${soc#\[}"; soc="${soc%\]}"
-    fi
+    # fetch_combined/supervisorctl 输出为空格分隔: [socN] mod STATE tail
+    line=$(echo "$line" | tr -s ' ')
+    read -r soc mod state tail <<< "$line"
+    soc="${soc#\[}"; soc="${soc%\]}"
     [[ -z "$soc" || -z "$mod" ]] && return
 
     case "$action" in
@@ -1614,8 +1595,6 @@ log_get_path() {
     [[ $soc == "soc2" ]] && conf_dir=$CONF_DIR_SOC2
 
     local conf_file=$conf_dir/$mod.conf
-    set -- "$conf_file"
-    [[ -f "$1" ]] && conf_file="$1"
     [[ -z $conf_file ]] && return
     local raw_cmd=""
     local sv_log=""
@@ -1684,9 +1663,6 @@ fetch_combined() {
     done
 }
 
-svc::batch_handler() {
-    : # no longer used; kept for reference
-}
 export -f md::_ensure_ssh_opts fetch_combined svc::mod_handler svc::_run_module_action svc::_open_module_log log_get_path
 export CONF_DIR_SOC1 CONF_DIR_SOC2 SOC2_IP RED GREEN YELLOW BLUE NC
 
@@ -1752,32 +1728,6 @@ disk::_get_dev() {
 
 disk::_get_mnt_dev() {
     findmnt -n -o SOURCE "$MOUNT_ROOT"
-}
-
-# 检查硬盘是否正确挂载双端
-disk::check(){
-    if [[ $MDRIVE_VEHICLE_MODEL == "ECAR_HW4" ]]; then
-        # 适配物流车逻辑
-        if mountpoint -q $MOUNT_ROOT; then
-            echo -e "[soc1]硬盘: ${GREEN}Mounted${NC}"
-        else
-            echo -e "[soc1]硬盘: ${RED}Umounted${NC}"
-        fi
-    else
-        local dev mnt
-        dev=$(disk::_get_dev)
-        mnt=$(disk::_get_mnt_dev)
-        if [[ -n "$dev" && "$mnt" == "$dev" ]]; then
-            echo -e "[soc1]硬盘: ${GREEN}Mounted${NC}"
-        else
-            echo -e "[soc1]硬盘: ${RED}Umounted${NC}"
-        fi
-    fi
-    if ssh "${SSH_OPTS[@]}" "$SOC2_IP" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
-        echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
-    else
-        echo -e "[soc2]硬盘: ${RED}Umounted or Error${NC}"
-    fi
 }
 
 
@@ -2202,7 +2152,6 @@ vmc::install(){
         s/\r//g                   # 删掉 Windows 换行符
     "
     }
-    wait
     local failed=false installed=false
     for item in "${packages[@]}"; do
         local name="${item%%:*}"
@@ -2643,7 +2592,6 @@ dispatch() {
 
 
 main(){
-    INSIDE_MD="false"
     local prog
     prog="${0##*/}"
     if [[ "$prog" == "tag" ]]; then

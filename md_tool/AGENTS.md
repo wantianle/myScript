@@ -1,7 +1,7 @@
 # 仓库指南
 
 ## 项目结构与模块组织
-该仓库是一个基于 Bash 的运维工具集。`md.sh` 是主入口脚本，负责设备检查、服务控制、日志导出和包管理。`deploy.sh` 用于将 `md.sh` 和 `bin/` 中的 `.deb` 包部署到远端目标。`ssh.sh` 用于初始化免密登录和本地 `~/.ssh/config` 配置。`fix_udev.sh` 用于安装基于 udev 和 systemd 的磁盘自动修复与挂载流程。`bin/` 存放随仓库分发的依赖包。`1/` 目录看起来是按日期组织的运行产物或数据目录，不应视为源码。
+该仓库是一个基于 Bash 的运维工具集。`md.sh` 是主入口脚本，负责设备检查、服务控制、日志导出和包管理。`deploy.sh` 用于将 `md.sh` 和 `bin/` 中的 `.deb` 包部署到远端目标。`ssh.sh` 用于初始化免密登录和本地 `~/.ssh/config` 配置。`bin/` 存放随仓库分发的依赖包。`md_go/` 是 Go 重构实验工程（骨架阶段，业务未迁移）。`mdrive服务管理工具.md` 是工具的用户手册。注：适配 mdrive2 的旧版工具集已拆出到仓库根目录的 `md_old/` 独立目录，不属本目录源码。
 
 ## 构建、测试与开发命令
 这些脚本目前未统一设置可执行位，开发时直接用 Bash 调用。
@@ -9,8 +9,7 @@
 - `bash md.sh check`：运行主工具的检查流程。
 - `bash deploy.sh`：将脚本和依赖包部署到配置好的远端主机。
 - `bash ssh.sh`：配置局域网或公网环境下的 SSH 免密访问。
-- `sudo bash fix_udev.sh`：安装磁盘自动修复服务和 udev 规则。
-- `bash -n md.sh deploy.sh ssh.sh fix_udev.sh`：提交前必须执行的语法检查。
+- `bash -n md.sh deploy.sh ssh.sh`：提交前必须执行的语法检查。
 
 如果本机安装了 `shellcheck`，提交前额外执行 `shellcheck *.sh`。
 
