@@ -13,6 +13,9 @@ LOCAL_SCRIPT="$DIR/md.sh"
 bindir="$DIR/bin"
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
+# 避免 ssh 把本机 zh_CN.UTF-8 转发到车端（车端无此 locale 会导致 setlocale 警告）
+export LC_ALL=C
+
 # 待部署的软件包列表
 DEB_FILES=(
     "rsync_3.1.3-8ubuntu0.9_arm64.deb" "fzf_0.29.0-1ubuntu0.1_arm64.deb" "less_551-1_arm64.deb"

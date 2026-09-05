@@ -18,6 +18,9 @@ NC='\033[0m'
 SSH_PASSWORDS=("mini!@#123.com" "nvidia")
 SSH_PASS_CACHED=""
 
+# 避免 ssh 把本机 zh_CN.UTF-8 转发到车端（车端无此 locale 会导致 setlocale 警告）
+export LC_ALL=C
+
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }

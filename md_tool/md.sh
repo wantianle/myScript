@@ -8,6 +8,8 @@ GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
+# 避免 ssh 把本机 zh_CN.UTF-8 转发到车端（车端无此 locale 会导致 setlocale 警告）
+export LC_ALL=C
 # 免密配置
 SUDO_PATH="/etc/sudoers.d/mdrive_perms"
 KEY_PATH="$HOME/.ssh/id_ed25519"
@@ -87,7 +89,7 @@ usage() {
     printf "  %-45s  %s\n" "umount"                                      "安全弹出硬盘"
     printf "  %-45s  %s\n" "upgrade"                                     "自检并升级最新包版本"
     printf "  %-45s  %s\n" "install [version]"                           "手动升级多个组件版本，也可通过参数升级单个组件版本"
-    printf "  %-45s  %s\n" "rb(rollback) [version_keyword]"              "根据 remote 文件或指定关键字回滚升级任意版本的包"
+    printf "  %-45s  %s\n" "rb(rollback) [version] [name]"                  "回滚版本；- 占位不限版本，name 前缀 = 为精确包名，如: md rb 1.1.1 cve / md rb - =mdrive"
     printf "  %-45s  %s\n" "stop/start/restart/status [1(soc1)|2(soc2)]" "同时管理 soc1&2 服务，也可以通过参数指定单端"
     printf "  %-45s  %s\n" "log <1(soc1)|2(soc)>"                        "查看 5 分钟内 soc1/soc2 服务日志"
     printf "  %-45s  %s\n" "c(channel) [1(soc1)|2(soc2)]"                "查看 soc1/soc2 DDS 消息"
@@ -1672,8 +1674,9 @@ svc::module() {
         log_warn "请先安装 fzf..."
         return 1
     fi
+    local last_query=""
     while true; do
-        local result key action
+        local result key action fzf_query
         result=$(fetch_combined | fzf \
             --ansi \
             --multi \
@@ -1682,11 +1685,16 @@ svc::module() {
             --bind "tab:toggle+down" \
             --header "Tab:多选 | Enter:模块日志 | Alt-Enter:开发日志 | Alt-S/X/R:启/停/重启 | Esc:退出" \
             --expect=enter,alt-enter,alt-s,alt-x,alt-r,esc \
+            --print-query \
+            --query "$last_query" \
             --bind "ctrl-r:reload(fetch_combined)")
 
         [[ -z "$result" ]] && return
 
-        key=$(echo "$result" | head -1)
+        # fzf 输出结构: [查询串, 按键, 选中项...]
+        fzf_query=$(echo "$result" | head -1)
+        key=$(echo "$result" | sed -n '2p')
+        last_query="$fzf_query"
 
         case "$key" in
             esc) return ;;
@@ -1701,7 +1709,7 @@ svc::module() {
         # Log viewing: only process the first item (focused)
         if [[ "$action" == "sv" || "$action" == "glog" ]]; then
             local log_line
-            log_line=$(echo "$result" | tail -n +2 | head -1)
+            log_line=$(echo "$result" | sed -n '3p')
             svc::mod_handler "$log_line" "$action"
             continue
         fi
@@ -1712,7 +1720,7 @@ svc::module() {
             [[ -z "$line" ]] && continue
             svc::mod_handler "$line" "$action"
             ((count++))
-        done < <(echo "$result" | tail -n +2)
+        done < <(echo "$result" | tail -n +3)
         [[ $count -gt 1 ]] && echo "批量${action}: $count 个模块"
         # Loop back → fzf re-opens with refreshed data
     done
@@ -2252,6 +2260,7 @@ vmc::finstall() {
 vmc::rollback() {
     local pkg_name=""
     local search_v=""
+    local name_kw=""
     if [[ -z $1 ]]; then
         if [[ ! -f "$REMOTE_CONFIG" ]]; then
             log_err "未找到远程配置文件 $REMOTE_CONFIG，请先使用 md remote add 添加配置"
@@ -2266,11 +2275,29 @@ vmc::rollback() {
         [[ "$branch_name" == "-" ]] && search_v=""
     else
         search_v=$1
+        name_kw=${2:-}
     fi
+    # 命令行版本关键字 "-" 表示不限版本
+    [[ "$search_v" == "-" ]] && search_v=""
 
     log_info "正在搜索历史版本..."
     local versions_list
-    versions_list=$(vmc fsearch ${pkg_name:+-n "$pkg_name"} ${search_v:+-v "$search_v"} -i 100 --verbose | awk '
+    # 双参数检索: $1=版本关键字("-"=不限), $2=包名关键字(带 "=" 前缀=精确包名, 否则子串模糊)
+    # remote 配置分支的 pkg_name 等价于精确模式: 只展示该包
+    local exact_col="" name_for_search=""
+    if [[ -n "$pkg_name" ]]; then
+        # remote 配置分支: 精确包名
+        name_for_search=$pkg_name
+        exact_col=$pkg_name
+    elif [[ "$name_kw" == "="* ]]; then
+        # CLI "=name": 精确包名, 剥掉 "=" 前缀传给 -n (子串可命中), 再按第 4 列精确过滤
+        name_for_search="${name_kw#=}"
+        exact_col=$name_for_search
+    else
+        # CLI 模糊模式: 包名子串, 不做第 4 列精确过滤, 让 fzf 展示所有子串命中的包
+        name_for_search=$name_kw
+    fi
+    versions_list=$(vmc fsearch ${name_for_search:+-n "$name_for_search"} ${search_v:+-v "$search_v"} -i 100 --verbose | awk '
         /^\[Index:/ {
             if (version) print time " | " version " | " platform " | " name;
             name=""; version=""; time=""; platform="";
@@ -2297,19 +2324,20 @@ vmc::rollback() {
         END { if (version) print time " | " version " | " platform " | " name; }
     ' | sort -r)
 
-    # vmc -n 是子串匹配 (mdrive 会匹配 mdrive_conf)，这里再做一次精确过滤
-    if [[ -n "$pkg_name" ]]; then
-        versions_list=$(echo "$versions_list" | awk -F ' \\| ' -v pkg="$pkg_name" '$4 == pkg')
+    # 精确模式(remote 配置包名 / CLI "=name")下 vmc -n 仍是子串匹配, 按展示列表第 4 列精确过滤;
+    # CLI 模糊模式(name_kw 不带 "=")不做第 4 列过滤, 保留所有子串命中的包供 fzf 区分挑选
+    if [[ -n "$exact_col" ]]; then
+        versions_list=$(echo "$versions_list" | awk -F ' \\| ' -v pkg="$exact_col" '$4 == pkg')
     fi
 
     if [[ -z "$versions_list" ]]; then
-        log_err "[$search_v] 未搜索到任何远程版本"
+        log_err "[ver:${search_v:-*}, name:${name_for_search:-*}] 未搜索到任何远程版本"
         return 1
     fi
     local selected_line
     selected_line=$(echo "$versions_list" | grep -E "$VMC_PLATFORM|any" | fzf \
         --ansi \
-        --header "发布时间            |  远程版本号          |  平台      |  包名 (搜索关键字: $search_v)" \
+        --header "发布时间            |  远程版本号          |  平台      |  包名 (ver: ${search_v:-*}, name: ${name_for_search:-*})" \
         --layout=reverse \
         --height=100%)
 
