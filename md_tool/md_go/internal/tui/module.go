@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"mdrive/md/internal/svc"
@@ -188,46 +189,50 @@ func (m *moduleMenu) toggle() {
 // action collects the selected rows (or the cursor row when nothing is
 // selected) and dispatches a batch start/stop/restart through the svc layer.
 func (m *moduleMenu) action(action string) tea.Cmd {
+	// m.sel is a map; iteration order is nondeterministic, and the batch
+	// action must operate on modules in list order (Bash modules are processed
+	// top-to-bottom, md.sh:1050-1063). Collect the selected row indices and sort
+	// them ascending so the action order is stable.
 	idx := m.targets()
 	if len(idx) == 0 {
 		m.msg = "没有可操作的模块"
 		m.loErr = true
 		return nil
 	}
-	var soc, mod string
+	fail := 0
 	for _, i := range idx {
-		_ = mod
-		_ = soc
 		if err := m.svc.RunModuleAction(m.ctx, m.rows[i].SOC, m.rows[i].Name, action); err != nil {
-			return func() tea.Msg {
-				return moduleActionMsg{msg: fmt.Sprintf("批量%s: 部分失败", action), err: true}
-			}
+			fail++
 		}
 	}
-	// The goroutine-free path: svc layer already logged per-module results.
+	// Process every selected module even if one fails (md.sh:1050-1063 keeps
+	// going and counts failures); only abort early if the operation is empty.
+	msg := fmt.Sprintf("批量%s: %d 个模块", action, len(idx))
+	if fail > 0 {
+		msg = fmt.Sprintf("批量%s: %d 个模块 (失败 %d 个)", action, len(idx), fail)
+	}
+	err := fail > 0
 	return func() tea.Msg {
-		count := len(idx)
-		return moduleActionMsg{msg: fmt.Sprintf("批量%s: %d 个模块", action, count)}
+		return moduleActionMsg{msg: msg, err: err}
 	}
 }
 
-// openLog runs the module log view for the cursor row's soc/mod. The svc layer
-// resolves the path and delegates to a pager via the log callback.
+// openLog is reserved for the G6 module-log pager. The Bash version opens the
+// module's own log file with `less` (svc::_open_module_log, md.sh:854-881);
+// that requires logout-path resolution + a real pager, which is deferred to
+// G6. Wiring a placeholder here that streams mdrive.service's journal to a
+// discard writer would both read the wrong source and leak a live ssh + a
+// journalctl goroutine on every keypress, so the key is disabled with an
+// explicit message instead of a fake-working call.
 func (m *moduleMenu) openLog(logType string) tea.Cmd {
-	if len(m.rows) == 0 {
-		return nil
-	}
-	r := m.rows[m.cur]
 	return func() tea.Msg {
-		if err := m.svc.HandleSelectedRow(m.ctx, r.Render(m.nc), logType, func(soc, mod, t string) error {
-			return m.svc.Log(m.ctx, soc, logWriter{})
-		}); err != nil {
-			return moduleActionMsg{msg: err.Error(), err: true}
-		}
-		return moduleActionMsg{msg: ""}
+		return moduleActionMsg{msg: fmt.Sprintf("模块日志查看将在 G6 提供，当前请在服务日志视图查看"), err: false}
 	}
 }
 
+// targets returns the row indices to operate on: all Tab-selected rows (in
+// ascending index order, so a batch action is deterministic) when any is
+// selected, otherwise the cursor row alone.
 func (m *moduleMenu) targets() []int {
 	var out []int
 	any := false
@@ -243,6 +248,7 @@ func (m *moduleMenu) targets() []int {
 				out = append(out, i)
 			}
 		}
+		sort.Ints(out)
 		return out
 	}
 	if len(m.rows) > 0 {
@@ -295,10 +301,4 @@ func (m *moduleMenu) fetch() tea.Cmd {
 	}
 }
 
-// logWriter is an io.Writer that discards streamed log output in the module
-// menu (the command view has its own terminal); md.m log is shown by the
-// pager callback. Keeping it here lets HandleSelectedRow's log path compile
-// without importing os.
-type logWriter struct{}
-
-func (logWriter) Write(b []byte) (int, error) { return len(b), nil }
+// (EOF)

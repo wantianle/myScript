@@ -18,13 +18,22 @@ func (s *Svc) RunModuleAction(ctx context.Context, soc, mod, action string) erro
 	s.log.Info("正在对 [%s] %s 执行 %s...", soc, mod, action)
 
 	cmd := fmt.Sprintf("sudo supervisorctl %s %s", action, mod)
-	var out ExecOut
 	// Stdin isolation for soc2 (`</dev/null`, md.sh:807) is handled by the
 	// exec layer: sshx.Exec treats a nil Stdin as /dev/null (ssh -n), so a
 	// batched stdin stream is never consumed by the remote command.
-	out, _ = sh.Exec(ctx, cmd)
+	out, err := sh.Exec(ctx, cmd)
 
 	sleepCtx(ctx)
+
+	// A transport-layer failure (mid-stream disconnect or the exec deadline)
+	// surfaces as err with Code==0 — never trust Code alone. The Bash version
+	// treats a dropped SSH connection as rc==255 (md.sh:812-813), so map any
+	// exec error here onto that same "SSH 连接错误" path instead of falsely
+	// reporting success.
+	if err != nil {
+		s.log.Err("[%s] %s %s 失败: soc2 SSH 连接错误 (%v)", soc, mod, action, err)
+		return fmt.Errorf("[%s] %s %s SSH 连接错误", soc, mod, action)
+	}
 
 	rc := out.Code
 	switch {

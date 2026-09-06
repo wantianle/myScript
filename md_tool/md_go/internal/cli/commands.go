@@ -249,7 +249,22 @@ func upgradeCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			prePassed := s.PreCheck(cmd.Context()) == nil
-			port := vmcflow.UpgradePort{PreCheckPassed: prePassed, Confirm: ""}
+			// The Bash version always prompts (md.sh:1419-1424): y/回车继续,
+			// and only 'f' continues when the pre-check failed. Never run this
+			// destructive upgrade without an explicit confirm (P0-4).
+			confirm := readLineStdin()
+			if prePassed {
+				if confirm != "y" && confirm != "Y" && confirm != "" {
+					vf.Log.Err("已取消升级")
+					return nil
+				}
+			} else {
+				if confirm != "f" {
+					vf.Log.Err("已取消升级")
+					return nil
+				}
+			}
+			port := vmcflow.UpgradePort{PreCheckPassed: prePassed, Confirm: confirm}
 			return vf.Upgrade(cmd.Context(), port)
 		},
 	}
