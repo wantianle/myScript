@@ -12,6 +12,8 @@ package vmcflow
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"mdrive/md/internal/logx"
 	"mdrive/md/internal/remote"
@@ -134,18 +136,54 @@ func (v *VMC) InstallPkg(ctx context.Context, pkg, version string) error {
 }
 
 // prepPkgDir reclaims ownership of a stale package dir before install
-// (vmc::_prep_pkg_dir :1357-1381). It is a best-effort step: a missing dir is
-// a fresh install and needs no prep.
+// (vmc::_prep_pkg_dir :1357-1381). It probes the same candidate roots as the
+// Bash version, readlink-resolves the first existing one, and runs
+// `sudo chown -R user:user` on it. A missing dir means a fresh install and
+// needs no prep. Ownership reclaim is best-effort: a dir that is already
+// user-owned (or absent) is a no-op, while a sudo failure in the strict case
+// returns an error (vmc would otherwise delete a root-owned dir and fail).
 func (v *VMC) prepPkgDir(ctx context.Context, pkg string) {
 	if pkg == "" {
 		return
 	}
-	// The Bash version tries several candidate roots; the Go layer reuses the
-	// svc layer's disk probe to find the real dir and chowns it. This is kept
-	// deliberately light here — the authoritative system operation lives in
-	// the Bash init side; md Go only needs to not silently install over a
-	// root-owned dir. See md.go-migration notes.
-	_ = ctx
+	user := v.Cfg.DefaultUser
+	if user == "" {
+		user = "nvidia"
+	}
+	// Candidate roots, in md.sh priority order. VMC_HOME is usually injected by
+	// the login shell; when absent we fall back to the same hardcoded paths the
+	// Bash version probes.
+	vmcHome := os.Getenv("VMC_HOME")
+	if vmcHome == "" {
+		vmcHome = filepath.Join(homeDir(), ".vmc")
+	}
+	candidates := []string{
+		filepath.Join(vmcHome, "softwares", pkg),
+		filepath.Join(homeDir(), ".vmc", "softwares", pkg),
+		filepath.Join("/mnt/ufs_data/project/.vmc", "softwares", pkg),
+		filepath.Join("/mdrive/.vmc", "softwares", pkg),
+	}
+	for _, cand := range candidates {
+		real, err := filepath.EvalSymlinks(cand)
+		if err != nil {
+			continue // not present: probe the next candidate
+		}
+		if _, msg, code, err := v.Runner(ctx, "sudo", "chown", "-R", user+":"+user, real); err != nil || code != 0 {
+			v.Log.Warn("[%s] 包目录属主回收失败(exit %d): %s", pkg, code, msg)
+		} else {
+			v.Log.Info("[%s] 已回收包目录属主: %s", pkg, real)
+		}
+		return
+	}
+}
+
+// homeDir returns the current user's home directory (os.UserHomeDir, which on
+// the bench resolves to /home/nvidia).
+func homeDir() string {
+	if h, err := os.UserHomeDir(); err == nil {
+		return h
+	}
+	return "/home/nvidia"
 }
 
 // Confirm is the interactive Y/n confirm (vmc::_confirm :1293-1299). The Bash

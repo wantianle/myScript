@@ -132,3 +132,52 @@ func TestParseEditTextSpecs(t *testing.T) {
 		t.Errorf("targets[0] = %+v", targets[0])
 	}
 }
+
+func TestPrepPkgDir(t *testing.T) {
+	home := t.TempDir()
+	pkgDir := filepath.Join(home, ".vmc", "softwares", "mdrive")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VMC_HOME", filepath.Join(home, ".vmc"))
+
+	var got []string
+	r := func(ctx context.Context, name string, args ...string) (string, string, int, error) {
+		got = append(got, strings.Join(append([]string{name}, args...), " "))
+		return "", "", 0, nil
+	}
+	v := vmcNew(r)
+	v.Cfg.DefaultUser = "nvidia"
+	v.prepPkgDir(context.Background(), "mdrive")
+
+	want := "sudo chown -R nvidia:nvidia " + pkgDir
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("got chown = %v, want %q", got, want)
+	}
+}
+
+func TestPrepPkgDirNoopWhenAbsent(t *testing.T) {
+	t.Setenv("VMC_HOME", filepath.Join(t.TempDir(), ".vmc-unused"))
+	var got []string
+	r := func(ctx context.Context, name string, args ...string) (string, string, int, error) {
+		got = append(got, name)
+		return "", "", 0, nil
+	}
+	v := vmcNew(r)
+	v.prepPkgDir(context.Background(), "does_not_exist")
+	if len(got) != 0 {
+		t.Errorf("absent pkg should not chown, got %v", got)
+	}
+}
+
+func TestPrepPkgDirEmptyPkgNoop(t *testing.T) {
+	var called bool
+	r := func(ctx context.Context, name string, args ...string) (string, string, int, error) {
+		called = true
+		return "", "", 0, nil
+	}
+	vmcNew(r).prepPkgDir(context.Background(), "")
+	if called {
+		t.Error("empty pkg must not run any command")
+	}
+}
