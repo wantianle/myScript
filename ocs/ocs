@@ -5,8 +5,9 @@
 set -eo pipefail
 
 DB="$HOME/.local/share/opencode/opencode.db"
+OMOS_CONFIG="$HOME/.config/opencode/oh-my-opencode-slim.jsonc"
 LIMIT=50
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 # ── 内部函数 ──────────────────────────────────────
 
@@ -31,6 +32,61 @@ _escape_like() {
   s="${s//%/\\%}"
   s="${s//_/\\_}"
   echo "$s"
+}
+
+# 从 oh-my-opencode-slim.jsonc 动态读取可用 preset 名单（每行一个）
+_presets() {
+  python3 - "$OMOS_CONFIG" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+if not os.path.exists(path):
+    sys.exit(0)
+src = open(path, encoding="utf-8").read()
+# 去 JSONC 注释（// 与 /* */），保留字符串内 //（如 URL）
+out, i, n = [], 0, len(src)
+in_str = esc = False
+while i < n:
+    c = src[i]
+    if in_str:
+        out.append(c)
+        if esc:
+            esc = False
+        elif c == "\\":
+            esc = True
+        elif c == '"':
+            in_str = False
+        i += 1
+        continue
+    if c == '"':
+        in_str = True; out.append(c); i += 1; continue
+    if c == "/" and i + 1 < n and src[i + 1] == "/":
+        while i < n and src[i] != "\n":
+            i += 1
+        continue
+    if c == "/" and i + 1 < n and src[i + 1] == "*":
+        i += 2
+        while i + 1 < n and not (src[i] == "*" and src[i + 1] == "/"):
+            i += 1
+        i += 2
+        continue
+    out.append(c); i += 1
+try:
+    data = json.loads("".join(out))
+except Exception:
+    sys.exit(0)
+for name in (data.get("presets") or {}):
+    print(name)
+PY
+}
+
+# 启动 opencode；指定了 preset 时注入环境变量
+_opencode() {
+  if [[ -n "$PRESET" ]]; then
+    echo "  [preset: $PRESET]"
+    OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode "$@"
+  else
+    opencode "$@"
+  fi
 }
 
 _list() {
@@ -186,7 +242,7 @@ _resume() {
   echo "目录: $(_shortdir "$dir")"
   echo ""
   cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
-  opencode --session "$sid"
+  _opencode --session "$sid"
 }
 
 _delete() {
@@ -303,7 +359,7 @@ _search() {
     echo "目录: $(_shortdir "$dir")"
     echo ""
     cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
-    opencode --session "$sid"
+    _opencode --session "$sid"
     return
   fi
 
@@ -322,6 +378,8 @@ ocs — OpenCode Session Manager
 
 用法:
   ocs                   列出最近会话（带目录、时间）
+  ocs -p <preset>       在当前目录用指定 OMOS preset 直接开新会话
+  ocs -p <preset> <ID>  按 ID 恢复会话，并强制用指定 preset
   ocs <ID片段>           按 ID 恢复：唯一→恢复，多条→列表，无→全部
   ocs s <关键词>         按标题+目录搜索唯一→恢复，多条→列表，无→全部
   ocs d <ID片段>         删除会话（确认后删除）
@@ -329,8 +387,16 @@ ocs — OpenCode Session Manager
   ocs r <ID片段> <名>    重命名会话
   ocs rename <ID片段> <名> 同上
 
+preset 说明:
+  从 ~/.config/opencode/oh-my-opencode-slim.jsonc 的 presets 动态读取，
+  经 OH_MY_OPENCODE_SLIM_PRESET 环境变量注入单次进程。
+  注意: 恢复历史会话时强制换 preset 会让主线程切换模型（上下文保留，
+  但属于"切模型本身的风险"，与项目级切换 preset 行为一致）。
+
 示例:
   ocs                    # 列出所有
+  ocs -p lite            # 当前目录用 lite 团队开新会话
+  ocs -p openai iyeTCx6Y # 用 openai 团队恢复指定会话
   ocs iyeTCx6Y           # 按 ID 恢复（支持片段匹配）
   ocs s ssh             # 搜索含 ssh 的会话，唯一匹配直接恢复
   ocs d oJnNVI           # 删除指定会话
@@ -346,9 +412,47 @@ if [[ ! -f "$DB" ]]; then
   exit 1
 fi
 
+# 解析全局选项 -p/--preset（可出现在任意位置，需在子命令前）
+PRESET=""
+_rest=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p|--preset)
+      [[ -z "${2:-}" ]] && { echo "用法: ocs -p <preset> [子命令/ID]"; exit 1; }
+      PRESET="$2"
+      shift 2
+      ;;
+    -p=*|--preset=*)
+      PRESET="${1#*=}"
+      shift
+      ;;
+    *)
+      _rest+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${_rest[@]}"
+
+# 指定了 preset 时先校验存在性（从 OMOS 配置动态读取）
+if [[ -n "$PRESET" ]]; then
+  if ! _presets | grep -qx -- "$PRESET"; then
+    echo "错误: preset '$PRESET' 不在 oh-my-opencode-slim.jsonc 中"
+    echo "可用 presets:"
+    _presets | sed 's/^/  /'
+    exit 1
+  fi
+fi
+
 case "${1:-}" in
   "")
-    _list "${2:-}"
+    if [[ -n "$PRESET" ]]; then
+      # -p 且无子命令/ID：在当前目录直接开新会话
+      echo "新会话 @ $(_shortdir "$PWD")"
+      _opencode
+    else
+      _list "${2:-}"
+    fi
     ;;
   -h|--help)
     _usage
