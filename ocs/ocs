@@ -89,6 +89,57 @@ _opencode() {
   fi
 }
 
+# 读取指定 preset 下某 agent 的模型，输出 "provider|model"（供预写 session.model）
+_preset_agent_model() {
+  python3 - "$OMOS_CONFIG" "$1" "$2" <<'PY'
+import json, os, sys
+path, preset_name, agent = sys.argv[1], sys.argv[2], sys.argv[3]
+if not os.path.exists(path):
+    sys.exit(0)
+src = open(path, encoding="utf-8").read()
+out, i, n = [], 0, len(src)
+in_str = esc = False
+while i < n:
+    c = src[i]
+    if in_str:
+        out.append(c)
+        if esc:
+            esc = False
+        elif c == "\\":
+            esc = True
+        elif c == '"':
+            in_str = False
+        i += 1
+        continue
+    if c == '"':
+        in_str = True; out.append(c); i += 1; continue
+    if c == "/" and i + 1 < n and src[i + 1] == "/":
+        while i < n and src[i] != "\n":
+            i += 1
+        continue
+    if c == "/" and i + 1 < n and src[i + 1] == "*":
+        i += 2
+        while i + 1 < n and not (src[i] == "*" and src[i + 1] == "/"):
+            i += 1
+        i += 2
+        continue
+    out.append(c); i += 1
+try:
+    data = json.loads("".join(out))
+except Exception:
+    sys.exit(0)
+preset = (data.get("presets") or {}).get(preset_name) or {}
+cfg = preset.get(agent) or {}
+m = cfg.get("model")
+if isinstance(m, str) and m:
+    if "/" in m:
+        provider, model = m.split("/", 1)
+    else:
+        provider, model = "minieye", m
+    print(f"{provider}|{model}")
+PY
+}
+
 _list() {
   local filter="$1" mode="${2:-search}" kw where="WHERE parent_id IS NULL AND id LIKE 'ses_%'" w now
   kw=$(_escape_like "$filter")
@@ -216,6 +267,22 @@ _match_count_search() {
   _db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND id LIKE 'ses_%' AND (title LIKE '%' || '$kw' || '%' OR directory LIKE '%' || '$kw' || '%');"
 }
 
+# 指定了 preset 时，恢复前把该会话的 model 预写为 preset 中对应 agent 的模型。
+# 目的：避免"主线程已切新模型、但 DB/UI 还显示旧模型"的滞后（实测 opencode
+# 要等第一回合跑完才回写 session.model）。仅在有 -p 时触发。
+_apply_preset_model() {
+  [[ -z "$PRESET" ]] && return 0
+  local sid="$1" agent_name spec provider model
+  agent_name=$(_db "SELECT agent FROM session WHERE id='$sid';")
+  [[ -z "$agent_name" ]] && agent_name="orchestrator"
+  spec=$(_preset_agent_model "$PRESET" "$agent_name")
+  [[ -z "$spec" ]] && return 0
+  provider="${spec%%|*}"
+  model="${spec##*|}"
+  _db "UPDATE session SET model='{\"id\":\"$model\",\"providerID\":\"$provider\",\"variant\":\"default\"}' WHERE id='$sid';"
+  echo "  [主线程模型 → $provider/$model]"
+}
+
 _resume() {
   local count sid
   count=$(_match_count_id "$1")
@@ -241,6 +308,7 @@ _resume() {
   echo "会话: $title"
   echo "目录: $(_shortdir "$dir")"
   echo ""
+  _apply_preset_model "$sid"
   cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
   _opencode --session "$sid"
 }
@@ -358,6 +426,7 @@ _search() {
     echo "会话: $title"
     echo "目录: $(_shortdir "$dir")"
     echo ""
+    _apply_preset_model "$sid"
     cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
     _opencode --session "$sid"
     return
