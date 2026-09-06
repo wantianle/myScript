@@ -189,22 +189,23 @@ func (s *Svc) diskExternalCheck(ctx context.Context, local, soc2sh Shell) bool {
 		}
 	}
 
-	// External disk usage (md.sh:1846) + free-space warning helper.
-	if ok && soc2sh != nil {
-		if !s.diskUsage(ctx, soc2sh, "External (data)", s.cfg.MountRoot) {
+	// External disk usage + cache free-space warning. md.sh flow::pre:1846
+	// (`disk::usage "External (data)" $MOUNT_ROOT`) and diagnose:1186-1191
+	// (`disk_free_gb "$MDRIVE_CACHE"`) both run df on the LOCAL soc1 — MDRIVE_CACHE
+	// (/mdrive/.cache) is a soc1 path. Query local, not soc2.
+	if ok && local != nil {
+		if !s.diskUsage(ctx, local, "External (data)", s.cfg.MountRoot) {
 			ok = false
 		}
-		// free-space probe already surfaces in checkRecorderDisk; here we just
-		// surface a low-space warning without blocking (md.sh:1186-1191).
-		s.remoteDiskFreeGBWarning(ctx, soc2sh)
+		s.localDiskFreeGBWarning(ctx, local)
 	}
 
 	return ok
 }
 
-// remoteDiskFreeGBWarning logs a cache-space warning when the cache has < 5GB
-// free (md.sh diagnose step, downgraded to a warning).
-func (s *Svc) remoteDiskFreeGBWarning(ctx context.Context, sh Shell) {
+// localDiskFreeGBWarning logs a cache-space warning when the LOCAL cache has
+// < 5GB free (md.sh diagnose:1186-1191, downgraded to a warning).
+func (s *Svc) localDiskFreeGBWarning(ctx context.Context, sh Shell) {
 	if sh == nil {
 		return
 	}
