@@ -273,6 +273,23 @@ _match_count_search() {
   _db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND id LIKE 'ses_%' AND (title LIKE '%' || '$kw' || '%' OR directory LIKE '%' || '$kw' || '%');"
 }
 
+# 指定了 preset 时，恢复前把该会话的 model 预写为 preset 中对应 agent 的模型。
+# 目的：TUI 恢复已有会话时，主线程模型取自 session.model（opencode setAgentModel /
+# /model 都写它），而 CLI -m 与 env 对已有会话不生效。预写是旧会话原地切主模型的
+# 唯一有效机制。仅在有 -p 时触发。
+_apply_preset_model() {
+  [[ -z "$PRESET" ]] && return 0
+  local sid="$1" agent_name spec provider model
+  agent_name=$(_db "SELECT agent FROM session WHERE id='$sid';")
+  [[ -z "$agent_name" ]] && agent_name="orchestrator"
+  spec=$(_preset_agent_model "$PRESET" "$agent_name")
+  [[ -z "$spec" ]] && return 0
+  provider="${spec%%|*}"
+  model="${spec##*|}"
+  _db "UPDATE session SET model='{\"id\":\"$model\",\"providerID\":\"$provider\",\"variant\":\"default\"}' WHERE id='$sid';"
+  echo "  [主线程模型 → $provider/$model]"
+}
+
 _resume() {
   local count sid
   count=$(_match_count_id "$1")
@@ -298,6 +315,7 @@ _resume() {
   echo "会话: $title"
   echo "目录: $(_shortdir "$dir")"
   echo ""
+  _apply_preset_model "$sid"
   cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
   _opencode --session "$sid"
 }
@@ -415,6 +433,7 @@ _search() {
     echo "会话: $title"
     echo "目录: $(_shortdir "$dir")"
     echo ""
+    _apply_preset_model "$sid"
     cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
     _opencode --session "$sid"
     return
@@ -445,15 +464,16 @@ ocs — OpenCode Session Manager
   ocs rename <ID片段> <名> 同上
 
 preset 说明:
-  从 ~/.config/opencode/oh-my-opencode-slim.jsonc 的 presets 动态读取，
-  经 OH_MY_OPENCODE_SLIM_PRESET 环境变量注入单次进程。
-  注意: 恢复历史会话时强制换 preset 会让主线程切换模型（上下文保留，
-  但属于"切模型本身的风险"，与项目级切换 preset 行为一致）。
+  从 ~/.config/opencode/oh-my-opencode-slim.jsonc 的 presets 动态读取。
+  - 新会话: 经 OH_MY_OPENCODE_SLIM_PRESET 环境变量 + -m 注入主模型，全部生效。
+  - 恢复旧会话: 主线程模型取自该会话的 session.model，CLI -m / env 对已有会话
+    不生效；因此 ocs 会在恢复前把 session.model 预写为 preset 的 orchestrator 模型，
+    实现"原地换主模型"。子 agent 仍由 env preset 控制。
 
 示例:
   ocs                    # 列出所有
   ocs -p lite            # 当前目录用 lite 团队开新会话
-  ocs -p openai iyeTCx6Y # 用 openai 团队恢复指定会话
+  ocs -p openai iyeTCx6Y # 恢复指定会话并原地切到 openai-team 主模型
   ocs iyeTCx6Y           # 按 ID 恢复（支持片段匹配）
   ocs s ssh             # 搜索含 ssh 的会话，唯一匹配直接恢复
   ocs d oJnNVI           # 删除指定会话
