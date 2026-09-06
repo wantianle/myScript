@@ -1,18 +1,20 @@
 package cli
 
 import (
-	"mdrive/md/internal/app"
 	"mdrive/md/internal/config"
-	"mdrive/md/internal/tui"
 
 	"github.com/spf13/cobra"
 )
 
+// Options configures the root command.
 type Options struct {
 	ProgramName string
 	Version     string
 }
 
+// NewRootCommand builds the md command tree. G3 ships the service-control
+// surface: start/stop/restart/status/log/c(channel)/record/remote/check. The
+// TUI-backed `md m` module menu and `md e` export are wired in G4.
 func NewRootCommand(opts Options) *cobra.Command {
 	if opts.ProgramName == "" {
 		opts.ProgramName = "md"
@@ -22,25 +24,7 @@ func NewRootCommand(opts Options) *cobra.Command {
 	}
 
 	cfg := config.FromEnv()
-	session := app.NewSession(cfg)
-
-	if opts.ProgramName == "tag" {
-		return newTagRootCommand(session, opts.Version)
-	}
-
-	root := &cobra.Command{
-		Use:           "md",
-		Short:         "MDrive vehicle operations tool",
-		Version:       opts.Version,
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return tui.Run(cmd.Context(), session.Config, opts.Version)
-		},
-	}
-
-	root.SetVersionTemplate("md {{.Version}}\n")
-	root.AddCommand(newTagCommand(session))
-
+	root := newServiceRoot(cfg, opts.ProgramName, opts.Version)
+	root.SetVersionTemplate(opts.ProgramName + " {{.Version}}\n")
 	return root
 }
