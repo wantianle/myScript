@@ -18,12 +18,8 @@ echo "=== 安装 OpenCode 配置 ($USERNAME) ==="
 
 mkdir -p ~/.config/opencode
 
-# 替换占位符并写入
-safe_sed_write "$SCRIPT_DIR/opencode.json" ~/.config/opencode/opencode.json \
-    -e "s/__MINIEYE_API_KEY__/$MINIEYE_API_KEY/g" \
-    -e "s/__CLAUDE_API_KEY__/$CLAUDE_API_KEY/g" \
-    -e "s/__USERNAME__/$USERNAME/g" \
-    -- "opencode/opencode.json"
+# 直接复制本机同步来的 opencode.jsonc（含真实配置）
+safe_copy "$SCRIPT_DIR/opencode.jsonc" ~/.config/opencode/opencode.jsonc "opencode/opencode.jsonc"
 
 safe_copy "$SCRIPT_DIR/oh-my-opencode-slim.jsonc" ~/.config/opencode/oh-my-opencode-slim.jsonc "opencode/oh-my-opencode-slim.jsonc"
 safe_copy "$SCRIPT_DIR/tui.json" ~/.config/opencode/tui.json "opencode/tui.json"

@@ -1,6 +1,12 @@
 {
+  "allow_home_project": true,
+  "execute_threshold_percentage": 50,
   "historian": {
-    "model": "minieye/gpt-5.6-terra",
-    "variant": "medium"
+    "opencode": {"model": "minieye/deepseek-v4-flash", "variant": "max"},
+    "pi": {"model": "minieye/deepseek-v4-flash", "thinking_level": "max"}
+  },
+  "dreamer": {
+    "opencode": {"model": "minieye/deepseek-v4-flash", "variant": "max"},
+    "pi": {"model": "minieye/deepseek-v4-flash", "thinking_level": "max"}
   }
 }

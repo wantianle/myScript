@@ -12,6 +12,6 @@
 - A new entity is justified only when it carries a clear boundary, ownership, lifecycle, invariant, reuse point, test seam, or safety guarantee that reduces overall complexity.
 - Prefer stable, boring, traceable control flow over hidden registration, import-time side effects, monkey patching, dynamic attribute tricks, or behavior hidden behind decorators.
 - Keep Python idiomatic when it improves clarity: comprehensions for simple value construction, context managers for resource lifetime, standard library parsers for structured data, and small functions for clear operations.
-- Avoid Pythonic-looking code that hides intent: nested clever comprehensions, list comprehensions used only for side effects, broad `**locals()` forwarding`, implicit global mutation, and unnecessary metaprogramming.
+- Avoid Pythonic-looking code that hides intent: nested clever comprehensions, list comprehensions used only for side effects, broad `**locals()` forwarding, implicit global mutation, and unnecessary metaprogramming.
 - When two designs both work, choose the one with fewer moving parts and more visible data flow.
 - This is not anti-abstraction. It is a requirement that every abstraction prove it pays for itself.

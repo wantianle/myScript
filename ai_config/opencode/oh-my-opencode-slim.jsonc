@@ -9,25 +9,30 @@
     "size": "medium",
     "speed": 1
   },
-  "preset": "openai",
+  "preset": "deepseek",
   "presets": {
     "openai": {
       "designer": {
         "mcps": [],
-        "model": "minieye/gpt-5.5",
+        "model": "minieye/gpt-5.6-terra",
         "skills": [],
-        "variant": "medium"
+        "variant": "high"
       },
       "explorer": {
         "mcps": [],
-        "model": "minieye-openai-claude/claude-opus-4-7",
-        "skills": [],
+        "model": "minieye/gpt-5.6-luna",
+        "skills": [
+          "codemap"
+        ],
         "variant": "low"
       },
       "fixer": {
         "mcps": [],
-        "model": "minieye-openai-claude/claude-opus-4-7",
-        "skills": [],
+        "model": "minieye/gpt-5.6-terra",
+        "skills": [
+          "mdrive-container",
+          "simplify"
+        ],
         "variant": "medium"
       },
       "librarian": {
@@ -36,28 +41,142 @@
           "context7",
           "gh_grep"
         ],
-        "model": "minieye/gpt-5.4",
+        "model": "minieye/gpt-5.6-luna",
         "skills": [],
         "variant": "low"
       },
       "oracle": {
         "mcps": [],
-        "model": "minieye/gpt-5.5",
-        "skills": [
-          "simplify"
-        ],
-        "variant": "high"
+        "model": "minieye/gpt-5.6-sol",
+        "skills": [],
+        "variant": "xhigh"
       },
       "orchestrator": {
         "mcps": [
           "*",
           "!context7"
         ],
-        "model": "minieye-openai-claude/claude-opus-4-7",
+        "model": "minieye/gpt-5.6-terra",
         "skills": [
-          "*"
+          "deepwork",
+          "worktrees",
+          "reflect",
+          "lean-flow",
+          "clonedeps"
         ],
+        "variant": "xhigh"
+      }
+    },
+    "deepseek": {
+      "designer": {
+        "mcps": [],
+        "model": "minieye/deepseek-v4-flash",
+        "skills": [],
         "variant": "high"
+      },
+      "explorer": {
+        "mcps": [],
+        "model": "minieye/deepseek-v4-flash",
+        "skills": [
+          "codemap"
+        ],
+        "variant": "low"
+      },
+      "fixer": {
+        "mcps": [],
+        "model": "minieye/deepseek-v4-flash",
+        "skills": [
+          "mdrive-container",
+          "simplify"
+        ],
+        "variant": "low"
+      },
+      "librarian": {
+        "mcps": [
+          "websearch",
+          "context7",
+          "gh_grep"
+        ],
+        "model": "minieye/deepseek-v4-flash",
+        "skills": [],
+        "variant": "low"
+      },
+      "oracle": {
+        "mcps": [],
+        "model": "minieye/deepseek-v4-flash",
+        "skills": [],
+        "variant": "max"
+      },
+      "orchestrator": {
+        "mcps": [
+          "*",
+          "!context7"
+        ],
+        "model": "minieye/deepseek-v4-flash",
+        "skills": [
+          "deepwork",
+          "worktrees",
+          "reflect",
+          "lean-flow",
+          "clonedeps"
+        ],
+        "variant": "max"
+      }
+    },
+    "DeepSeek": {
+      "designer": {
+        "mcps": [],
+        "model": "DeepSeek/deepseek-v4-flash",
+        "skills": [],
+        "variant": "high"
+      },
+      "explorer": {
+        "mcps": [],
+        "model": "DeepSeek/deepseek-v4-flash",
+        "skills": [
+          "codemap"
+        ],
+        "variant": "low"
+      },
+      "fixer": {
+        "mcps": [],
+        "model": "DeepSeek/deepseek-v4-flash",
+        "skills": [
+          "mdrive-container",
+          "simplify"
+        ],
+        "variant": "low"
+      },
+      "librarian": {
+        "mcps": [
+          "websearch",
+          "context7",
+          "gh_grep"
+        ],
+        "model": "DeepSeek/deepseek-v4-flash",
+        "skills": [],
+        "variant": "low"
+      },
+      "oracle": {
+        "mcps": [],
+        "model": "DeepSeek/deepseek-v4-flash",
+        "skills": [],
+        "variant": "max"
+      },
+      "orchestrator": {
+        "mcps": [
+          "*",
+          "!context7"
+        ],
+        "model": "DeepSeek/deepseek-v4-flash",
+        "skills": [
+          "deepwork",
+          "worktrees",
+          "reflect",
+          "lean-flow",
+          "clonedeps"
+        ],
+        "variant": "max"
       }
     }
   }

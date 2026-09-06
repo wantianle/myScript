@@ -1,0 +1,117 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "model": "minieye-openai-claude/claude-opus-4-7",
+  "username": "mini",
+
+  "lsp": true,
+
+  "agent": {
+    "explore": { "disable": true },
+    "general": { "disable": true }
+  },
+
+  "command": {},
+
+  "compaction": {
+    "auto": false,
+    "prune": false,
+    "tail_turns": 80
+  },
+
+  "mode": {},
+
+  "permission": {
+    "*": "allow"
+  },
+
+  "plugin": [
+    "@cortexkit/opencode-magic-context@latest",
+    "oh-my-opencode-slim@latest"
+  ],
+
+  "provider": {
+    // Minieye OpenAI
+    "minieye": {
+      "name": "Minieye",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "sk-fa85026177186ea1504f219cf0bf46f9bc92755ebd4697051cd1b92270013427",
+        "baseURL": "https://sub2api.minieye.tech/v1",
+        "includeUsage": true
+      },
+      "models": {
+        "deepseek-v4-flash": {
+          "name": "deepseek-v4-flash",
+          "cost":   { "input": 0.019,  "output": 1.286 },
+          "limit":  { "context": 1000000, "output": 384000 }
+        },
+        "gpt-5.4": {
+          "name": "gpt-5.4",
+          "cost":   { "input": 0.50, "output": 3.00 },
+          "limit":  { "context":  1000000,   "output": 128000 }
+        },
+        "gpt-5.5": {
+          "name": "gpt-5.5",
+          "cost":   { "input": 0.50, "output": 3.00 },
+          "limit":  { "context":  1000000,   "output": 128000 }
+        },
+        "gpt-5.6-luna": {
+          "name": "gpt-5.6-luna",
+          "cost":   { "input": 0.02, "output": 0.12 },
+          "limit":  { "context":  1050000,   "output": 128000 }
+        },
+        "gpt-5.6-sol": {
+          "name": "gpt-5.6-sol",
+          "cost":   { "input": 0.50, "output": 3.00 },
+          "limit":  { "context":  1050000,   "output": 128000 }
+        },
+        "gpt-5.6-terra": {
+          "name": "gpt-5.6-terra",
+          "cost":   { "input": 0.20, "output": 1.20 },
+          "limit":  { "context":  1050000,   "output": 128000 }
+        }
+      }
+    },
+
+    // Minieye Claude
+    "minieye-claude": {
+      "name": "Minieye-Claude",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "sk-6590439b93c299437c01c0c246c82a17d896d06964974cb48aea5a70f22ba636",
+        "baseURL": "https://sub2api.minieye.tech/v1",
+        "includeUsage": true
+      },
+      "models": {
+        "claude-opus-4-8": {
+          "name": "claude-opus-4-8",
+          "cost":   { "input": 0.057, "output": 3.857 },
+          "limit":  { "context":  1000000, "output": 384000 }
+        }
+      }
+    },
+
+    // DeepSeek API
+    "DeepSeek": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "sk-bc595b40a377411a9a9af7e82d6e32db",
+        "baseURL": "https://api.deepseek.com/v1",
+        "setCacheKey": true
+      },
+      "models": {
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro",
+          "cost":   { "input": 0.30, "output": 27.00 },
+          "limit":  { "context": 1000000, "output": 384000 }
+        },
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash",
+          "cost":   { "input": 0.10,  "output": 9.00 },
+          "limit":  { "context": 1000000, "output": 384000 }
+        }
+      }
+    }
+  }
+}
