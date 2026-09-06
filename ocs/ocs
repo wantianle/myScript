@@ -7,7 +7,7 @@ set -eo pipefail
 DB="$HOME/.local/share/opencode/opencode.db"
 OMOS_CONFIG="$HOME/.config/opencode/oh-my-opencode-slim.jsonc"
 LIMIT=50
-VERSION="1.1.0"
+VERSION="2.0.0"
 
 # ── 内部函数 ──────────────────────────────────────
 
@@ -79,71 +79,29 @@ for name in (data.get("presets") or {}):
 PY
 }
 
-# 启动 opencode；指定了 preset 时注入环境变量，恢复场景额外 -m 强制主线程模型
-# （TUI 恢复会话会沿用会话历史模型并显式覆盖 agent config，必须用 CLI -m 才能顶掉）
-_opencode() {
-  if [[ -n "$PRESET" ]]; then
-    echo "  [preset: $PRESET]"
-    if [[ -n "$OMOS_MAIN_MODEL" ]]; then
-      echo "  [主线程模型: $OMOS_MAIN_MODEL]"
-      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode -m "$OMOS_MAIN_MODEL" "$@"
-    else
-      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode "$@"
-    fi
-  else
-    opencode "$@"
+# 拆分 "目标[:preset]" 参数。仅当冒号后缀是 OMOS 里真实存在的 preset 名时才拆分，
+# 避免误伤标题/关键词里可能含冒号的内容。输出全局变量 TARGET 与 PRESET。
+_parse_target() {
+  local raw="$1"
+  TARGET="$raw"
+  PRESET=""
+  [[ "$raw" != *:* ]] && return 0
+  local suffix="${raw##*:}"
+  if _presets | grep -qx -- "$suffix"; then
+    PRESET="$suffix"
+    TARGET="${raw%:*}"
   fi
 }
 
-# 读取指定 preset 下某 agent 的模型，输出 "provider|model"（供 -m 强制主线程模型）
-_preset_agent_model() {
-  python3 - "$OMOS_CONFIG" "$1" "$2" <<'PY'
-import json, os, sys
-path, preset_name, agent = sys.argv[1], sys.argv[2], sys.argv[3]
-if not os.path.exists(path):
-    sys.exit(0)
-src = open(path, encoding="utf-8").read()
-out, i, n = [], 0, len(src)
-in_str = esc = False
-while i < n:
-    c = src[i]
-    if in_str:
-        out.append(c)
-        if esc:
-            esc = False
-        elif c == "\\":
-            esc = True
-        elif c == '"':
-            in_str = False
-        i += 1
-        continue
-    if c == '"':
-        in_str = True; out.append(c); i += 1; continue
-    if c == "/" and i + 1 < n and src[i + 1] == "/":
-        while i < n and src[i] != "\n":
-            i += 1
-        continue
-    if c == "/" and i + 1 < n and src[i + 1] == "*":
-        i += 2
-        while i + 1 < n and not (src[i] == "*" and src[i + 1] == "/"):
-            i += 1
-        i += 2
-        continue
-    out.append(c); i += 1
-try:
-    data = json.loads("".join(out))
-except Exception:
-    sys.exit(0)
-preset = (data.get("presets") or {}).get(preset_name) or {}
-cfg = preset.get(agent) or {}
-m = cfg.get("model")
-if isinstance(m, str) and m:
-    if "/" in m:
-        provider, model = m.split("/", 1)
-    else:
-        provider, model = "minieye", m
-    print(f"{provider}|{model}")
-PY
+# 启动 opencode。有 preset 时注入 OH_MY_OPENCODE_SLIM_PRESET 环境变量（只影响
+# 子 agent 方案；TUI 恢复已有会话时主线程模型由会话自身决定，需在会话内 /model 切换）
+_opencode() {
+  if [[ -n "$PRESET" ]]; then
+    echo "  [preset: $PRESET]"
+    OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode "$@"
+  else
+    opencode "$@"
+  fi
 }
 
 _list() {
@@ -273,23 +231,6 @@ _match_count_search() {
   _db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND id LIKE 'ses_%' AND (title LIKE '%' || '$kw' || '%' OR directory LIKE '%' || '$kw' || '%');"
 }
 
-# 指定了 preset 时，恢复前把该会话的 model 预写为 preset 中对应 agent 的模型。
-# 目的：TUI 恢复已有会话时，主线程模型取自 session.model（opencode setAgentModel /
-# /model 都写它），而 CLI -m 与 env 对已有会话不生效。预写是旧会话原地切主模型的
-# 唯一有效机制。仅在有 -p 时触发。
-_apply_preset_model() {
-  [[ -z "$PRESET" ]] && return 0
-  local sid="$1" agent_name spec provider model
-  agent_name=$(_db "SELECT agent FROM session WHERE id='$sid';")
-  [[ -z "$agent_name" ]] && agent_name="orchestrator"
-  spec=$(_preset_agent_model "$PRESET" "$agent_name")
-  [[ -z "$spec" ]] && return 0
-  provider="${spec%%|*}"
-  model="${spec##*|}"
-  _db "UPDATE session SET model='{\"id\":\"$model\",\"providerID\":\"$provider\",\"variant\":\"default\"}' WHERE id='$sid';"
-  echo "  [主线程模型 → $provider/$model]"
-}
-
 _resume() {
   local count sid
   count=$(_match_count_id "$1")
@@ -315,7 +256,6 @@ _resume() {
   echo "会话: $title"
   echo "目录: $(_shortdir "$dir")"
   echo ""
-  _apply_preset_model "$sid"
   cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
   _opencode --session "$sid"
 }
@@ -433,7 +373,6 @@ _search() {
     echo "会话: $title"
     echo "目录: $(_shortdir "$dir")"
     echo ""
-    _apply_preset_model "$sid"
     cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
     _opencode --session "$sid"
     return
@@ -453,29 +392,28 @@ _usage() {
 ocs — OpenCode Session Manager
 
 用法:
-  ocs                   列出最近会话（带目录、时间）
-  ocs -p <preset>       在当前目录用指定 OMOS preset 直接开新会话
-  ocs -p <preset> <ID>  按 ID 恢复会话，并强制用指定 preset
-  ocs <ID片段>           按 ID 恢复：唯一→恢复，多条→列表，无→全部
-  ocs s <关键词>         按标题+目录搜索唯一→恢复，多条→列表，无→全部
-  ocs d <ID片段>         删除会话（确认后删除）
-  ocs i <ID片段>         查看会话详细信息
-  ocs r <ID片段> <名>    重命名会话
+  ocs                 列出最近会话（带目录、时间）
+  ocs :<preset>       当前目录用指定 OMOS preset 开新会话
+  ocs <ID>:<preset>   恢复会话并注入 preset（子 agent 临时用该方案）
+  ocs <ID片段>         按 ID 恢复：唯一→恢复，多条→列表，无→全部
+  ocs s <关键词>       按标题+目录搜索唯一→恢复，多条→列表，无→全部
+  ocs d <ID片段>       删除会话（确认后删除）
+  ocs i <ID片段>       查看会话详细信息
+  ocs r <ID片段> <名>  重命名会话
   ocs rename <ID片段> <名> 同上
 
 preset 说明:
-  从 ~/.config/opencode/oh-my-opencode-slim.jsonc 的 presets 动态读取。
-  - 新会话: 经 OH_MY_OPENCODE_SLIM_PRESET 环境变量 + -m 注入主模型，全部生效。
-  - 恢复旧会话: 主线程模型取自该会话的 session.model，CLI -m / env 对已有会话
-    不生效；因此 ocs 会在恢复前把 session.model 预写为 preset 的 orchestrator 模型，
-    实现"原地换主模型"。子 agent 仍由 env preset 控制。
+  presets 从 ~/.config/opencode/oh-my-opencode-slim.jsonc 动态读取
+  （当前: pro / lite / mix）。带 preset 时只注入 OH_MY_OPENCODE_SLIM_PRESET
+  环境变量——影响子 agent 的模型方案。注意: 恢复已有会话时主线程模型由会话
+  自身决定，env 无法切换，需在会话内用 /model 切换主模型。
 
 示例:
   ocs                    # 列出所有
-  ocs -p lite            # 当前目录用 lite 团队开新会话
-  ocs -p openai iyeTCx6Y # 恢复指定会话并原地切到 openai-team 主模型
-  ocs iyeTCx6Y           # 按 ID 恢复（支持片段匹配）
-  ocs s ssh             # 搜索含 ssh 的会话，唯一匹配直接恢复
+  ocs :lite              # 当前目录用 lite 团队开新会话
+  ocs 0591f4d1:pro       # 恢复该会话，子 agent 临时用 pro 方案
+  ocs 0591f4d1           # 按 ID 恢复（支持片段匹配）
+  ocs s ssh              # 搜索含 ssh 的会话，唯一匹配直接恢复
   ocs d oJnNVI           # 删除指定会话
   ocs i oJnNVI           # 查看会话详情
   ocs r oJnNVI 新的名字  # 重命名
@@ -489,51 +427,21 @@ if [[ ! -f "$DB" ]]; then
   exit 1
 fi
 
-# 解析全局选项 -p/--preset（可出现在任意位置，需在子命令前）
-PRESET=""
-_rest=()
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -p|--preset)
-      [[ -z "${2:-}" ]] && { echo "用法: ocs -p <preset> [子命令/ID]"; exit 1; }
-      PRESET="$2"
-      shift 2
-      ;;
-    -p=*|--preset=*)
-      PRESET="${1#*=}"
-      shift
-      ;;
-    *)
-      _rest+=("$1")
-      shift
-      ;;
-  esac
-done
-set -- "${_rest[@]}"
+# 主参数: [ID][:preset] 或 :preset（ID 为空=当前目录开新会话）
+# preset 必须是 OMOS 配置里真实存在的名字才会被拆分，否则整个当 ID/关键词
+_parse_target "${1:-}"
 
-# 指定了 preset 时先校验存在性（从 OMOS 配置动态读取），并解析主线程模型
-if [[ -n "$PRESET" ]]; then
-  if ! _presets | grep -qx -- "$PRESET"; then
-    echo "错误: preset '$PRESET' 不在 oh-my-opencode-slim.jsonc 中"
-    echo "可用 presets:"
-    _presets | sed 's/^/  /'
-    exit 1
-  fi
-  # orchestrator 模型用于 -m 强制主线程（TUI 恢复会沿用会话历史模型，env 无效）
-  _spec=$(_preset_agent_model "$PRESET" "orchestrator")
-  if [[ -n "$_spec" ]]; then
-    OMOS_MAIN_MODEL="${_spec%%|*}/${_spec##*|}"
-  fi
-fi
-
-case "${1:-}" in
+case "$TARGET" in
   "")
     if [[ -n "$PRESET" ]]; then
-      # -p 且无子命令/ID：在当前目录直接开新会话
+      # :preset → 在当前目录开新会话，注入该 preset
       echo "新会话 @ $(_shortdir "$PWD")"
       _opencode
+    elif [[ -z "${1:-}" ]]; then
+      _list ""
     else
-      _list "${2:-}"
+      _usage
+      exit 1
     fi
     ;;
   -h|--help)
@@ -559,6 +467,6 @@ case "${1:-}" in
     _rename "$2" "${3:-}"
     ;;
   *)
-    _resume "$1"
+    _resume "$TARGET"
     ;;
 esac
