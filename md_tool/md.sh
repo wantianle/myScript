@@ -82,28 +82,38 @@ md::_ensure_ssh_opts() {
 usage() {
     local prefix="md "
     echo -e "${BLUE}Usage:${NC}"
-    echo -e "  $prefix<c(command)> [a(arguments)] <>代表必选 []代表可选 ()代表可简写"
-    echo -e "${BLUE}Commands:${NC}"
-    printf "  ${YELLOW}%-45s${NC}  ${YELLOW}%s${NC}\n" "init"            "每次部署工具需要初始化免密并安装工具到系统"
-    printf "  %-45s  %s\n" "check"                                       "检查车辆状态"
-    printf "  %-45s  %s\n" "umount"                                      "安全弹出硬盘"
-    printf "  %-45s  %s\n" "upgrade"                                     "自检并升级最新包版本"
-    printf "  %-45s  %s\n" "install [version]"                           "手动升级多个组件版本，也可通过参数升级单个组件版本"
-    printf "  %-45s  %s\n" "rb(rollback) [version] [name]"                  "回滚版本；- 占位不限版本，name 前缀 = 为精确包名，如: md rb 1.1.1 cve / md rb - =mdrive"
-    printf "  %-45s  %s\n" "stop/start/restart/status [1(soc1)|2(soc2)]" "同时管理 soc1&2 服务，也可以通过参数指定单端"
-    printf "  %-45s  %s\n" "log <1(soc1)|2(soc)>"                        "查看 5 分钟内 soc1/soc2 服务日志"
-    printf "  %-45s  %s\n" "c(channel) [1(soc1)|2(soc2)]"                "查看 soc1/soc2 DDS 消息"
-    printf "  %-45s  %s\n" "m(module) [action soc 模块...]"                 "无参数: fzf 管理模块; 有参数: 单端单/多模块启停，如 md m restart 2 Perception-Groundline"
-    printf "  %-45s  %s\n" "mod <start|stop|restart> <1|2> <模块名>"        "同 m 的命令形态，仅用于直接启停单个模块"
-    printf "  %-45s  %s\n" "record [on]|<off>"                           "开启关闭 soc2 的 Recorder"
-    printf "  %-45s  %s\n" "tag info [message]"                          "记录打点信息；不带 message 时先锁定时间再输入描述"
-    printf "  %-45s  %s\n" "tag list"                                    "按日期列出已记录的打点信息"
-    printf "  %-45s  %s\n" "tag exp [--clip] -d <date> [-i <ids|ranges...>]" "导出 tag 关联 mcap 到本地电脑，支持 -i 1 3 5 或 1-20"
-    printf "  %-45s  %s\n" "e(export)"                                   "交互式选择需要导出的 bag/log 文件或文件夹"
-    printf "  %-45s  %s\n" "remote <add|del|list>"                       "管理本地包对应的远程分支"
-    printf "  %-45s  %s\n" ""                                            "  remote add <name> [branch|'-'] [platform]"
-    printf "  %-45s  %s\n" ""                                            "  remote del <name>"
-
+    echo -e "  ${prefix}<command> [arguments]"
+    echo -e "  <>必选  []可选  ()可简写"
+    echo ""
+    echo -e "${BLUE}-- 初始化 --${NC}"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "init"                       "部署后初始化免密并安装工具到系统"
+    echo ""
+    echo -e "${BLUE}-- 状态检查 --${NC}"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "check"                      "检查网络/时间/硬盘/设备状态"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "status [1(soc1)|2(soc2)]"   "查看双端 mdrive 服务状态，可指定单端"
+    echo ""
+    echo -e "${BLUE}-- 服务控制 --${NC}"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "start/stop/restart [1|2]"   "启停双端 mdrive 服务，可用 1(soc1)/2(soc2) 指定单端"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "log [1(soc1)|2(soc2)]"      "查看最近 5 分钟单端服务日志(带过滤跟踪，缺省=soc1)"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "c(channel) [1(soc1)|2(soc2)]" "查看 soc1/soc2 DDS 消息"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "m(module) [action soc 模块...]" "无参数: fzf 交互管理模块; 有参数: 单端启停模块"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "mod <start|stop|restart> <1|2> <模块名>" "直接启停单个模块(与 m 参数形态一致)"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "record [on]|<off>"          "开启/关闭 soc2 Recorder"
+    echo ""
+    echo -e "${BLUE}-- 版本管理 --${NC}"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "upgrade"                    "自检并升级到最新版本"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "install [version]"          "编辑版本信息批量升级，或直接指定单包版本"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "rb(rollback) [version] [name]" "按版本关键字回滚; '-' 占位不限版本, '=name' 精确包名"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" ""                           "  例: rb 1.1.1 cve / rb - =mdrive / rb - cve"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "remote <add|del|list>"      "管理本地包对应的远程分支"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" ""                           "  remote add <name> [branch|-] [platform] / remote del <name>"
+    echo ""
+    echo -e "${BLUE}-- 硬盘与导出 --${NC}"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "umount"                     "停止服务并安全弹出硬盘"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "e(export)"                  "交互式选择 bag/log 文件并导出到本地电脑"
+    echo ""
+    echo -e "${BLUE}-- 帮助 --${NC}"
+    printf "  ${YELLOW}%-45s${NC}  %s\n" "help|-h|--help"             "显示本帮助"
     echo ""
 }
 
@@ -204,12 +214,14 @@ sys::nopasswd(){
                 -i "${KEY_PATH}.pub" "$USER@$SOC2_IP" </dev/null || {
                 rm -f "$_askpass"
                 log_err "推送公钥到 soc2 失败，请检查密码或网络"
+                log_err "提示: 请手工执行 ssh-copy-id $USER@$SOC2_IP 确认 soc2 可达且密码正确后重跑 md init"
                 return 1
             }
             rm -f "$_askpass"
         else
             if ! ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "${KEY_PATH}.pub" "$USER@$SOC2_IP"; then
                 log_err "推送公钥到 soc2 失败，请检查 soc1 -> soc2 网络和 nvidia 用户密码"
+                log_err "提示: 请手工执行 ssh-copy-id $USER@$SOC2_IP 确认 soc2 可达且密码正确后重跑 md init"
                 return 1
             fi
         fi
@@ -242,6 +254,7 @@ EOF
         log_ok "soc1 受限 sudo 免密配置完成"
     else
         log_err "soc1 受限 sudo 免密配置失败"
+        log_err "提示: 手动执行 sudo visudo -f $SUDO_PATH 检查语法后重跑 md init"
         return 1
     fi
     echo "配置 soc2 受限免密 sudo..."
@@ -249,6 +262,7 @@ EOF
         log_ok "soc2 sudo 免密配置完成"
     else
         log_err "soc2 sudo 免密配置失败"
+        log_err "提示: 手动执行 sudo visudo -f $SUDO_PATH 检查语法后重跑 md init"
         return 1
     fi
 }
@@ -272,11 +286,8 @@ sys::init(){
     fi
     if sudo chmod +x /usr/local/bin/md; then
         log_ok "工具已安装到 /usr/local/bin/md"
-        if sudo ln -sf /usr/local/bin/md /usr/local/bin/tag; then
-            log_ok "tag 工具已安装到 /usr/local/bin/tag"
-        else
-            log_warn "tag 工具安装失败，请检查 /usr/local/bin/tag 权限"
-        fi
+        # 清理历史遗留的 tag 软链（tag 功能已弃用）
+        sudo rm -f /usr/local/bin/tag
     else
         log_err "初始化失败，无法设置 /usr/local/bin/md 可执行权限"
         return 1
@@ -292,9 +303,7 @@ sys::init(){
     }
     {
         declare -f _md_completions
-        declare -f _tag_completions
         printf "complete -F _md_completions md\n"
-        printf "complete -F _tag_completions tag\n"
     } > "$completion_tmp"
     if sudo cp "$completion_tmp" "$completion_file" && sudo chmod 0644 "$completion_file"; then
         rm -f "$completion_tmp"
@@ -436,6 +445,7 @@ sys::prepare_export_ssh() {
 
     if [[ -z "$EXPORT_LOCAL_IP" ]]; then
         log_err "未检测到本地 SSH 连接 IP"
+        log_err "提示: 请通过 ssh 直连(局域网)或带 -R 端口反向隧道登录车端后执行 md export"
         return 1
     fi
 
@@ -467,9 +477,9 @@ sys::prepare_export_ssh() {
 
 
 sys::prepare_export_dirs() {
-    local roots="/media/mdrive_export /media/tag_export"
+    local roots="/media/mdrive_export"
     local prepare_cmd="mkdir -p $roots"
-    local fix_cmd='sudo mkdir -p /media && sudo chown "$USER:$USER" /media && mkdir -p /media/mdrive_export /media/tag_export'
+    local fix_cmd='sudo mkdir -p /media && sudo chown "$USER:$USER" /media && mkdir -p /media/mdrive_export'
 
     if ssh -n "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" "$prepare_cmd" >/dev/null 2>&1; then
         return 0
@@ -478,7 +488,7 @@ sys::prepare_export_dirs() {
     log_warn "本地电脑 /media 无法创建导出目录，准备在本地电脑执行: sudo chown \$USER:\$USER /media"
     log_warn "如果本地电脑提示 sudo 密码，请输入本地电脑用户 $EXPORT_PC_USER 的密码"
     if ssh "${EXPORT_SSH_COPY_OPTS[@]}" -t "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" "$fix_cmd"; then
-        log_ok "本地导出目录已准备: /media/mdrive_export /media/tag_export"
+        log_ok "本地导出目录已准备: /media/mdrive_export"
         return 0
     fi
 
@@ -490,13 +500,6 @@ sys::prepare_export_dirs() {
 sys::export_mkdir() {
     local dest=$1
     ssh -n "${EXPORT_SSH_OPTS[@]}" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP" "mkdir -p '$dest'"
-}
-
-
-sys::export_copy_file() {
-    local src=$1
-    local dest=$2
-    rsync -avPL -e "ssh ${EXPORT_SSH_OPTS[*]}" "$src" "$EXPORT_PC_USER@$EXPORT_LOCAL_IP:$dest" < /dev/null
 }
 
 
@@ -623,752 +626,11 @@ sys::export() {
     done 3<<< "$selections"
 
     if $failed; then
-        log_warn "导出完成，但存在失败项，本地路径: ${EXPORT_TARGET_LABEL:-$EXPORT_LOCAL_IP}:$local_dest"
+        log_err "部分文件导出失败，请检查本地电脑网络/磁盘空间/路径权限后重试"
         return 1
     fi
 
     log_ok "导出完成！本地路径: ${EXPORT_TARGET_LABEL:-$EXPORT_LOCAL_IP}:$local_dest"
-}
-
-#endregion
-
-#region ------------------- tag 打点层 ------------------
-
-tag::_bag_root() {
-    if [[ -n "${MDRIVE_TAG_BAG_ROOT:-}" ]]; then
-        printf "%s\n" "${MDRIVE_TAG_BAG_ROOT%/}"
-    else
-        printf "%s\n" "/mdrive_data/bag"
-    fi
-}
-
-
-tag::_now_text() {
-    if [[ -n "${MDRIVE_TAG_NOW:-}" ]]; then
-        if [[ "$MDRIVE_TAG_NOW" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
-            printf "%s\n" "$MDRIVE_TAG_NOW"
-            return 0
-        fi
-        log_err "MDRIVE_TAG_NOW 格式错误，应为 YYYY-mm-dd HH:MM:SS"
-        return 1
-    fi
-    date +"%Y-%m-%d %H:%M:%S"
-}
-
-
-tag::_compact_time() {
-    local time_text=$1
-    printf "%s\n" "${time_text//[-: ]/}"
-}
-
-
-tag::_files_for_date() {
-    local bag_root=$1
-    local tag_date=$2
-    [[ -f "$bag_root/tag_${tag_date}.json" ]] && printf "%s\n" "$bag_root/tag_${tag_date}.json"
-}
-
-
-tag::_all_files() {
-    local bag_root=$1
-    find -L "$bag_root" -maxdepth 1 -type f -name 'tag_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json' -print0 2>/dev/null | sort -z
-}
-
-
-tag::_select_records() {
-    local bag_root=$1
-    local time_compact=$2
-    local tag_date=${time_compact:0:8}
-    local tag_hms=${time_compact:8:6}
-    local max_record_lag_seconds=60
-    local tag_epoch tag_day_epoch
-    local path dir_name file_name dir_date file_hms record_seconds abs_path entry
-    local selected_dir="" selected_dir_epoch=-1 selected_dir_date="" selected_dir_hms=""
-    local dir_hms dir_epoch dir_seconds file_day_epoch record_epoch
-
-    TAG_RECORD_PATHS=()
-    TAG_CURRENT_RECORD=""
-    TAG_RECORD_STATUS="not_found"
-    TAG_RECORD_LAG_SECONDS=""
-
-    tag_epoch=$(date -d "${tag_date:0:4}-${tag_date:4:2}-${tag_date:6:2} ${tag_hms:0:2}:${tag_hms:2:2}:${tag_hms:4:2}" +%s 2>/dev/null) || return 1
-
-    while IFS= read -r path; do
-        dir_name="${path##*/}"
-        [[ "$dir_name" =~ ^record_([0-9]{8})_([0-9]{6})$ ]] || continue
-        dir_date=${BASH_REMATCH[1]}
-        dir_hms=${BASH_REMATCH[2]}
-        dir_epoch=$(date -d "${dir_date:0:4}-${dir_date:4:2}-${dir_date:6:2} ${dir_hms:0:2}:${dir_hms:2:2}:${dir_hms:4:2}" +%s 2>/dev/null) || continue
-        if (( dir_epoch > tag_epoch )); then
-            continue
-        fi
-        if (( selected_dir_epoch < 0 || dir_epoch > selected_dir_epoch )); then
-            selected_dir_epoch=$dir_epoch
-            selected_dir=$path
-            selected_dir_hms=$dir_hms
-            selected_dir_date=$dir_date
-        fi
-    done < <(find -L "$bag_root" -maxdepth 1 -type d -name 'record_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]' 2>/dev/null)
-
-    if [[ -z "$selected_dir" ]]; then
-        return 1
-    fi
-
-    dir_date=$selected_dir_date
-    dir_hms=$selected_dir_hms
-    dir_seconds=$((10#${dir_hms:0:2} * 3600 + 10#${dir_hms:2:2} * 60 + 10#${dir_hms:4:2}))
-    tag_day_epoch=$(date -d "${dir_date:0:4}-${dir_date:4:2}-${dir_date:6:2} 00:00:00" +%s 2>/dev/null) || return 1
-
-    local entries=()
-    while IFS= read -r path; do
-        file_name="${path##*/}"
-
-        [[ "$file_name" =~ ^record\.[0-9]+\.[0-9]{6}\.mcap$ ]] || continue
-        file_hms="${file_name%".mcap"}"
-        file_hms="${file_hms##*.}"
-        record_seconds=$((10#${file_hms:0:2} * 3600 + 10#${file_hms:2:2} * 60 + 10#${file_hms:4:2}))
-        file_day_epoch=$tag_day_epoch
-        if (( record_seconds < dir_seconds )); then
-            file_day_epoch=$((file_day_epoch + 86400))
-        fi
-        record_epoch=$((file_day_epoch + record_seconds))
-
-        if abs_path=$(readlink -f "$path" 2>/dev/null); then
-            entry="$record_epoch"$'\t'"$file_name"$'\t'"$abs_path"
-            entries+=("$entry")
-        fi
-    done < <(find -L "$selected_dir" -maxdepth 1 -type f -name 'record.*.mcap' 2>/dev/null)
-
-    if [[ ${#entries[@]} -eq 0 ]]; then
-        return 1
-    fi
-
-    local sorted_entries=()
-    local current_index=-1
-    local index key current_entry current_record_epoch
-    mapfile -t sorted_entries < <(printf "%s\n" "${entries[@]}" | sort -n)
-
-    for index in "${!sorted_entries[@]}"; do
-        key=${sorted_entries[$index]%%$'\t'*}
-        if (( key > tag_epoch )); then
-            break
-        fi
-        current_index=$index
-    done
-
-    if (( current_index < 0 )); then
-        return 1
-    fi
-    current_entry=${sorted_entries[$current_index]}
-    current_record_epoch=${current_entry%%$'\t'*}
-    TAG_RECORD_LAG_SECONDS=$((tag_epoch - current_record_epoch))
-    if (( TAG_RECORD_LAG_SECONDS > max_record_lag_seconds )); then
-        TAG_RECORD_STATUS="stale"
-        return 1
-    fi
-
-    local start_index=$((current_index - 2))
-    local end_index=$((current_index + 1))
-    local max_index=$((${#sorted_entries[@]} - 1))
-    (( start_index < 0 )) && start_index=0
-    (( end_index > max_index )) && end_index=$max_index
-
-    for ((index = start_index; index <= end_index; index++)); do
-        path=${sorted_entries[$index]#*$'\t'}
-        path=${path#*$'\t'}
-        TAG_RECORD_PATHS+=("$path")
-        if (( index == current_index )); then
-            TAG_CURRENT_RECORD="$path"
-        fi
-    done
-
-    if [[ ${#TAG_RECORD_PATHS[@]} -lt 4 ]]; then
-        TAG_RECORD_STATUS="partial"
-    else
-        TAG_RECORD_STATUS="found"
-    fi
-}
-
-
-tag::_append_entry() {
-    local tag_file=$1
-    local time_text=$2
-    local time_compact=$3
-    local timestamp=$4
-    local message=$5
-
-    python3 - "$tag_file" "$time_text" "$time_compact" "$timestamp" "$message" <<'PY'
-import fcntl
-import json
-import os
-import sys
-from pathlib import Path
-
-output_path = Path(sys.argv[1])
-new_entry = {
-    "time": sys.argv[2],
-    "time_compact": sys.argv[3],
-    "timestamp": int(sys.argv[4]),
-    "message": sys.argv[5],
-}
-
-
-def load_entries(path):
-    if not path.exists():
-        return []
-    text = path.read_text(encoding="utf-8").strip()
-    if not text:
-        return []
-    data = json.loads(text)
-    if isinstance(data, list):
-        return data
-    raise ValueError(f"unsupported tag file format: {path}")
-
-
-lock_path = output_path.with_suffix(output_path.suffix + ".lock")
-tmp_path = output_path.with_name(f".{output_path.name}.tmp.{os.getpid()}")
-output_path.parent.mkdir(parents=True, exist_ok=True)
-
-with lock_path.open("w", encoding="utf-8") as lock_file:
-    fcntl.flock(lock_file, fcntl.LOCK_EX)
-    try:
-        entries = load_entries(output_path)
-        entries.append(new_entry)
-        entries.sort(key=lambda item: str(item.get("time", "")))
-
-        with tmp_path.open("w", encoding="utf-8") as output_file:
-            json.dump(entries, output_file, ensure_ascii=False, indent=2)
-            output_file.write("\n")
-            output_file.flush()
-            os.fsync(output_file.fileno())
-
-        os.replace(tmp_path, output_path)
-
-        dir_fd = os.open(str(output_path.parent), os.O_DIRECTORY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
-PY
-}
-
-
-tag::info() {
-    local message=""
-    local bag_root time_text time_compact timestamp tag_date tag_file
-    bag_root=$(tag::_bag_root)
-    if [[ ! -d "$bag_root" ]]; then
-        log_err "bag 目录不存在: $bag_root"
-        return 1
-    fi
-
-    time_text=$(tag::_now_text) || return 1
-    time_compact=$(tag::_compact_time "$time_text")
-    timestamp=$(date -d "$time_text" +%s 2>/dev/null) || {
-        log_err "无法解析打点时间: $time_text"
-        return 1
-    }
-
-    if [[ $# -gt 0 ]]; then
-        message="$*"
-    else
-        printf "tag time: %s\n" "$time_text"
-        if [[ -t 0 ]]; then
-            if ! read -e -r -p "message: " message; then
-                log_err "读取打点描述失败"
-                return 1
-            fi
-        elif ! read -r message; then
-            log_err "读取打点描述失败"
-            return 1
-        fi
-        if [[ -z "$message" ]]; then
-            log_warn "描述为空，已取消打点"
-            return 1
-        fi
-    fi
-
-    tag_date=${time_compact:0:8}
-    tag_file="$bag_root/tag_${tag_date}.json"
-
-    if ! tag::_append_entry "$tag_file" "$time_text" "$time_compact" "$timestamp" "$message"; then
-        log_err "保存打点失败: $tag_file"
-        return 1
-    fi
-
-    log_ok "打点已保存: $tag_file"
-    printf "time: %s\n" "$time_text"
-    printf "timestamp: %s\n" "$timestamp"
-    printf "message: %s\n" "$message"
-}
-
-
-tag::list() {
-    local bag_root
-    bag_root=$(tag::_bag_root)
-    if [[ ! -d "$bag_root" ]]; then
-        log_err "bag 目录不存在: $bag_root"
-        return 1
-    fi
-
-    if ! command -v python3 >/dev/null 2>&1; then
-        log_err "tag list 需要 python3 解析 tag 文件"
-        return 1
-    fi
-
-    local tag_files=()
-    local path
-    while IFS= read -r -d '' path; do
-        tag_files+=("$path")
-    done < <(tag::_all_files "$bag_root")
-
-    if [[ ${#tag_files[@]} -eq 0 ]]; then
-        log_warn "未找到 tag 文件: $bag_root/tag_YYYYmmdd.json"
-        return 0
-    fi
-
-    python3 - "${tag_files[@]}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-by_date = {}
-
-
-def load_entries(path):
-    text = path.read_text(encoding="utf-8").strip()
-    if not text:
-        return []
-    data = json.loads(text)
-    if isinstance(data, list):
-        return data
-    return []
-
-
-for file_name in sys.argv[1:]:
-    path = Path(file_name)
-    date = path.name[4:] if path.name.startswith("tag_") else path.name
-    if date.endswith(".json"):
-        date = date[:-5]
-    entries = by_date.setdefault(date, [])
-    for item in load_entries(path):
-        time_text = str(item.get("time", ""))
-        message = str(item.get("message", ""))
-        entries.append((time_text, message))
-
-for date in sorted(by_date):
-    entries = sorted(by_date[date], key=lambda item: item[0])
-    if not entries:
-        continue
-    print(date)
-    for index, (time_text, message) in enumerate(entries, 1):
-        print(f"  {index}. {time_text}  {message}")
-PY
-}
-
-
-tag::_cleanup_clip_files() {
-    local clip_path
-    for clip_path in "${TAG_CLIP_FILES_TO_CLEAN[@]:-}"; do
-        [[ -n "$clip_path" && -f "$clip_path" ]] && rm -f "$clip_path"
-    done
-    TAG_CLIP_FILES_TO_CLEAN=()
-}
-
-
-tag::_write_export_info() {
-    local raw_info_file=$1
-    local export_info_file=$2
-    local records_file=$3
-    local clip_enabled=$4
-    local bag_root=$5
-    local clip_dir=${6:-}
-    local tag_index=${7:-}
-    local time_compact
-    local path export_path clip_root=""
-    local index_prefix=""
-
-    if [[ -n "$tag_index" ]]; then
-        index_prefix="tag 序号 $tag_index: "
-    fi
-
-    mapfile -t tag_export_meta < <(python3 - "$raw_info_file" "$bag_root" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-item = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-compact = str(item.get("time_compact", ""))
-if not compact:
-    compact = "".join(ch for ch in str(item.get("time", "")) if ch.isdigit())
-print(compact)
-print(str(item.get("record_root") or sys.argv[2]).rstrip("/"))
-PY
-)
-    time_compact=${tag_export_meta[0]:-}
-    clip_root=${tag_export_meta[1]:-$bag_root}
-    if [[ -n "$clip_dir" ]]; then
-        clip_root=${clip_dir%/}
-    fi
-
-    if ! tag::_select_records "$bag_root" "$time_compact"; then
-        if [[ "$TAG_RECORD_STATUS" == "stale" ]]; then
-            log_err "${index_prefix}最近的 mcap 包比 $time_compact 早 ${TAG_RECORD_LAG_SECONDS}s，超过 60s 限制"
-        else
-            log_err "${index_prefix}未找到 $time_compact 对应的 mcap 包"
-        fi
-        return 1
-    fi
-
-    : > "$records_file"
-    for path in "${TAG_RECORD_PATHS[@]}"; do
-        export_path=$path
-        if [[ "$clip_enabled" == "true" ]]; then
-            export_path="$clip_root/clip_${path##*/}"
-        fi
-        printf "%s\t%s\n" "$export_path" "$path" >> "$records_file"
-    done
-
-    python3 - "$raw_info_file" "$export_info_file" "$TAG_RECORD_STATUS" "$TAG_CURRENT_RECORD" "$records_file" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-item = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-item["record_status"] = sys.argv[3]
-item["current_record"] = sys.argv[4] or None
-records_path = Path(sys.argv[5])
-record_paths = []
-if records_path.exists():
-    for line in records_path.read_text(encoding="utf-8").splitlines():
-        if not line:
-            continue
-        parts = line.split("\t", 1)
-        record_paths.append(parts[1] if len(parts) > 1 else parts[0])
-item["record_paths"] = record_paths
-Path(sys.argv[2]).write_text(
-    json.dumps(item, ensure_ascii=False, indent=2) + "\n",
-    encoding="utf-8",
-)
-PY
-}
-
-
-tag::_prepare_clip_files() {
-    local task_file=$1
-    local original_path clip_path records_file clip_output_dir mkit_output actual_clip_path tmp_records_file
-    local -A seen_paths=()
-
-    if ! command -v mkit >/dev/null 2>&1; then
-        log_err "--clip 需要 mkit 命令"
-        return 1
-    fi
-
-    TAG_CLIP_FILES_TO_CLEAN=()
-    while IFS=$'\t' read -r -u 3 _ _ _ _ records_file; do
-        [[ -z "$records_file" ]] && continue
-        tmp_records_file="${records_file}.tmp"
-        : > "$tmp_records_file"
-        while IFS=$'\t' read -r -u 4 clip_path original_path; do
-            [[ -z "$clip_path" ]] && continue
-            [[ -z "$original_path" ]] && original_path="${clip_path%/*}/${clip_path##*/clip_}"
-            if [[ -n "${seen_paths[$original_path]:-}" ]]; then
-                printf "%s\t%s\n" "${seen_paths[$original_path]}" "$original_path" >> "$tmp_records_file"
-                continue
-            fi
-            if [[ ! -f "$original_path" ]]; then
-                log_warn "record 文件不存在，跳过裁剪: $original_path"
-                continue
-            fi
-            clip_output_dir="${clip_path%/*}"
-            mkdir -p "$clip_output_dir"
-            log_info "裁剪 mcap: $original_path"
-            if ! mkit_output=$(mkit edit -k /sensor/lidar/scan camera2 camera3 camera5 camera6 camera7 camera81 camera82 camera83 camera84 -f "$original_path" -o "$clip_output_dir" 2>&1); then
-                printf "%s\n" "$mkit_output"
-                log_err "mkit edit 失败: $original_path"
-                rm -f "$tmp_records_file"
-                return 1
-            fi
-            printf "%s\n" "$mkit_output"
-            actual_clip_path=$(printf "%s\n" "$mkit_output" | sed -n 's/^Processing: .* -> //p' | tail -n 1)
-            if [[ -z "$actual_clip_path" || ! -f "$actual_clip_path" ]]; then
-                actual_clip_path=$(find "$clip_output_dir" -maxdepth 1 -type f -name 'clip_*.mcap' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
-            fi
-            if [[ -z "$actual_clip_path" || ! -f "$actual_clip_path" ]]; then
-                log_err "未生成裁剪文件: $clip_output_dir/clip_*.mcap"
-                rm -f "$tmp_records_file"
-                return 1
-            fi
-            if [[ "$actual_clip_path" != "$clip_path" ]]; then
-                rm -f "$clip_path"
-                mv "$actual_clip_path" "$clip_path"
-                actual_clip_path=$clip_path
-            fi
-            seen_paths[$original_path]=$actual_clip_path
-            printf "%s\t%s\n" "$actual_clip_path" "$original_path" >> "$tmp_records_file"
-            TAG_CLIP_FILES_TO_CLEAN+=("$actual_clip_path")
-        done 4< "$records_file"
-        mv "$tmp_records_file" "$records_file"
-    done 3< "$task_file"
-}
-
-
-tag::exp() {
-    local tag_date=""
-    local clip=false
-    local ids=()
-
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            "--clip")
-                clip=true
-                ;;
-            "-d"|"--date")
-                shift
-                if [[ -z "${1:-}" ]]; then
-                    log_err "tag exp 缺少 -d 日期参数"
-                    return 1
-                fi
-                tag_date=$1
-                ;;
-            "-i"|"--index")
-                shift
-                while [[ $# -gt 0 && "$1" != -* ]]; do
-                    ids+=("$1")
-                    shift
-                done
-                continue
-                ;;
-            *)
-                log_err "未知参数: $1"
-                log_err "Usage: tag exp [--clip] -d <YYYYmmdd> [-i <ids|ranges...>]"
-                return 1
-                ;;
-        esac
-        shift
-    done
-
-    if [[ ! "$tag_date" =~ ^[0-9]{8}$ ]]; then
-        log_err "Usage: tag exp [--clip] -d <YYYYmmdd> [-i <ids|ranges...>]"
-        return 1
-    fi
-
-    local bag_root
-    bag_root=$(tag::_bag_root)
-    if [[ ! -d "$bag_root" ]]; then
-        log_err "bag 目录不存在: $bag_root"
-        return 1
-    fi
-
-    if ! command -v python3 >/dev/null 2>&1; then
-        log_err "tag exp 需要 python3 解析 tag 文件"
-        return 1
-    fi
-
-    local tag_files=()
-    local path
-    while IFS= read -r path; do
-        tag_files+=("$path")
-    done < <(tag::_files_for_date "$bag_root" "$tag_date")
-
-    if [[ ${#tag_files[@]} -eq 0 ]]; then
-        log_err "未找到 tag 文件: $bag_root/tag_${tag_date}.json"
-        return 1
-    fi
-
-    local task_file task_dir clip_dir
-    task_file=$(mktemp)
-    task_dir=$(mktemp -d)
-    clip_dir="$task_dir/clip"
-    python3 - "$task_file" "$task_dir" "$tag_date" "${ids[@]}" -- "${tag_files[@]}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-task_path = Path(sys.argv[1])
-task_dir = Path(sys.argv[2])
-tag_date = sys.argv[3]
-separator = sys.argv.index("--")
-raw_ids = sys.argv[4:separator]
-tag_files = [Path(item) for item in sys.argv[separator + 1:]]
-
-
-def load_entries(path):
-    text = path.read_text(encoding="utf-8").strip()
-    if not text:
-        return []
-    data = json.loads(text)
-    if isinstance(data, list):
-        return data
-    return []
-
-
-entries = []
-for path in tag_files:
-    entries.extend(load_entries(path))
-entries.sort(key=lambda item: str(item.get("time", "")))
-
-if raw_ids:
-    selected_indexes = []
-    for raw_id in raw_ids:
-        for part in raw_id.split():
-            if "-" in part:
-                start_text, sep, end_text = part.partition("-")
-                if not sep or not start_text.isdigit() or not end_text.isdigit():
-                    raise SystemExit(f"invalid tag index or range: {part}")
-                start = int(start_text)
-                end = int(end_text)
-                if start < 1 or end < 1 or start > end:
-                    raise SystemExit(f"invalid tag range: {part}")
-                selected_indexes.extend(range(start, end + 1))
-            else:
-                if not part.isdigit():
-                    raise SystemExit(f"invalid tag index or range: {part}")
-                selected_indexes.append(int(part))
-else:
-    selected_indexes = list(range(1, len(entries) + 1))
-
-selected = []
-seen_indexes = set()
-for index in selected_indexes:
-    if index < 1 or index > len(entries):
-        raise SystemExit(f"tag index out of range: {index}")
-    if index in seen_indexes:
-        continue
-    seen_indexes.add(index)
-    item = entries[index - 1]
-    compact = str(item.get("time_compact", ""))
-    if not compact:
-        compact = "".join(ch for ch in str(item.get("time", "")) if ch.isdigit())
-    if len(compact) < 14:
-        raise SystemExit(f"tag index {index} has invalid time: {item.get('time')}")
-    folder_name = f"tag_{compact[:8]}_{compact[8:14]}"
-    selected.append((index, folder_name, item))
-
-with task_path.open("w", encoding="utf-8") as output:
-    for index, folder_name, item in selected:
-        raw_info_path = task_dir / f"{index}_raw_tag_info.json"
-        export_info_path = task_dir / f"{index}_tag_info.json"
-        records_path = task_dir / f"{index}_records.txt"
-        raw_info_path.write_text(
-            json.dumps(item, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        records_path.write_text("", encoding="utf-8")
-        output.write(f"{index}\t{folder_name}\t{raw_info_path}\t{export_info_path}\t{records_path}\n")
-PY
-    local py_status=$?
-    if [[ $py_status -ne 0 ]]; then
-        rm -f "$task_file"
-        rm -rf "$task_dir"
-        return 1
-    fi
-
-    if [[ ! -s "$task_file" ]]; then
-        rm -f "$task_file"
-        rm -rf "$task_dir"
-        log_warn "没有可导出的 tag"
-        return 0
-    fi
-
-    local exported=0
-    local failed=false
-    local index folder remote_dest raw_info_file info_file records_file record_path record_count
-    local line
-    while IFS= read -r -u 3 line; do
-        [[ -z "$line" ]] && continue
-        IFS=$'\t' read -r index folder raw_info_file info_file records_file <<< "$line"
-        if ! tag::_write_export_info "$raw_info_file" "$info_file" "$records_file" "$clip" "$bag_root" "$clip_dir" "$index"; then
-            log_err "生成导出信息失败: tag 序号 $index"
-            failed=true
-        fi
-    done 3< "$task_file"
-
-    if $failed; then
-        rm -f "$task_file"
-        rm -rf "$task_dir"
-        return 1
-    fi
-
-    if ! sys::prepare_export_ssh; then
-        rm -f "$task_file"
-        rm -rf "$task_dir"
-        return 1
-    fi
-
-    if $clip; then
-        if ! tag::_prepare_clip_files "$task_file"; then
-            tag::_cleanup_clip_files
-            rm -f "$task_file"
-            rm -rf "$task_dir"
-            return 1
-        fi
-    fi
-
-    while IFS= read -r -u 3 line; do
-        [[ -z "$line" ]] && continue
-        IFS=$'\t' read -r index folder raw_info_file info_file records_file <<< "$line"
-        remote_dest="/media/tag_export/$folder"
-
-        log_info "导出 tag 序号 $index 到 ${EXPORT_TARGET_LABEL:-$EXPORT_LOCAL_IP}:$remote_dest"
-        sys::export_mkdir "$remote_dest"
-        if ! sys::export_copy_file "$info_file" "$remote_dest/tag_info.json"; then
-            log_err "tag_info.json 导出失败: 序号 $index"
-            failed=true
-        fi
-
-        record_count=0
-        while IFS=$'\t' read -r -u 4 record_path _; do
-            [[ -z "$record_path" ]] && continue
-            if [[ ! -f "$record_path" ]]; then
-                log_warn "record 文件不存在，跳过: $record_path"
-                continue
-            fi
-            if sys::export_copy_file "$record_path" "$remote_dest/${record_path##*/}"; then
-                record_count=$((record_count + 1))
-            else
-                log_err "record 导出失败: $record_path"
-                failed=true
-            fi
-        done 4< "$records_file"
-
-        log_ok "tag 序号 $index 导出完成，record 文件数: $record_count"
-        exported=$((exported + 1))
-    done 3< "$task_file"
-    rm -f "$task_file"
-    rm -rf "$task_dir"
-    $clip && tag::_cleanup_clip_files
-
-    if $failed; then
-        log_warn "导出完成，但存在失败项"
-        return 1
-    fi
-
-    log_ok "导出完成，共 $exported 个 tag，本地路径: ${EXPORT_TARGET_LABEL:-$EXPORT_LOCAL_IP}:/media/tag_export/"
-}
-
-
-tag::dispatch() {
-    local action=$1
-    [[ $# -gt 0 ]] && shift
-    case "$action" in
-        "info")
-            tag::info "$@"
-            ;;
-        "list")
-            tag::list
-            ;;
-        "exp"|"export")
-            tag::exp "$@"
-            ;;
-        *)
-            log_err "Usage: tag <info|list|exp>"
-            return 1
-            ;;
-    esac
 }
 
 #endregion
@@ -1416,6 +678,21 @@ svc::manage(){
 
 }
 
+
+# 解析 soc 参数(供 start/stop/restart/status): 合法 1/soc1/2/soc2/空(空=双端)。非法打印错误并返回 1
+svc::_resolve_soc_arg() {
+    local arg=${1:-}
+    case "$arg" in
+        soc1|1) printf 'soc1\n' ;;
+        soc2|2) printf 'soc2\n' ;;
+        "") printf 'both\n' ;;
+        *)
+            log_err "无效 SOC 参数: $arg（仅支持 1/soc1/2/soc2，缺省=双端）" >&2
+            return 1
+            ;;
+    esac
+}
+
 # 查看日志
 svc::log(){
     case "$1" in
@@ -1424,6 +701,10 @@ svc::log(){
             ;;
         "soc2"|"2")
             ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys|mdrive_driver_camera"'
+            ;;
+        *)
+            log_err "无效 SOC 参数: $1（仅支持 1/soc1/2/soc2，缺省=soc1）"
+            return 1
             ;;
     esac
 }
@@ -1462,6 +743,7 @@ svc::recorder(){
         fi
     else
         log_err "soc2 硬盘未挂载或无法访问: $MOUNT_ROOT"
+        log_err "提示: 运行 md check，按提示修复硬盘后再 md record on"
     fi
 
     if [[ "$action" == "on" && "$disk_ready" != "true" ]]; then
@@ -1486,19 +768,31 @@ svc::channel(){
         "soc2"|"2")
             ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && export GLOG_log_dir='${GLOG_log_dir:-/mnt/ufs_data/project/data/log}' && dtop"
             ;;
+        *)
+            log_err "无效 SOC 参数: $1（仅支持 1/soc1/2/soc2，缺省=soc1）"
+            return 1
+            ;;
     esac
 }
 
-# 执行模块启停操作
+# 执行模块启停操作，返回真实退出码
 svc::_run_module_action() {
-    local soc=$1 mod=$2 action=$3
+    local soc=$1 mod=$2 action=$3 rc out
     echo -e "正在对 [$soc] $mod 执行 $action..."
     if [[ "$soc" == "soc1" ]]; then
-        sudo supervisorctl "$action" "$mod" 2>/dev/null
+        out=$(sudo supervisorctl "$action" "$mod" 2>&1); rc=$?
     else
-        ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod 2>/dev/null" </dev/null
+        out=$(ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod" 2>&1 </dev/null); rc=$?
     fi
     sleep 1
+    if (( rc == 0 )); then
+        log_ok "[$soc] $mod $action 成功"
+    elif (( rc == 255 )); then
+        log_err "[$soc] $mod $action 失败: soc2 SSH 连接错误"
+    else
+        log_err "[$soc] $mod $action 失败: ${out:-未知错误}"
+    fi
+    return "$rc"
 }
 
 
@@ -1584,7 +878,10 @@ svc::mod_handler() {
 
     case "$action" in
         "glog"|"sv")  svc::_open_module_log "$soc" "$mod" "$action" ;;
-        "start"|"stop"|"restart") svc::_run_module_action "$soc" "$mod" "$action" ;;
+        "start"|"stop"|"restart")
+            svc::_run_module_action "$soc" "$mod" "$action"
+            return $?
+            ;;
     esac
 }
 
@@ -1683,10 +980,11 @@ svc::module() {
             --height 95% \
             --reverse \
             --bind "tab:toggle+down" \
-            --header "Tab:多选 | Enter:模块日志 | Alt-Enter:开发日志 | Alt-S/X/R:启/停/重启 | Esc:退出" \
+            --header $'Tab:多选(批量启停)  Ctrl-R:刷新  Esc:退出\nEnter:当前行sv日志  Alt-Enter:开发日志  Alt-S/X/R:启/停/重启(单行=当前行, 多选=批量)' \
             --expect=enter,alt-enter,alt-s,alt-x,alt-r,esc \
             --print-query \
             --query "$last_query" \
+            --nth 2,3 \
             --bind "ctrl-r:reload(fetch_combined)")
 
         [[ -z "$result" ]] && return
@@ -1708,20 +1006,39 @@ svc::module() {
 
         # Log viewing: only process the first item (focused)
         if [[ "$action" == "sv" || "$action" == "glog" ]]; then
-            local log_line
+            local sel_count log_line
+            sel_count=$(echo "$result" | tail -n +3 | grep -c '[^[:space:]]' || true)
             log_line=$(echo "$result" | sed -n '3p')
-            svc::mod_handler "$log_line" "$action"
+            if [[ -n "$log_line" ]]; then
+                if (( sel_count > 1 )); then
+                    log_warn "已选 $sel_count 项，日志仅打开选中项中列表序第 1 项"
+                fi
+                local clean_line soc mod
+                clean_line=$(echo "$log_line" | sed 's/\x1b\[[0-9;]*m//g' | tr -s ' ')
+                read -r soc mod _ <<< "$clean_line"
+                soc="${soc#\[}"; soc="${soc%\]}"
+                if [[ -n "$soc" && -n "$mod" ]]; then
+                    log_info "日志: [$soc] $mod"
+                fi
+                svc::mod_handler "$log_line" "$action"
+            fi
             continue
         fi
 
         # Batch start/stop/restart: process all selected items
-        local count=0
+        local count=0 fail=0
         while IFS= read -r line; do
             [[ -z "$line" ]] && continue
-            svc::mod_handler "$line" "$action"
             ((count++))
+            svc::mod_handler "$line" "$action" || ((fail++))
         done < <(echo "$result" | tail -n +3)
-        [[ $count -gt 1 ]] && echo "批量${action}: $count 个模块"
+        if (( count > 1 )); then
+            if (( fail > 0 )); then
+                log_warn "批量${action}: $count 个模块 (失败 $fail 个)"
+            else
+                echo "批量${action}: $count 个模块"
+            fi
+        fi
         # Loop back → fzf re-opens with refreshed data
     done
 }
@@ -1782,6 +1099,7 @@ disk::umount(){
     done
     if mountpoint -q "$MOUNT_ROOT"; then
         log_err "卸载 $MOUNT_ROOT 失败，请手动检查"
+        log_err "提示: 运行 md check 查看硬盘状态，或先 md start 恢复服务后再试"
         return 1
     fi
     ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo umount -l $MOUNT_ROOT 2>/dev/null"
@@ -1906,25 +1224,35 @@ vmc::remote() {
     local action=$1
     case "$action" in
         "add")
-            # sed -i -E "/^$2[[:space:]]+/d" "$REMOTE_CONFIG" 2>/dev/null
-            local new_entry="$2 $3 $4"
+            local name=${2:-} branch=${3:-} platform=${4:-}
+            if [[ -z "$name" || "$name" == *" "* || "$name" == "#"* ]]; then
+                log_err "用法: md remote add <name> <branch|-> [platform]"
+                return 1
+            fi
+            [[ -z "$branch" ]] && branch="-"
+            local new_entry="$name $branch $platform"
             if [[ -f "$REMOTE_CONFIG" ]] && grep -Fxq "$new_entry" "$REMOTE_CONFIG"; then
                 log_warn "配置 [$new_entry] 已存在"
             else
                 echo "$new_entry" >> "$REMOTE_CONFIG"
-                log_ok "分支 [$2] 已添加。"
+                log_ok "已添加: $new_entry"
             fi
             ;;
         "del")
-            if [[ -z "$2" ]]; then
+            local name=${2:-}
+            if [[ -z "$name" ]]; then
                 log_err "请指定要删除的包名"
+                return 1
+            fi
+            if [[ ! -f "$REMOTE_CONFIG" ]] || ! awk -v name="$name" '$1==name {found=1} END{exit !found}' "$REMOTE_CONFIG"; then
+                log_err "远程配置中不存在包名: $name"
                 return 1
             fi
             local tmp
             tmp=$(mktemp) || return 1
-            awk -v name="$2" '$1 != name' "$REMOTE_CONFIG" > "$tmp" && mv "$tmp" "$REMOTE_CONFIG"
+            awk -v name="$name" '$1 != name' "$REMOTE_CONFIG" > "$tmp" && mv "$tmp" "$REMOTE_CONFIG"
             rm -f "$tmp"
-            log_ok "分支 [$2] 远程配置已删除"
+            log_ok "分支 [$name] 远程配置已删除"
             ;;
         "list")
             log_info "当前远程分支列表:"
@@ -2142,6 +1470,7 @@ vmc::upgrade() {
 
     if $failed; then
         log_err "存在安装失败项，已停止自动启动服务，请检查后手动处理"
+        log_warn "执行 md start 恢复双端服务运行"
         return 1
     fi
 
@@ -2156,16 +1485,31 @@ vmc::install(){
     if flow::pre; then
         log_info "是否继续升级版本？('y'或回车继续，其他键退出)"
         read -r ans
-        [[ "$ans" == "y" || "$ans" == "" ]] || return 0
+        if [[ "$ans" != "y" && "$ans" != "" ]]; then
+            log_warn "已取消升级"
+            return 1
+        fi
     else
         log_info "是否继续升级版本？('f'强制继续，其他键退出)"
         read -r ans
-        [[ "$ans" == "f" ]] || return 1
+        if [[ "$ans" != "f" ]]; then
+            log_warn "已取消升级"
+            return 1
+        fi
     fi
     local tmp_file
     tmp_file=$(mktemp)
     log_info "即将打开 vi 编辑器，请粘贴版本信息，保存并退出后生效..."
     sleep 1
+    {
+        echo "# 每行指定一个要升级的包，未列出的包保持不动。格式: 包名: 版本号"
+        echo "# 示例:"
+        echo "#   mdrive_conf: 1.0.0"
+        echo "#   mdrive_map:  1.1.1"
+        echo ""
+        echo "# 当前已安装版本(参考，去掉 # 并改成目标版本即生效):"
+        vmc list 2>/dev/null | awk '{print "#   " $1 ": " $2}' | tr -d '()'
+    } > "$tmp_file"
     vi "$tmp_file"
     input_text=$(< "$tmp_file")
     log_info "更新以下包版本："
@@ -2174,15 +1518,16 @@ vmc::install(){
     # 正则提取清洗
     _extract() {
     local pattern=$1
-    echo "$input_text" | grep -iE "^[[:space:]]*(${pattern})" | head -n 1 | sed -r "
-        s/^[[:space:]]*(${pattern})//i; # 删掉 key 本身（忽略大小写）
+    # 包名后需跟非标识符字符或行尾, 避免 mdrive 误匹配 mdrive_conf 行
+    echo "$input_text" | grep -iE "^[[:space:]]*(${pattern})([^_a-zA-Z0-9]|$)" | head -n 1 | sed -r "
+        s/^[[:space:]]*(${pattern})[^_a-zA-Z0-9]?//i; # 删掉 key 本身及紧随的分隔符(忽略大小写)
         s/^[[:space:]:：]*//;     # 删掉可能存在的冒号或空格
         s/^[[:space:]\"（(]*//;   # 删掉开头可能残留的空格、引号、左括号
         s/[[:space:]\"）)]*$//;   # 删掉结尾可能残留的空格、引号、右括号
         s/\r//g                   # 删掉 Windows 换行符
     "
     }
-    local failed=false installed=false
+    local failed=false installed=false stopped=false
     for item in "${packages[@]}"; do
         local name="${item%%:*}"
         local pattern="${item##*:}"
@@ -2195,6 +1540,12 @@ vmc::install(){
         echo ""
         log_info "正在安装 [$name] 版本: $version ..."
         installed=true
+        if [[ "$stopped" != "true" ]]; then
+            # 确认确有包要安装后才停服（避免 vi 未写有效版本时白停）
+            svc::manage stop soc1
+            svc::manage stop soc2
+            stopped=true
+        fi
         if vmc::_install_pkg "$name" "$version"; then
             log_ok "[$name] 安装成功"
         else
@@ -2209,10 +1560,10 @@ vmc::install(){
     fi
     if $failed; then
         log_err "存在安装失败项，已停止自动启动服务，请检查后手动处理"
+        log_warn "执行 md start 恢复双端服务运行"
         return 1
     fi
 
-    vmc list
     svc::manage start soc1
     svc::manage start soc2
 }
@@ -2332,6 +1683,7 @@ vmc::rollback() {
 
     if [[ -z "$versions_list" ]]; then
         log_err "[ver:${search_v:-*}, name:${name_for_search:-*}] 未搜索到任何远程版本"
+        log_err "提示: 换更短版本关键字，或先用 md remote list 确认分支与包名"
         return 1
     fi
     local selected_line
@@ -2355,7 +1707,10 @@ vmc::rollback() {
     svc::manage stop soc1
     svc::manage stop soc2
     sys::clean
-    vmc::finstall "$selected_ver" "$selected_pkg"
+    if ! vmc::finstall "$selected_ver" "$selected_pkg"; then
+        log_warn "回滚失败，服务已停止，执行 md start 恢复运行"
+        return 1
+    fi
 }
 
 #endregion
@@ -2371,6 +1726,7 @@ flow::pre() {
         echo -e "${GREEN}正常${NC}"
     else
         echo -e "${RED}断开${NC}"
+        log_err "请检查 soc2 供电/网线 (ping $SOC2_IP)，恢复后重试"
         return 1
     fi
 
@@ -2495,7 +1851,7 @@ _md_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # 一级命令
-    opts="init check umount upgrade install rollback rb stop start restart status log c channel m module mod record tag remote export e"
+    opts="init check umount upgrade install rollback rb stop start restart status log c channel m module mod record remote export e"
 
     case "$prev" in
         stop|start|restart|status|log|c|channel)
@@ -2514,10 +1870,6 @@ _md_completions() {
             COMPREPLY=( $(compgen -W "on off" -- "$cur") )
             return 0
             ;;
-        tag)
-            COMPREPLY=( $(compgen -W "info list exp export" -- "$cur") )
-            return 0
-            ;;
         rollback|rb)
             # 如果配置了远程分支，自动补全包名
             if [[ -f "$REMOTE_CONFIG" ]]; then
@@ -2534,25 +1886,12 @@ _md_completions() {
     fi
 }
 
-
-_tag_completions() {
-    local cur opts
-    COMPREPLY=()
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    opts="info list exp export"
-
-    if [[ $COMP_CWORD -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
-        return 0
-    fi
-}
-
 #endregion
 
 #region ====================== CORE ======================
 
 dispatch() {
-    local cmd=$1
+    local cmd=$1 _umount_confirm
     shift
     case "$cmd" in
         "init")
@@ -2563,23 +1902,23 @@ dispatch() {
             flow::pre
             ;;
         "start"|"stop"|"restart")
-            if [[ "$1" == "soc1" || "$1" == "1" ]]; then
+            local soc
+            soc=$(svc::_resolve_soc_arg "${1:-}") || return 1
+            if [[ "$soc" == "both" ]]; then
                 svc::manage "$cmd" soc1
-            elif [[ "$1" == "soc2" || "$1" == "2" ]]; then
                 svc::manage "$cmd" soc2
             else
-                svc::manage "$cmd" soc1
-                svc::manage "$cmd" soc2
+                svc::manage "$cmd" "$soc"
             fi
             ;;
         "status")
-            if [[ "$1" == "soc1" || "$1" == "1" ]]; then
+            local soc
+            soc=$(svc::_resolve_soc_arg "${1:-}") || return 1
+            if [[ "$soc" == "both" ]]; then
                 svc::check soc1
-            elif [[ "$1" == "soc2" || "$1" == "2" ]]; then
                 svc::check soc2
             else
-                svc::check soc1
-                svc::check soc2
+                svc::check "$soc"
             fi
             ;;
         "log")
@@ -2601,9 +1940,6 @@ dispatch() {
         "record")
             svc::recorder "$@"
             ;;
-        "tag")
-            tag::dispatch "$@"
-            ;;
         "remote")
             vmc::remote "$@"
             ;;
@@ -2614,23 +1950,35 @@ dispatch() {
             vmc::rollback "$@"
             ;;
         "install")
-            svc::manage stop soc1
-            svc::manage stop soc2
-            sys::clean
             if [[ -n "$1" ]]; then
-                vmc::finstall "$1"
+                vmc::_confirm "将停止双端 mdrive 服务并安装 $1（服务不会自动重启）" || return
+                svc::manage stop soc1
+                svc::manage stop soc2
+                sys::clean
+                if ! vmc::finstall "$1"; then
+                    log_warn "安装失败，服务已停止，执行 md start 恢复运行"
+                    return 1
+                fi
             else
-                vmc::install
+                sys::clean
+                vmc::install || return 1
             fi
             vmc list
             ;;
         "umount")
+            log_warn "此操作将: ① 停止双端 mdrive 服务 ② 卸载数据盘 $MOUNT_ROOT"
+            log_warn "如硬盘正被 Recorder 写入，当前录制会中断"
+            read -r -p "输入 y 确认弹出硬盘 [y/N]: " _umount_confirm
+            [[ "$_umount_confirm" == "y" || "$_umount_confirm" == "Y" ]] || { log_warn "已取消"; return; }
             svc::manage stop soc1
             svc::manage stop soc2
             disk::umount
             ;;
         "export"|"e")
             sys::export
+            ;;
+        "-h"|"--help"|"help")
+            usage
             ;;
         *)
             log_err "未知命令: $cmd"
@@ -2641,12 +1989,6 @@ dispatch() {
 
 
 main(){
-    local prog
-    prog="${0##*/}"
-    if [[ "$prog" == "tag" ]]; then
-        tag::dispatch "$@"
-        return
-    fi
     if [[ -z $1 ]]; then
         usage
     else

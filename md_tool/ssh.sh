@@ -33,6 +33,11 @@ echo -e "${BLUE}===============================================${NC}"
 read -rp "  请选择模式 [1/2]: " MODE
 echo ""
 
+if [[ "$MODE" != "1" && "$MODE" != "2" ]]; then
+    log_err "无效模式，请输入 1 或 2"
+    exit 1
+fi
+
 # [1/3] 密钥生成逻辑
 log_info "检查本地密钥..."
 mkdir -p "$HOME/.ssh"
@@ -312,6 +317,17 @@ else
     # 公网模式配置
     read -rp "  请输入公网映射端口 (多个用空格隔开): " WAN_PORTS
     TARGET_WAN="$WAN_PORTS"
+
+    if [[ -z "$WAN_PORTS" ]]; then
+        log_err "未输入端口，退出。"
+        exit 1
+    fi
+    for p in $WAN_PORTS; do
+        if [[ ! "$p" =~ ^[0-9]+$ ]] || (( p < 1 || p > 65535 )); then
+            log_err "非法端口: $p（需为 1-65535 的整数）"
+            exit 1
+        fi
+    done
 fi
 chmod 600 "$CONFIG_PATH"
 

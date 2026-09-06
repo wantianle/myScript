@@ -227,6 +227,16 @@ else
         log_err "未指定端口，退出。"
         exit 1
     fi
+    bad=()
+    for p in "${PORTS[@]}"; do
+        if [[ ! "$p" =~ ^[0-9]+$ ]] || (( p < 1 || p > 65535 )); then
+            bad+=("$p")
+        fi
+    done
+    if [[ ${#bad[@]} -gt 0 ]]; then
+        log_err "非法端口: ${bad[*]}（需为 1-65535 的整数）"
+        exit 1
+    fi
     for p in "${PORTS[@]}"; do
         TARGET_HOSTS+=("$WAN_DOMAIN")
         TARGET_PORTS+=("$p")
