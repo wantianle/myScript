@@ -70,7 +70,7 @@
     "deepseek": {
       "designer": {
         "mcps": [],
-        "model": "minieye/deepseek-v4-flash",
+        "model": "minieye/deepseek-v4-flash-vision-exp",
         "skills": [],
         "variant": "high"
       },
@@ -112,7 +112,7 @@
           "*",
           "!context7"
         ],
-        "model": "minieye/deepseek-v4-flash",
+        "model": "minieye/deepseek-v4-flash-vision-exp",
         "skills": [
           "deepwork",
           "worktrees",
@@ -121,6 +121,62 @@
           "clonedeps"
         ],
         "variant": "max"
+      }
+    },
+    "lite": {
+      "designer": {
+        "mcps": [],
+        "model": "minieye/qwen3.8-flash",
+        "skills": [],
+        "variant": "medium"
+      },
+      "explorer": {
+        "mcps": [],
+        "model": "minieye/glm-5.3-flash",
+        "skills": [
+          "codemap"
+        ],
+        "variant": "low"
+      },
+      "fixer": {
+        "mcps": [],
+        "model": "minieye/qwen3.8-flash",
+        "skills": [
+          "mdrive-container",
+          "simplify"
+        ],
+        "variant": "low"
+      },
+      "librarian": {
+        "mcps": [
+          "websearch",
+          "context7",
+          "gh_grep"
+        ],
+        "model": "minieye/glm-5.3-flash",
+        "skills": [],
+        "variant": "low"
+      },
+      "oracle": {
+        "mcps": [],
+        "model": "minieye/qwen3.8-flash",
+        "skills": [],
+        "variant": "max"
+      },
+      "orchestrator": {
+        "mcps": [
+          "*",
+          "!context7"
+        ],
+        "model": "minieye/qwen3.8-flash",
+        "skills": [
+          "deepwork",
+          "worktrees",
+          "reflect",
+          "lean-flow",
+          "clonedeps"
+        ],
+        "variant": "high"
       }
     }
   }
