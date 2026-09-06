@@ -260,10 +260,34 @@ func upgradeCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 // version lines). This keeps the Go tool script-friendly.
 func installCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
-		Use:   "install",
-		Short: "Install package versions from pasted version lines",
-		Args:  cobra.NoArgs,
+		Use:     "install [version]",
+		Aliases: []string{"i"},
+		Short:   "Install package versions (scripted single-version, or paste all versions)",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Scripted single-version: `md install <version>` → finstall
+			// (vmc::install with an arg, md.sh:1975-1983).
+			if len(args) == 1 {
+				version := args[0]
+				if !(vmcflow.Confirm{Response: readLineStdin()}).Ask() {
+					vf.Log.Warn("已取消安装")
+					return nil
+				}
+				_ = s.PreCheck(cmd.Context())
+				_ = s.Manage(cmd.Context(), "stop", "soc1")
+				_ = s.Manage(cmd.Context(), "stop", "soc2")
+				if err := vf.Clean(cmd.Context()); err != nil {
+					return err
+				}
+				if err := vf.Finstall(cmd.Context(), version, ""); err != nil {
+					vf.Log.Warn("安装失败，服务已停止，执行 md start 恢复运行")
+					return err
+				}
+				return nil
+			}
+
+			// Interactive paste: `md install` → read all version lines from
+			// stdin, extract and install each (vmc::install, md.sh).
 			input, err := readAllStdin()
 			if err != nil {
 				return err
