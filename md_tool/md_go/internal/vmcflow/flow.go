@@ -300,6 +300,10 @@ type RollbackCandidate struct {
 }
 
 // renderCandidates renders parsed records to display rows, sorted descending.
+// Bash `vim fsearch` is fed to `sort -r` over the whole `time | ver | ...` row
+// (md.sh:1698), so the primary sort key is the publish time and the secondary
+// is the version. ReleaseTime is RFC3339 (lexicographically == chronologically
+// ordered), which is why comparing the string directly is faithful.
 func renderCandidates(recs []vmc.Record) []RollbackCandidate {
 	var out []RollbackCandidate
 	for _, r := range recs {
@@ -308,10 +312,11 @@ func renderCandidates(recs []vmc.Record) []RollbackCandidate {
 			Time: time, Version: r.Version, Platform: r.Platform, Name: r.Name,
 		})
 	}
-	// sort -r: descending by version string (md.sh:1698).
+	// Primary key: ReleaseTime descending; tie-break: Version descending.
 	for i := 0; i < len(out); i++ {
 		for j := i + 1; j < len(out); j++ {
-			if out[i].Version < out[j].Version {
+			if out[i].Time < out[j].Time ||
+				(out[i].Time == out[j].Time && out[i].Version < out[j].Version) {
 				out[i], out[j] = out[j], out[i]
 			}
 		}

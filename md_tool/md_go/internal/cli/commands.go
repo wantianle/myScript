@@ -288,7 +288,8 @@ func installCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 					vf.Log.Warn("已取消安装")
 					return nil
 				}
-				_ = s.PreCheck(cmd.Context())
+				// Bash finstall path (md.sh:1975-1983) never runs flow::pre; drop
+				// the PreCheck the single-version path had added (P1-6).
 				_ = s.Manage(cmd.Context(), "stop", "soc1")
 				_ = s.Manage(cmd.Context(), "stop", "soc2")
 				if err := vf.Clean(cmd.Context()); err != nil {

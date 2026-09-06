@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -58,8 +59,12 @@ func readAllStdin() (string, error) {
 	return string(b), err
 }
 
-// readLineStdin reads one trimmed line from stdin (a confirm response).
+// readLineStdin reads one line from stdin, returning it trimmed. It blocks only
+// until the next newline (not until EOF/Ctrl-D like io.ReadAll would), so an
+// interactive confirm prompt returns as soon as the operator presses Enter.
+// Empty lines (bare Enter) and whitespace-only input both yield "".
 func readLineStdin() string {
-	b, _ := io.ReadAll(os.Stdin)
-	return strings.TrimSpace(string(b))
+	r := bufio.NewReader(os.Stdin)
+	line, _ := r.ReadString('\n')
+	return strings.TrimSpace(line)
 }

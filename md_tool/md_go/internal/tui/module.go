@@ -96,6 +96,11 @@ func (m *moduleMenu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg == nil {
 			m.msg = "（加载失败）"
 			m.loErr = true
+		} else {
+			// Clear the multi-select after a refresh (Bash reopens fzf with a
+			// fresh empty selection). Carrying stale indices across a reload
+			// would silently operate on modules the operator never re-selected.
+			m.sel = make(map[int]bool)
 		}
 		return m, nil
 	case moduleActionMsg:
