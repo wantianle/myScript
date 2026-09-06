@@ -95,7 +95,7 @@ _opencode() {
   fi
 }
 
-# 读取指定 preset 下某 agent 的模型，输出 "provider|model"（供预写 session.model）
+# 读取指定 preset 下某 agent 的模型，输出 "provider|model"（供 -m 强制主线程模型）
 _preset_agent_model() {
   python3 - "$OMOS_CONFIG" "$1" "$2" <<'PY'
 import json, os, sys
@@ -273,21 +273,6 @@ _match_count_search() {
   _db "SELECT COUNT(*) FROM session WHERE parent_id IS NULL AND id LIKE 'ses_%' AND (title LIKE '%' || '$kw' || '%' OR directory LIKE '%' || '$kw' || '%');"
 }
 
-# 指定了 preset 时，恢复前把该会话的 model 预写为 preset 中对应 agent 的模型。
-# 目的：避免"主线程已切新模型、但 DB/UI 还显示旧模型"的滞后（实测 opencode
-# 要等第一回合跑完才回写 session.model）。仅在有 -p 时触发。
-_apply_preset_model() {
-  [[ -z "$PRESET" ]] && return 0
-  local sid="$1" agent_name spec provider model
-  agent_name=$(_db "SELECT agent FROM session WHERE id='$sid';")
-  [[ -z "$agent_name" ]] && agent_name="orchestrator"
-  spec=$(_preset_agent_model "$PRESET" "$agent_name")
-  [[ -z "$spec" ]] && return 0
-  provider="${spec%%|*}"
-  model="${spec##*|}"
-  _db "UPDATE session SET model='{\"id\":\"$model\",\"providerID\":\"$provider\",\"variant\":\"default\"}' WHERE id='$sid';"
-}
-
 _resume() {
   local count sid
   count=$(_match_count_id "$1")
@@ -313,7 +298,6 @@ _resume() {
   echo "会话: $title"
   echo "目录: $(_shortdir "$dir")"
   echo ""
-  _apply_preset_model "$sid"
   cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
   _opencode --session "$sid"
 }
@@ -431,7 +415,6 @@ _search() {
     echo "会话: $title"
     echo "目录: $(_shortdir "$dir")"
     echo ""
-    _apply_preset_model "$sid"
     cd "$dir" 2>/dev/null || { echo "目录不存在，在当前目录恢复"; }
     _opencode --session "$sid"
     return
