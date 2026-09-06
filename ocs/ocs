@@ -79,26 +79,16 @@ for name in (data.get("presets") or {}):
 PY
 }
 
-# 启动 opencode。指定 preset 时：
-#  - 新会话（无 --session）：env preset 直接生效
-#  - 恢复旧会话（带 --session）：原地恢复时主线程模型被会话历史锁定，env/-m 均无法切换
-#    → 自动 --fork：复制历史 + 按新 preset 初始化模型，实现"一步切方案且主模型真换"
+# 启动 opencode；指定了 preset 时注入环境变量，恢复场景额外 -m 强制主线程模型
+# （TUI 恢复会话会沿用会话历史模型并显式覆盖 agent config，必须用 CLI -m 才能顶掉）
 _opencode() {
-  local fork_flag=""
   if [[ -n "$PRESET" ]]; then
-    for arg in "$@"; do
-      if [[ "$arg" == "--session" || "$arg" == "-s" ]]; then
-        fork_flag="--fork"
-        break
-      fi
-    done
     echo "  [preset: $PRESET]"
     if [[ -n "$OMOS_MAIN_MODEL" ]]; then
       echo "  [主线程模型: $OMOS_MAIN_MODEL]"
-      [[ -n "$fork_flag" ]] && echo "  [历史已复制为新会话 (fork)，避免原地恢复时主模型被旧历史锁定]"
-      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode -m "$OMOS_MAIN_MODEL" $fork_flag "$@"
+      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode -m "$OMOS_MAIN_MODEL" "$@"
     else
-      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode $fork_flag "$@"
+      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode "$@"
     fi
   else
     opencode "$@"
@@ -457,16 +447,13 @@ ocs — OpenCode Session Manager
 preset 说明:
   从 ~/.config/opencode/oh-my-opencode-slim.jsonc 的 presets 动态读取，
   经 OH_MY_OPENCODE_SLIM_PRESET 环境变量注入单次进程。
-  - 新会话: 直接按 preset 启动，主线程与子 agent 均用该方案。
-  - 恢复旧会话: 自动 --fork 复制历史并初始化为主模型用 preset 的
-    orchestrator 模型（opencode 原地恢复会锁定会话历史模型，env/-m
-    均无法切换，fork 是唯一能"一步切方案且主模型真换"的路径）。
-    原会话不受影响，fork 出新会话继续。
+  注意: 恢复历史会话时强制换 preset 会让主线程切换模型（上下文保留，
+  但属于"切模型本身的风险"，与项目级切换 preset 行为一致）。
 
 示例:
   ocs                    # 列出所有
   ocs -p lite            # 当前目录用 lite 团队开新会话
-  ocs -p openai iyeTCx6Y # fork 指定会话，用 openai 团队继续
+  ocs -p openai iyeTCx6Y # 用 openai 团队恢复指定会话
   ocs iyeTCx6Y           # 按 ID 恢复（支持片段匹配）
   ocs s ssh             # 搜索含 ssh 的会话，唯一匹配直接恢复
   ocs d oJnNVI           # 删除指定会话
