@@ -122,62 +122,6 @@
         ],
         "variant": "max"
       }
-    },
-    "DeepSeek": {
-      "designer": {
-        "mcps": [],
-        "model": "DeepSeek/deepseek-v4-flash",
-        "skills": [],
-        "variant": "high"
-      },
-      "explorer": {
-        "mcps": [],
-        "model": "DeepSeek/deepseek-v4-flash",
-        "skills": [
-          "codemap"
-        ],
-        "variant": "low"
-      },
-      "fixer": {
-        "mcps": [],
-        "model": "DeepSeek/deepseek-v4-flash",
-        "skills": [
-          "mdrive-container",
-          "simplify"
-        ],
-        "variant": "low"
-      },
-      "librarian": {
-        "mcps": [
-          "websearch",
-          "context7",
-          "gh_grep"
-        ],
-        "model": "DeepSeek/deepseek-v4-flash",
-        "skills": [],
-        "variant": "low"
-      },
-      "oracle": {
-        "mcps": [],
-        "model": "DeepSeek/deepseek-v4-flash",
-        "skills": [],
-        "variant": "max"
-      },
-      "orchestrator": {
-        "mcps": [
-          "*",
-          "!context7"
-        ],
-        "model": "DeepSeek/deepseek-v4-flash",
-        "skills": [
-          "deepwork",
-          "worktrees",
-          "reflect",
-          "lean-flow",
-          "clonedeps"
-        ],
-        "variant": "max"
-      }
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
-  "model": "minieye-openai-claude/claude-opus-4-7",
+  "model": "minieye/deepseek-v4-flash",
   "username": "mini",
 
   "lsp": true,
@@ -31,7 +31,7 @@
   ],
 
   "provider": {
-    // Minieye OpenAI
+    // Minieye OpenAI (公司 OpenAI 接口 = codex key)
     "minieye": {
       "name": "Minieye",
       "npm": "@ai-sdk/openai-compatible",
@@ -43,8 +43,18 @@
       "models": {
         "deepseek-v4-flash": {
           "name": "deepseek-v4-flash",
-          "cost":   { "input": 0.019,  "output": 1.286 },
+          "cost":   { "input": 0.44, "output": 1.32 },
           "limit":  { "context": 1000000, "output": 384000 }
+        },
+        "deepseek-v4-flash-vision-exp": {
+          "name": "deepseek-v4-flash-vision-exp",
+          "cost":   { "input": 0.44, "output": 1.32 },
+          "limit":  { "context": 1000000, "output": 384000 }
+        },
+        "glm-5.3-flash": {
+          "name": "glm-5.3-flash",
+          "cost":   { "input": 0.15, "output": 0.50 },
+          "limit":  { "context": 1000000, "output": 128000 }
         },
         "gpt-5.4": {
           "name": "gpt-5.4",
@@ -53,28 +63,42 @@
         },
         "gpt-5.5": {
           "name": "gpt-5.5",
-          "cost":   { "input": 0.50, "output": 3.00 },
-          "limit":  { "context":  1000000,   "output": 128000 }
+          "cost":   { "input": 1.25, "output": 7.50 },
+          "limit":  { "context":  1050000,   "output": 128000 }
+        },
+        "gpt-5.6": {
+          "name": "gpt-5.6",
+          "cost":   { "input": 1.00, "output": 5.00 },
+          "limit":  { "context":  1050000,   "output": 128000 }
         },
         "gpt-5.6-luna": {
           "name": "gpt-5.6-luna",
-          "cost":   { "input": 0.02, "output": 0.12 },
+          "cost":   { "input": 0.05, "output": 0.30 },
           "limit":  { "context":  1050000,   "output": 128000 }
         },
         "gpt-5.6-sol": {
           "name": "gpt-5.6-sol",
-          "cost":   { "input": 0.50, "output": 3.00 },
+          "cost":   { "input": 1.00, "output": 5.00 },
           "limit":  { "context":  1050000,   "output": 128000 }
         },
         "gpt-5.6-terra": {
           "name": "gpt-5.6-terra",
-          "cost":   { "input": 0.20, "output": 1.20 },
+          "cost":   { "input": 0.50, "output": 3.00 },
           "limit":  { "context":  1050000,   "output": 128000 }
+        },
+        "gpt-image-2": {
+          "name": "gpt-image-2",
+          "cost":   { "input": 2.00, "output": 7.50 }
+        },
+        "qwen3.8-flash": {
+          "name": "qwen3.8-flash",
+          "cost":   { "input": 0.15, "output": 0.47 },
+          "limit":  { "context": 1000000, "output": 128000 }
         }
       }
     },
 
-    // Minieye Claude
+    // Minieye Claude 计划 key（公司 Claude 接口，仅配可用 flash 系模型）
     "minieye-claude": {
       "name": "Minieye-Claude",
       "npm": "@ai-sdk/openai-compatible",
@@ -84,32 +108,25 @@
         "includeUsage": true
       },
       "models": {
-        "claude-opus-4-8": {
-          "name": "claude-opus-4-8",
-          "cost":   { "input": 0.057, "output": 3.857 },
-          "limit":  { "context":  1000000, "output": 384000 }
-        }
-      }
-    },
-
-    // DeepSeek API
-    "DeepSeek": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "apiKey": "sk-bc595b40a377411a9a9af7e82d6e32db",
-        "baseURL": "https://api.deepseek.com/v1",
-        "setCacheKey": true
-      },
-      "models": {
-        "deepseek-v4-pro": {
-          "name": "DeepSeek V4 Pro",
-          "cost":   { "input": 0.30, "output": 27.00 },
+        "deepseek-v4-flash": {
+          "name": "deepseek-v4-flash",
+          "cost":   { "input": 0.44, "output": 1.32 },
           "limit":  { "context": 1000000, "output": 384000 }
         },
-        "deepseek-v4-flash": {
-          "name": "DeepSeek V4 Flash",
-          "cost":   { "input": 0.10,  "output": 9.00 },
+        "deepseek-v4-flash-vision-exp": {
+          "name": "deepseek-v4-flash-vision-exp",
+          "cost":   { "input": 0.44, "output": 1.32 },
           "limit":  { "context": 1000000, "output": 384000 }
+        },
+        "glm-5.3-flash": {
+          "name": "glm-5.3-flash",
+          "cost":   { "input": 0.15, "output": 0.50 },
+          "limit":  { "context": 1000000, "output": 128000 }
+        },
+        "qwen3.8-flash": {
+          "name": "qwen3.8-flash",
+          "cost":   { "input": 0.15, "output": 0.47 },
+          "limit":  { "context": 1000000, "output": 128000 }
         }
       }
     }
