@@ -79,11 +79,17 @@ for name in (data.get("presets") or {}):
 PY
 }
 
-# 启动 opencode；指定了 preset 时注入环境变量
+# 启动 opencode；指定了 preset 时注入环境变量，恢复场景额外 -m 强制主线程模型
+# （TUI 恢复会话会沿用会话历史模型并显式覆盖 agent config，必须用 CLI -m 才能顶掉）
 _opencode() {
   if [[ -n "$PRESET" ]]; then
     echo "  [preset: $PRESET]"
-    OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode "$@"
+    if [[ -n "$OMOS_MAIN_MODEL" ]]; then
+      echo "  [主线程模型: $OMOS_MAIN_MODEL]"
+      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode -m "$OMOS_MAIN_MODEL" "$@"
+    else
+      OH_MY_OPENCODE_SLIM_PRESET="$PRESET" opencode "$@"
+    fi
   else
     opencode "$@"
   fi
@@ -280,7 +286,6 @@ _apply_preset_model() {
   provider="${spec%%|*}"
   model="${spec##*|}"
   _db "UPDATE session SET model='{\"id\":\"$model\",\"providerID\":\"$provider\",\"variant\":\"default\"}' WHERE id='$sid';"
-  echo "  [主线程模型 → $provider/$model]"
 }
 
 _resume() {
@@ -503,13 +508,18 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${_rest[@]}"
 
-# 指定了 preset 时先校验存在性（从 OMOS 配置动态读取）
+# 指定了 preset 时先校验存在性（从 OMOS 配置动态读取），并解析主线程模型
 if [[ -n "$PRESET" ]]; then
   if ! _presets | grep -qx -- "$PRESET"; then
     echo "错误: preset '$PRESET' 不在 oh-my-opencode-slim.jsonc 中"
     echo "可用 presets:"
     _presets | sed 's/^/  /'
     exit 1
+  fi
+  # orchestrator 模型用于 -m 强制主线程（TUI 恢复会沿用会话历史模型，env 无效）
+  _spec=$(_preset_agent_model "$PRESET" "orchestrator")
+  if [[ -n "$_spec" ]]; then
+    OMOS_MAIN_MODEL="${_spec%%|*}/${_spec##*|}"
   fi
 fi
 
