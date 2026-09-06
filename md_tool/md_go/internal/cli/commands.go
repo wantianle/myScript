@@ -2,12 +2,15 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"mdrive/md/internal/config"
 	"mdrive/md/internal/logx"
 	"mdrive/md/internal/remote"
 	"mdrive/md/internal/svc"
 	"mdrive/md/internal/tui"
+	"mdrive/md/internal/vmcflow"
 
 	"github.com/spf13/cobra"
 )
@@ -20,6 +23,12 @@ import (
 func newServiceRoot(cfg config.Config, programName, version string) *cobra.Command {
 	log := logx.New()
 	s := svc.New(cfg, log)
+	vf := vmcflow.New(vmcflow.Cfg{
+		RemotesPath: remotePath(),
+		MDriveCache: cfg.MDriveCache,
+		MountRoot:   cfg.MountRoot,
+		DefaultUser: defaultUser(cfg),
+	}, log, s)
 
 	root := &cobra.Command{
 		Use:           programName,
@@ -40,6 +49,9 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		remoteCmd(),
 		checkCmd(s),
 		moduleCmd(s),
+		upgradeCmd(vf, s),
+		installCmd(vf, s),
+		rollbackCmd(vf),
 	)
 
 	return root
@@ -215,6 +227,92 @@ func moduleCmd(s *svc.Svc) *cobra.Command {
 				return fmt.Errorf("用法: md m <start|stop|restart> <1(soc1)|2(soc2)> <模块名...>")
 			}
 			return s.ModCtl(cmd.Context(), args[0], args[1], args[2:])
+		},
+	}
+}
+
+// defaultUser mirrors md.sh's `id -un` fallback (the vmc install user).
+func defaultUser(cfg config.Config) string {
+	if u := os.Getenv("USER"); u != "" {
+		return u
+	}
+	// md.sh's nvidia default.
+	return "nvidia"
+}
+
+// upgradeCmd implements `md upgrade` (vmc::upgrade). It runs the pre-check,
+// then the full multi-branch upgrade flow.
+func upgradeCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
+	return &cobra.Command{
+		Use:   "upgrade",
+		Short: "Upgrade installed packages to the latest remote versions",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			prePassed := s.PreCheck(cmd.Context()) == nil
+			port := vmcflow.UpgradePort{PreCheckPassed: prePassed, Confirm: ""}
+			return vf.Upgrade(cmd.Context(), port)
+		},
+	}
+}
+
+// installCmd implements `md install` (vmc::install). The vi-editor input is
+// supplied via stdin (the CLI does not open $EDITOR; the operator pastes the
+// version lines). This keeps the Go tool script-friendly.
+func installCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
+	return &cobra.Command{
+		Use:   "install",
+		Short: "Install package versions from pasted version lines",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input, err := readAllStdin()
+			if err != nil {
+				return err
+			}
+			prePassed := s.PreCheck(cmd.Context()) == nil
+			port := vmcflow.UpgradePort{PreCheckPassed: prePassed, Confirm: ""}
+			return vf.Install(cmd.Context(), input, port)
+		},
+	}
+}
+
+// rollbackCmd implements `md rb [version] [name]` (vmc::rollback). It searches
+// history, filters by exact column when a package is given, and installs the
+// first candidate (the CLI's TUI picker is a later enhancement). The confirm
+// prompt reads stdin.
+func rollbackCmd(vf *vmcflow.VMC) *cobra.Command {
+	return &cobra.Command{
+		Use:     "rollback [version] [name]",
+		Aliases: []string{"rb"},
+		Short:   "Roll back a package to a selected historical version",
+		Args:    cobra.MaximumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			version := argOr(args, 0, "")
+			name := argOr(args, 1, "")
+			exactCol := ""
+			if name == "" && version == "" {
+				// No args: md.sh flow reads the remote config. For the Go CLI we
+				// require at least a version keyword to keep it non-interactive.
+				return fmt.Errorf("用法: md rb <version关键字> [包名]，或 md rb - <包名关键字>")
+			}
+			if strings.HasPrefix(name, "=") {
+				exactCol = strings.TrimPrefix(name, "=")
+			}
+			cands, err := vf.Rollback(cmd.Context(), version, name, exactCol)
+			if err != nil {
+				return err
+			}
+			if len(cands) == 0 {
+				return nil // already logged "未搜索到"
+			}
+			// Auto-select the first (newest) candidate. The interactive picker
+			// is a CLI-layer enhancement; confirm reads stdin here.
+			sel := cands[0]
+			vf.Log.Warn("确定回滚 [%s] 到版本: %s ?", sel.Name, sel.Version)
+			confirm := vmcflow.Confirm{Response: readLineStdin()}
+			if !confirm.Ask() {
+				return nil
+			}
+			return vf.InstallRollback(cmd.Context(), sel, nil)
 		},
 	}
 }

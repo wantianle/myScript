@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"mdrive/md/internal/remote"
 )
@@ -49,3 +50,16 @@ func argOr(args []string, i int, fallback string) string {
 
 // stdoutP writes to stdout.
 func stdoutP(s string) (int, error) { return fmt.Fprint(os.Stdout, s) }
+
+// readAllStdin reads everything from stdin into a string (the `md install`
+// version-lines input).
+func readAllStdin() (string, error) {
+	b, err := io.ReadAll(os.Stdin)
+	return string(b), err
+}
+
+// readLineStdin reads one trimmed line from stdin (a confirm response).
+func readLineStdin() string {
+	b, _ := io.ReadAll(os.Stdin)
+	return strings.TrimSpace(string(b))
+}
