@@ -23,6 +23,7 @@ package svc
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"mdrive/md/internal/config"
 	"mdrive/md/internal/logx"
@@ -145,7 +146,7 @@ func (s *Svc) manageOne(ctx context.Context, action, soc string) {
 		cmd := fmt.Sprintf("timeout 15 sudo systemctl %s mdrive.service", action)
 		_, _ = sh.Exec(ctx, cmd)
 	} else {
-		cmd := "systemctl " + action + " mdrive.service"
+		cmd := "sudo systemctl " + action + " mdrive.service"
 		_, _ = sh.Exec(ctx, cmd)
 	}
 
@@ -185,12 +186,15 @@ func (s *Svc) pollStopped(ctx context.Context, sh Shell, soc string) {
 	s.log.Warn("[soc1] mdrive.service 停止超时，可能仍在退出中（数据盘 chown 耗时较长），继续前请确认")
 }
 
-// Check reports the service state for soc (md.sh svc::check :641-660). soc2's
-// ssh transport failure (255) returns an error and emits nothing.
+// Check reports the service state for soc (md.sh svc::check :641-660). A
+// connection failure to soc2 (md.sh's ssh 255) returns an error — the Bash
+// version returns 1 silently, so the caller sees a non-zero exit.
 func (s *Svc) Check(ctx context.Context, soc string) error {
 	sh := s.shellOr(soc, ctx)
 	if sh == nil {
-		return nil
+		// soc2 unreachable / dial failure (md.sh 255): report as an error so
+		// `md status 2` exits non-zero when the remote is down.
+		return fmt.Errorf("[%s] 无法连接目标，无法查询服务状态", soc)
 	}
 
 	// "both" resolves into two concrete reports.
@@ -202,14 +206,8 @@ func (s *Svc) Check(ctx context.Context, soc string) error {
 	// is-active --quiet needs no sudo on either side.
 	out, err := sh.Exec(ctx, "systemctl is-active --quiet mdrive.service")
 	if err != nil {
-		// soc2 255: silent + error (md.sh:654-657).
-		s.log.Warn("[%s] 连接失败，无法查询服务状态", soc)
+		// mid-stream transport failure (md.sh ssh 255): return the error.
 		return err
-	}
-	if soc == "soc2" && out.Code == 255 {
-		// ssh-level failure surfaces as ErrConnFailed; md.sh treats 255 as
-		// "silent, return 1". We already logged a hint; return the error.
-		return fmt.Errorf("[soc2] ssh 无法连到远端")
 	}
 
 	state := "Running"
@@ -287,7 +285,11 @@ func (s *Svc) checkRecorderDisk(ctx context.Context, sh Shell) bool {
 // it cannot be determined (md.sh:758-760: `df -BG ... | awk 'NR==2 {print
 // $4}' | tr -d 'G'`).
 func (s *Svc) remoteDiskFreeGB(ctx context.Context, sh Shell) int {
-	cmd := fmt.Sprintf("df -BG %s 2>/dev/null | awk 'NR==2 {print \\$4}' | tr -d 'G'", s.cfg.MountRoot)
+	// NOTE: the awk `$4` must be written without a backslash here. The command
+	// string is sent verbatim to the remote sh (no Bash double-quote layer),
+	// so `\$4` would reach awk as `\$4` and error. Go itself never interprets
+	// `$`, so a literal `$4` is correct (md.sh:758-760).
+	cmd := fmt.Sprintf("df -BG %s 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G'", s.cfg.MountRoot)
 	out, err := sh.Exec(ctx, cmd)
 	if err != nil || out.Code != 0 {
 		return -1
@@ -297,6 +299,42 @@ func (s *Svc) remoteDiskFreeGB(ctx context.Context, sh Shell) int {
 		return -1
 	}
 	return gb
+}
+
+// Log streams the mdrive.service journal to w (md.sh svc::log :719-732). soc1
+// runs locally, soc2 over ssh. The command is the filtered, following
+// journalctl; it runs until ctx is cancelled (Ctrl-C mirrors md.sh's
+// Ctrl-C-on-ssh behaviour).
+func (s *Svc) Log(ctx context.Context, soc string, w io.Writer) error {
+	sh := s.shellOr(soc, ctx)
+	if sh == nil {
+		return fmt.Errorf("无法建立 %s 连接", soc)
+	}
+	const cmd = "sudo journalctl -eu mdrive.service --since \"5 min ago\" -f " +
+		"--no-pager | grep --line-buffered -v -E \"ptp4l|phc2sys|mdrive_driver_camera\""
+	chunks, errs := sh.Stream(ctx, cmd)
+	for {
+		select {
+		case c, ok := <-chunks:
+			if !ok {
+				chunks = nil
+				continue
+			}
+			if _, err := w.Write(c.Data); err != nil {
+				return err
+			}
+		case err, ok := <-errs:
+			if !ok {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // Channel launches dtop — on soc1 locally, on soc2 over ssh with the

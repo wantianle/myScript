@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"context"
-
 	"mdrive/md/internal/config"
 	"mdrive/md/internal/logx"
 	"mdrive/md/internal/remote"
@@ -13,11 +11,12 @@ import (
 
 // newServiceRoot builds the md root command with the G3 service-control
 // subcommands wired to the svc layer. The no-arg TUI (md m module menu) is
-// wired separately in G4.
+// wired separately in G4. Every RunE reads cmd.Context() so the signal-aware
+// context main.go installs (SIGINT/SIGTERM) is honoured — this is what lets
+// `md log 2` stop on Ctrl-C.
 func newServiceRoot(cfg config.Config, programName, version string) *cobra.Command {
 	log := logx.New()
 	s := svc.New(cfg, log)
-	ctx := context.Background()
 
 	root := &cobra.Command{
 		Use:           programName,
@@ -27,17 +26,16 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		SilenceErrors: true,
 	}
 
-	// socFlag adds an optional [1|2] soc argument.
 	root.AddCommand(
-		manageCmd(s, ctx, "start"),
-		manageCmd(s, ctx, "stop"),
-		manageCmd(s, ctx, "restart"),
-		statusCmd(s, ctx),
-		logCmd(s, ctx),
-		channelCmd(s, ctx),
-		recordCmd(s, ctx),
-		remoteCmd(ctx),
-		checkCmd(s, ctx),
+		manageCmd(s, "start"),
+		manageCmd(s, "stop"),
+		manageCmd(s, "restart"),
+		statusCmd(s),
+		logCmd(s),
+		channelCmd(s),
+		recordCmd(s),
+		remoteCmd(),
+		checkCmd(s),
 	)
 
 	return root
@@ -52,7 +50,7 @@ func socArg(args []string) (string, error) {
 	return svc.ResolveSOCArg(arg)
 }
 
-func manageCmd(s *svc.Svc, ctx context.Context, action string) *cobra.Command {
+func manageCmd(s *svc.Svc, action string) *cobra.Command {
 	return &cobra.Command{
 		Use:   action + " [1|2]",
 		Short: action + " mdrive service (default both socs)",
@@ -62,12 +60,12 @@ func manageCmd(s *svc.Svc, ctx context.Context, action string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return s.Manage(ctx, action, soc)
+			return s.Manage(cmd.Context(), action, soc)
 		},
 	}
 }
 
-func statusCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
+func statusCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status [1|2]",
 		Short: "Show mdrive service status",
@@ -77,12 +75,12 @@ func statusCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return s.Check(ctx, soc)
+			return s.Check(cmd.Context(), soc)
 		},
 	}
 }
 
-func logCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
+func logCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
 		Use:   "log [1|2]",
 		Short: "Follow mdrive.service journal (default soc1)",
@@ -94,12 +92,12 @@ func logCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
 			} else if len(args) > 0 && !(args[0] == "soc1" || args[0] == "1") {
 				return errBadSOC(args[0])
 			}
-			return s.Log(ctx, soc, osStderr())
+			return s.Log(cmd.Context(), soc, osStderr())
 		},
 	}
 }
 
-func channelCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
+func channelCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
 		Use:     "channel [1|2]",
 		Aliases: []string{"c"},
@@ -110,12 +108,12 @@ func channelCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
 			if len(args) > 0 {
 				soc = args[0]
 			}
-			return s.Channel(ctx, soc)
+			return s.Channel(cmd.Context(), soc)
 		},
 	}
 }
 
-func recordCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
+func recordCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
 		Use:   "record [on|off]",
 		Short: "Start/stop the soc2 Recorder (default on)",
@@ -125,14 +123,13 @@ func recordCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
 			if len(args) > 0 {
 				action = args[0]
 			}
-			return s.Recorder(ctx, action)
+			return s.Recorder(cmd.Context(), action)
 		},
 	}
 }
 
-func remoteCmd(ctx context.Context) *cobra.Command {
+func remoteCmd() *cobra.Command {
 	run := func(args []string) error {
-		var err error
 		switch {
 		case len(args) == 0:
 			return cmdUsage("remote")
@@ -142,22 +139,24 @@ func remoteCmd(ctx context.Context) *cobra.Command {
 				return e
 			}
 			if lines == nil {
-				_, err = stdoutP("暂无分支\n")
-			} else {
-				for _, l := range lines {
-					_, _ = stdoutP(l + "\n")
-				}
+				_, err := stdoutP("暂无分支\n")
+				return err
 			}
-			return err
+			for _, l := range lines {
+				_, _ = stdoutP(l + "\n")
+			}
+			return nil
 		case args[0] == "add" && len(args) >= 3:
-			added, e := remote.Add(remotePath(), args[1], args[2], argOr(args, 3, ""))
+			plat := argOr(args, 3, "")
+			added, e := remote.Add(remotePath(), args[1], args[2], plat)
 			if e != nil {
 				return e
 			}
+			label := args[1] + " " + args[2] + " " + plat
 			if added {
-				_, _ = stdoutP("已添加: " + args[1] + " " + args[2] + " " + argOr(args, 3, "") + "\n")
+				_, _ = stdoutP("已添加: " + label + "\n")
 			} else {
-				_, _ = stdoutP("配置 [" + args[1] + " " + args[2] + " " + argOr(args, 3, "") + "] 已存在\n")
+				_, _ = stdoutP("配置 [" + label + "] 已存在\n")
 			}
 			return nil
 		case args[0] == "del" && len(args) == 2:
@@ -174,25 +173,23 @@ func remoteCmd(ctx context.Context) *cobra.Command {
 		}
 	}
 
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "remote <add|del|list>",
 		Short: "Manage remote branch targets (~/.md_remotes)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = ctx
 			return run(args)
 		},
 	}
-	return cmd
 }
 
-func checkCmd(s *svc.Svc, ctx context.Context) *cobra.Command {
+func checkCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
 		Short: "Run the environment self-check",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return s.PreCheck(ctx)
+			return s.PreCheck(cmd.Context())
 		},
 	}
 }

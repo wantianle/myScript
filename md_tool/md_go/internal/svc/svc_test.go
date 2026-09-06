@@ -92,7 +92,7 @@ func TestManageWhitelistAndTargets(t *testing.T) {
 	}
 	found := false
 	for _, c := range fs.commands {
-		if strings.Contains(c, "systemctl start mdrive.service") {
+		if strings.Contains(c, "sudo systemctl start mdrive.service") {
 			found = true
 		}
 	}
