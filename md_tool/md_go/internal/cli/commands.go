@@ -52,6 +52,7 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		upgradeCmd(vf, s),
 		installCmd(vf, s),
 		rollbackCmd(vf),
+		exportCmd(cfg, log),
 	)
 
 	return root
