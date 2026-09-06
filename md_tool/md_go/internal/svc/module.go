@@ -1,6 +1,7 @@
 package svc
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -95,3 +96,26 @@ const (
 	green  = "\033[1;32m"
 	yellow = "\033[1;33m"
 )
+
+// FetchModules returns the combined module status for both socs (md.sh
+// fetch_combined:966-986). Each soc's `sudo supervisorctl status` is gathered
+// and prefixed with its soc name. A transport failure on a soc is skipped; the
+// function errors only when neither soc yielded a usable listing.
+func (s *Svc) FetchModules(ctx context.Context) ([]ModuleRow, error) {
+	var rows []ModuleRow
+	for _, soc := range []string{"soc1", "soc2"} {
+		sh := s.shellOr(soc, ctx)
+		if sh == nil {
+			continue
+		}
+		out, err := sh.Exec(ctx, "sudo supervisorctl status 2>/dev/null")
+		if err != nil {
+			continue
+		}
+		rows = append(rows, ParseSupervisorStatus(soc, out.Stdout)...)
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("无法获取模块状态（soc1/soc2 均不可达）")
+	}
+	return rows, nil
+}

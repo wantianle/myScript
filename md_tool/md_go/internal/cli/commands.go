@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"fmt"
+
 	"mdrive/md/internal/config"
 	"mdrive/md/internal/logx"
 	"mdrive/md/internal/remote"
 	"mdrive/md/internal/svc"
+	"mdrive/md/internal/tui"
 
 	"github.com/spf13/cobra"
 )
@@ -36,6 +39,7 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		recordCmd(s),
 		remoteCmd(),
 		checkCmd(s),
+		moduleCmd(s),
 	)
 
 	return root
@@ -190,6 +194,27 @@ func checkCmd(s *svc.Svc) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return s.PreCheck(cmd.Context())
+		},
+	}
+}
+
+// moduleCmd implements `md m` (aliases module/mod): with no args it opens the
+// Bubble Tea module menu (G4); with args `md m <start|stop|restart> <1|2>
+// <mod...>` it runs a headless batch action (G4-a ModCtl).
+func moduleCmd(s *svc.Svc) *cobra.Command {
+	return &cobra.Command{
+		Use:     "m [<start|stop|restart> <1|2> <mod...>]",
+		Aliases: []string{"module", "mod"},
+		Short:   "Module operations (menu with no args, batch action with args)",
+		Args:    cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return tui.RunModuleMenu(cmd.Context(), s)
+			}
+			if len(args) < 3 {
+				return fmt.Errorf("用法: md m <start|stop|restart> <1(soc1)|2(soc2)> <模块名...>")
+			}
+			return s.ModCtl(cmd.Context(), args[0], args[1], args[2:])
 		},
 	}
 }
