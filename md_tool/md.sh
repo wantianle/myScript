@@ -666,16 +666,38 @@ svc::manage(){
     case "$2" in
         "soc1")
             log_info "$action soc1 mdrive service..."
+            if [[ "$action" == "stop" ]]; then
+                log_info "停止 mdrive 服务（数据盘 chown 耗时可能导致 30-60s 等待）..."
+            fi
             sudo systemctl $action mdrive.service
+            if [[ "$action" == "stop" ]]; then
+                # 停止确认轮询（最多约 12 秒），一旦非 active 即视为已停
+                for ((i=0; i<12; i++)); do
+                    systemctl is-active --quiet mdrive.service || break
+                    sleep 1
+                done
+                if systemctl is-active --quiet mdrive.service; then
+                    log_warn "[soc1] mdrive.service 停止超时，可能仍在退出中（数据盘 chown 耗时较长），继续前请确认"
+                fi
+            fi
             svc::check soc1
             ;;
         "soc2")
             log_info "$action soc2 mdrive service..."
+            if [[ "$action" == "stop" ]]; then
+                log_info "停止 mdrive 服务（数据盘 chown 耗时可能导致 30-60s 等待）..."
+            fi
             ssh "${SSH_OPTS[@]}" "$SOC2_IP" "timeout 15 sudo systemctl $action mdrive.service"
+            if [[ "$action" == "stop" ]]; then
+                # 远端停止确认轮询（最多约 12 秒），ssh 返回 0 表示仍 active
+                if ssh "${SSH_OPTS[@]}" "$SOC2_IP" 'for i in $(seq 1 12); do systemctl is-active --quiet mdrive.service || exit 1; sleep 1; done'; then
+                    log_warn "[soc2] mdrive.service 停止超时，可能仍在退出中（数据盘 chown 耗时较长），继续前请确认"
+                fi
+            fi
             svc::check soc2
             ;;
     esac
-
+    return 0
 }
 
 
