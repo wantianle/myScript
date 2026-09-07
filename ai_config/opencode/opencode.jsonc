@@ -66,11 +66,6 @@
           "cost":   { "input": 1.25, "output": 7.50 },
           "limit":  { "context":  1050000,   "output": 128000 }
         },
-        "gpt-5.6": {
-          "name": "gpt-5.6",
-          "cost":   { "input": 1.00, "output": 5.00 },
-          "limit":  { "context":  1050000,   "output": 128000 }
-        },
         "gpt-5.6-luna": {
           "name": "gpt-5.6-luna",
           "cost":   { "input": 0.05, "output": 0.30 },
