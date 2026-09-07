@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"mdrive/md/internal/remote"
+
+	"github.com/spf13/cobra"
 )
 
 // osStderr returns the standard error writer (used for streamed command
@@ -51,6 +53,20 @@ func argOr(args []string, i int, fallback string) string {
 
 // stdoutP writes to stdout.
 func stdoutP(s string) (int, error) { return fmt.Fprint(os.Stdout, s) }
+
+// flagYes reports whether the global --yes flag is set. It is a persistent
+// flag on the root command, so a subcommand reads it through its inherited
+// (merged) flag set.
+func flagYes(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	v, err := cmd.Flags().GetBool("yes")
+	if err != nil {
+		return false
+	}
+	return v
+}
 
 // stdoutfd returns the stdout file descriptor for terminal checking.
 func stdoutfd() uintptr { return os.Stdout.Fd() }

@@ -42,9 +42,11 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 	}
 	// Global flags for scripted use (P1 pipe streaming). --quiet suppresses
 	// non-error log lines so `md check --quiet` or `md status --quiet` leaves a
-	// stable stderr of only ERRORs next to the stdout payload.
-	var quiet bool
+	// stable stderr of only ERRORs next to the stdout payload. --yes skips an
+	// interactive confirm on upgrade/install/rollback (scripted, non-TTY use).
+	var quiet, yes bool
 	root.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress non-error log output (INFO/WARN)")
+	root.PersistentFlags().BoolVar(&yes, "yes", false, "assume yes for the upgrade/install/rollback confirm")
 	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if quiet {
 			log.SetQuiet(true)
@@ -303,10 +305,19 @@ func upgradeCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 			prePassed := s.PreCheck(cmd.Context()) == nil
 			// The Bash version always prompts (md.sh:1419-1424): y/回车继续,
 			// and only 'f' continues when the pre-check failed. Never run this
-			// destructive upgrade without an explicit confirm (P0-4).
-			confirm := readLineStdin()
+			// destructive upgrade without an explicit confirm (P0-4). --yes
+			// skips the confirm only when the pre-check passed; a failed
+			// pre-check still needs an explicit 'f' — never force a destructive
+			// upgrade off a red pre-check just because of --yes.
+			confirm := ""
+			if !flagYes(cmd) {
+				confirm = readLineStdin()
+			} else if !prePassed {
+				vf.Log.Err("升级前检查未通过，不能依赖 --yes 强制继续 (需要 'f')")
+				return fmt.Errorf("已取消升级")
+			}
 			if prePassed {
-				if confirm != "y" && confirm != "Y" && confirm != "" {
+				if confirm != "y" && confirm != "Y" && confirm != "" && confirm != "f" {
 					vf.Log.Err("已取消升级")
 					return fmt.Errorf("已取消升级") // md.sh returns 1 on cancel (md.sh:1421)
 				}
@@ -336,7 +347,7 @@ func installCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 			// (vmc::install with an arg, md.sh:1975-1983).
 			if len(args) == 1 {
 				version := args[0]
-				if !(vmcflow.Confirm{Response: readLineStdin()}).Ask() {
+				if !flagYes(cmd) && !(vmcflow.Confirm{Response: readLineStdin()}).Ask() {
 					vf.Log.Warn("已取消安装")
 					return fmt.Errorf("已取消安装") // md.sh:1986 returns 1 on cancel
 				}
@@ -399,12 +410,14 @@ func rollbackCmd(vf *vmcflow.VMC) *cobra.Command {
 				return fmt.Errorf("未搜索到可回滚版本")
 			}
 			// Auto-select the first (newest) candidate. The interactive picker
-			// is a CLI-layer enhancement; confirm reads stdin here.
+			// is a CLI-layer enhancement. --yes skips the confirm; otherwise it
+			// reads stdin, and a cancel exits non-zero (md.sh returns 1).
 			sel := cands[0]
-			vf.Log.Warn("确定回滚 [%s] 到版本: %s ?", sel.Name, sel.Version)
-			confirm := vmcflow.Confirm{Response: readLineStdin()}
-			if !confirm.Ask() {
-				return nil
+			if !flagYes(cmd) {
+				vf.Log.Warn("确定回滚 [%s] 到版本: %s ?", sel.Name, sel.Version)
+				if !(vmcflow.Confirm{Response: readLineStdin()}).Ask() {
+					return fmt.Errorf("已取消回滚")
+				}
 			}
 			return vf.InstallRollback(cmd.Context(), sel, nil)
 		},
