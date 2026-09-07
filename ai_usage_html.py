@@ -83,14 +83,16 @@ def _parse_iso_date(date_str: str) -> str:
 
 # ── local cost estimation ────────────────────────────────────────────────────
 
-# GPT 家族 = 官方价 × 2折 (×0.2)（官方 Standard 短上下文 2026-09-07 抓取）。
-# 注意 gpt-6-astra / gpt-5.6 系 >272K 输入会触发 2 倍计价，此处未折算（建议按整单计）。
+# GPT 家族 = 官方价 × 2折 (×0.2)（官方 Standard 短档 <272K，2026-09-07 重核）。
+#   官方价：gpt-5.4 2.50/15, gpt-5.5 5/30, 5.6 系 4/20,2/12,0.20/1.20, astra 10/50。
+#   注意 >272K 输入触发 2 倍计价（input×2、output×1.5），此处未折算。
+# DeepSeek = 官方峰价；qwen = 中国 CNY 换算 USD；glm = 官方列表价。
 RAW_MODEL_PRICING = {
-    "deepseek-v4-pro": {"input": 0.057, "output": 3.857},
-    "deepseek-v4-flash": {"input": 0.019, "output": 1.286},
-    "deepseek-v4-flash-vision-exp": {"input": 0.019, "output": 1.286},
+    "deepseek-v4-pro": {"input": 1.32, "output": 3.96},
+    "deepseek-v4-flash": {"input": 0.44, "output": 1.32},
+    "deepseek-v4-flash-vision-exp": {"input": 0.44, "output": 1.32},
     "glm-5.3-flash": {"input": 0.15, "output": 0.50},
-    "qwen3.8-flash": {"input": 0.15, "output": 0.47},
+    "qwen3.8-flash": {"input": 0.11, "output": 0.38},
     "gpt-5.4": {"input": 0.50, "output": 3.00},
     "gpt-5.5": {"input": 1.00, "output": 6.00},
     "gpt-5.6-luna": {"input": 0.04, "output": 0.24},
@@ -104,7 +106,7 @@ MODEL_PRICING = {
     for name, price in RAW_MODEL_PRICING.items()
 }
 
-# 历史残留 / 别名：这些模型无独立价，映射到同系正式价。gpt-5.6(裸名) 即 gpt-5.6-sol 别名。
+# 别名：gpt-5.6(裸名) 即 gpt-5.6-sol。
 MODEL_ALIAS = {
     "gpt-5.6": "gpt-5.6-sol",
 }
