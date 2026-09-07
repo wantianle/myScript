@@ -67,8 +67,8 @@ func TestExportPickerCtrlAToggleOff(t *testing.T) {
 
 func TestExportPickerEscCancels(t *testing.T) {
 	m := update(t, newTestPicker(),
-		tea.KeyMsg{Type: tea.KeyTab},  // select current "a/b"
-		tea.KeyMsg{Type: tea.KeyEsc},  // cancel -> clear selection
+		tea.KeyMsg{Type: tea.KeyTab}, // select current "a/b"
+		tea.KeyMsg{Type: tea.KeyEsc}, // cancel -> clear selection
 	)
 	if got := m.selected(); got != nil {
 		t.Errorf("esc cancel should yield nil, got %v", got)

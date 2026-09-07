@@ -1,5 +1,5 @@
 // Package platform centralises the "which machine am I and how do I reach the
-// other soc" logic that md.sh scatters across the tool. It answers three
+// other soc" logic that md.sh scatters across the tool. It answers the two
 // questions the dual-soc routing (P2) needs:
 //
 //   - Identity: is the current host soc1, soc2, or neither (a PC / x86
@@ -8,9 +8,6 @@
 //     for the exact membership and the rationale from startup_orin.sh :85-128).
 //   - Topology: given the current host, resolve a logical soc target into a
 //     concrete execution endpoint (local or over ssh to a specific host).
-//   - Capabilities: describe what tools a platform actually has (systemd,
-//     supervisor, data mount, channel viewer) so commands can give a targeted
-//     error instead of a bare "command not found" in a container.
 //
 // The package keeps identity detection injectable (a command runner) so it is
 // unit-testable without spawning `ip`, matching how svc tests inject a fake

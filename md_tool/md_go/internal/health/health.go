@@ -86,20 +86,6 @@ func RowFreeGB(dfOutput string) (int, bool) {
 	return FreeGB(fields[3])
 }
 
-// Mounted reports whether an entry for path exists in a `/proc/mounts` or
-// `mountpoint -q`-style input. Given the classical `mountpoint -q <path>`
-// exit-code probe, this function instead inspects captured /proc/mounts text:
-// it looks for a line whose mount point equals path. ok=false when absent.
-func Mounted(procMounts, path string) bool {
-	for _, line := range strings.Split(procMounts, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[1] == path {
-			return true
-		}
-	}
-	return false
-}
-
 // ReadOnly reports whether a `/proc/mounts` line for path carries the `ro`
 // mount option (md.sh:1169 `grep "$MOUNT_ROOT" /proc/mounts | grep -q " ro,"`).
 // The match is the substring " ro," against the options field.

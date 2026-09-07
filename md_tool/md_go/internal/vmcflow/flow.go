@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"mdrive/md/internal/svc"
 	"mdrive/md/internal/vmc"
 )
 
@@ -365,7 +364,3 @@ func unwrap(s string) string {
 	}
 	return s
 }
-
-// moduleSOC is a helper re-export so callers use the svc resolver for rollback
-// soc args if needed. Kept minimal.
-var _ = svc.ResolveSOCArg

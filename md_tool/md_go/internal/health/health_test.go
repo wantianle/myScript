@@ -71,16 +71,6 @@ func TestRowUsedPctBad(t *testing.T) {
 	}
 }
 
-func TestMounted(t *testing.T) {
-	pm := "/dev/nvme0n1p1 /media/data ext4 rw,relatime 0 0\n/dev/sda1 /boot ext4 ro,relatime 0 0\n"
-	if !Mounted(pm, "/media/data") {
-		t.Error("Mounted should find /media/data")
-	}
-	if Mounted(pm, "/nope") {
-		t.Error("Mounted should not find /nope")
-	}
-}
-
 func TestReadOnly(t *testing.T) {
 	pm := "/dev/nvme0n1p1 /media/data ext4 rw,relatime 0 0\n"
 	if ReadOnly(pm, "/media/data") {

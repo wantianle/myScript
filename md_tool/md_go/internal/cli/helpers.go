@@ -16,10 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// osStderr returns the standard error writer (used for streamed command
-// output that should not be buffered).
-func osStderr() io.Writer { return os.Stderr }
-
 // errBadSOC returns the invalid-soc error text md.sh emits.
 func errBadSOC(arg string) error {
 	return fmt.Errorf("无效 SOC 参数: %s（仅支持 1/soc1/2/soc2，缺省=soc1）", arg)
