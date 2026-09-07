@@ -56,24 +56,26 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 	}
 
 	root.AddCommand(
-		manageCmd(s, "start"),
-		manageCmd(s, "stop"),
-		manageCmd(s, "restart"),
 		channelCmd(s),
 		recordCmd(s),
 		remoteCmd(),
-		checkCmd(s),
 		moduleCmd(s),
 		exportCmd(cfg, log),
 	)
 
-	// Commands whose authority is host systemd/journald (status/log) or the vmc
-	// OTA channel (install/upgrade/rollback) are only meaningful on a vehicle
-	// soc. In a container (req4 slim tool) there is no systemd-as-PID1 and no
-	// journald, and no OTA install use, so these are not registered — the
-	// container keeps only the supervisor/service management surface.
+	// Commands whose authority is the vehicle host (systemd/mdrive.service for
+	// start/stop/restart/status, journald for log, env self-check for check) or
+	// the vmc OTA channel (install/upgrade/rollback) are only meaningful on a
+	// vehicle soc. In a container (req4 slim tool) there is no systemd-as-PID1,
+	// no journald, and no OTA install use, so these are not registered — the
+	// container keeps the supervisor/service surface (md m + module actions)
+	// and the channel/record/remote/export surface.
 	if !platform.IsContainer() {
 		root.AddCommand(
+			manageCmd(s, "start"),
+			manageCmd(s, "stop"),
+			manageCmd(s, "restart"),
+			checkCmd(s),
 			statusCmd(s),
 			logCmd(s),
 			upgradeCmd(vf, s),
