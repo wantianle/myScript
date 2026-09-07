@@ -136,6 +136,7 @@ func (s *Svc) manageOne(ctx context.Context, action, soc string) {
 	if sh == nil {
 		return
 	}
+	defer sh.Close()
 
 	s.log.Info("%s %s mdrive service...", action, soc)
 	if action == "stop" {
@@ -196,6 +197,7 @@ func (s *Svc) Check(ctx context.Context, soc string) error {
 		// `md status 2` exits non-zero when the remote is down.
 		return fmt.Errorf("[%s] 无法连接目标，无法查询服务状态", soc)
 	}
+	defer sh.Close()
 
 	// "both" resolves into two concrete reports.
 	if soc == "both" {
@@ -238,6 +240,7 @@ func (s *Svc) Recorder(ctx context.Context, action string) error {
 	if sh == nil {
 		return fmt.Errorf("无法建立 soc2 连接")
 	}
+	defer sh.Close()
 
 	// Disk pre-check (md.sh:755-769), always run.
 	diskReady := s.checkRecorderDisk(ctx, sh)
@@ -310,6 +313,7 @@ func (s *Svc) Log(ctx context.Context, soc string, w io.Writer) error {
 	if sh == nil {
 		return fmt.Errorf("无法建立 %s 连接", soc)
 	}
+	defer sh.Close()
 	const cmd = "sudo journalctl -eu mdrive.service --since \"5 min ago\" -f " +
 		"--no-pager | grep --line-buffered -v -E \"ptp4l|phc2sys|mdrive_driver_camera\""
 	chunks, errs := sh.Stream(ctx, cmd)
@@ -345,6 +349,7 @@ func (s *Svc) Channel(ctx context.Context, soc string) error {
 		if sh == nil {
 			return fmt.Errorf("无法启动本地 dtop")
 		}
+		defer sh.Close()
 		return sh.Interactive(ctx, "dtop")
 	}
 	if soc == "soc2" || soc == "2" {
@@ -352,6 +357,7 @@ func (s *Svc) Channel(ctx context.Context, soc string) error {
 		if sh == nil {
 			return fmt.Errorf("无法建立 soc2 连接")
 		}
+		defer sh.Close()
 		return sh.Interactive(ctx, interactiveSoc2())
 	}
 	return fmt.Errorf("无效 SOC 参数: %s（仅支持 1/soc1/2/soc2，缺省=soc1）", soc)

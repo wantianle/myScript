@@ -3,6 +3,7 @@ package vmcflow
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,5 +180,45 @@ func TestPrepPkgDirEmptyPkgNoop(t *testing.T) {
 	vmcNew(r).prepPkgDir(context.Background(), "")
 	if called {
 		t.Error("empty pkg must not run any command")
+	}
+}
+
+func TestCleanWarnsOnNearlyFull(t *testing.T) {
+	// df -P header + a data row with 95% used on the project dir.
+	dfOut := "Filesystem 1024-blocks Used Available Capacity Mounted-on\n/dev/sda 100000 95000 5000 95% /mnt/ufs_data/project\n"
+	var buf bytes.Buffer
+	r := func(ctx context.Context, name string, args ...string) (string, string, int, error) {
+		for _, a := range args {
+			if a == "/mnt/ufs_data/project" {
+				return dfOut, "", 0, nil
+			}
+		}
+		return "", "", 0, fmt.Errorf("no such mount")
+	}
+	v := vmcNew(r)
+	v.Cfg.MDriveDataRoot = "/mnt/ufs_data/project"
+	v.Log = logx.NewWithWriter(&buf)
+	if err := v.Clean(context.Background()); err != nil {
+		t.Fatalf("Clean: %v", err)
+	}
+	if !strings.Contains(buf.String(), "已使用 95%") {
+		t.Errorf("expected a warning for 95%% used, got: %q", buf.String())
+	}
+}
+
+func TestCleanSilentWhenPlenty(t *testing.T) {
+	dfOut := "Filesystem 1024-blocks Used Available Capacity Mounted-on\n/dev/sda 100000 20000 80000 20% /\n"
+	var buf bytes.Buffer
+	r := func(ctx context.Context, name string, args ...string) (string, string, int, error) {
+		return dfOut, "", 0, nil
+	}
+	v := vmcNew(r)
+	v.Cfg.MDriveDataRoot = "/mnt/ufs_data/project"
+	v.Log = logx.NewWithWriter(&buf)
+	if err := v.Clean(context.Background()); err != nil {
+		t.Fatalf("Clean: %v", err)
+	}
+	if strings.Contains(buf.String(), "告警") {
+		t.Errorf("expected no warning when disk has plenty of space, got: %q", buf.String())
 	}
 }

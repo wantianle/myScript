@@ -28,6 +28,7 @@ func (s *Svc) PreCheck(ctx context.Context) error {
 		s.log.Err("请检查 soc2 供电/网线 (ping %s)，恢复后重试", s.cfg.SOC2IP)
 		return fmt.Errorf("soc2 不可达")
 	}
+	defer soc2sh.Close()
 	if _, err := soc2sh.Exec(ctx, "exit"); err != nil {
 		s.log.Err("[网络] SOC2: 断开")
 		s.log.Err("请检查 soc2 供电/网线 (ping %s)，恢复后重试", s.cfg.SOC2IP)
@@ -38,6 +39,7 @@ func (s *Svc) PreCheck(ctx context.Context) error {
 	// --- Network server (soft fail, md.sh:1755-1761) ---
 	local := s.shellOr("soc1", ctx)
 	if local != nil {
+		defer local.Close()
 		if out, err := local.Exec(ctx, fmt.Sprintf("ping -c 1 -W 1 %s", s.cfg.ServerIP)); err != nil || out.Code != 0 {
 			s.log.Info("[网络] %s: 断开", s.cfg.ServerIP)
 			pass = false

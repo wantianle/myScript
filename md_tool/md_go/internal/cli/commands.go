@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -24,10 +25,11 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 	log := logx.New()
 	s := svc.New(cfg, log)
 	vf := vmcflow.New(vmcflow.Cfg{
-		RemotesPath: remotePath(),
-		MDriveCache: cfg.MDriveCache,
-		MountRoot:   cfg.MountRoot,
-		DefaultUser: defaultUser(cfg),
+		RemotesPath:    remotePath(),
+		MDriveCache:    cfg.MDriveCache,
+		MountRoot:      cfg.MountRoot,
+		MDriveDataRoot: cfg.MDriveDataRoot,
+		DefaultUser:    defaultUser(cfg),
 	}, log, s)
 
 	root := &cobra.Command{
@@ -227,7 +229,15 @@ func moduleCmd(s *svc.Svc) *cobra.Command {
 			if len(args) < 3 {
 				return fmt.Errorf("用法: md m <start|stop|restart> <1(soc1)|2(soc2)> <模块名...>")
 			}
-			return s.ModCtl(cmd.Context(), args[0], args[1], args[2:])
+			if err := s.ModCtl(cmd.Context(), args[0], args[1], args[2:]); err != nil {
+				// The batch failure count is the process exit code (md.sh:849-850).
+				var mbe *svc.ModuleBatchError
+				if errors.As(err, &mbe) {
+					return &ExitError{Code: mbe.Count, Err: err}
+				}
+				return err
+			}
+			return nil
 		},
 	}
 }
@@ -257,12 +267,12 @@ func upgradeCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 			if prePassed {
 				if confirm != "y" && confirm != "Y" && confirm != "" {
 					vf.Log.Err("已取消升级")
-					return nil
+					return fmt.Errorf("已取消升级") // md.sh returns 1 on cancel (md.sh:1421)
 				}
 			} else {
 				if confirm != "f" {
 					vf.Log.Err("已取消升级")
-					return nil
+					return fmt.Errorf("已取消升级") // md.sh:1424
 				}
 			}
 			port := vmcflow.UpgradePort{PreCheckPassed: prePassed, Confirm: confirm}
@@ -287,7 +297,7 @@ func installCmd(vf *vmcflow.VMC, s *svc.Svc) *cobra.Command {
 				version := args[0]
 				if !(vmcflow.Confirm{Response: readLineStdin()}).Ask() {
 					vf.Log.Warn("已取消安装")
-					return nil
+					return fmt.Errorf("已取消安装") // md.sh:1986 returns 1 on cancel
 				}
 				// Bash finstall path (md.sh:1975-1983) never runs flow::pre; drop
 				// the PreCheck the single-version path had added (P1-6).
@@ -343,7 +353,9 @@ func rollbackCmd(vf *vmcflow.VMC) *cobra.Command {
 				return err
 			}
 			if len(cands) == 0 {
-				return nil // already logged "未搜索到"
+				// md.sh returns 1 when nothing is found (md.sh:1709) — a script
+				// must be able to distinguish "no rollback" from success.
+				return fmt.Errorf("未搜索到可回滚版本")
 			}
 			// Auto-select the first (newest) candidate. The interactive picker
 			// is a CLI-layer enhancement; confirm reads stdin here.

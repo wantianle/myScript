@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"mdrive/md/internal/health"
 	"mdrive/md/internal/logx"
 	"mdrive/md/internal/remote"
 	"mdrive/md/internal/runner"
@@ -33,10 +34,11 @@ type VMC struct {
 // Cfg holds the config inputs the flows read (subset of config.Config that is
 // relevant here, kept small for test injection).
 type Cfg struct {
-	RemotesPath string // ~/.md_remotes
-	MDriveCache string // /mdrive/.cache
-	MountRoot   string // /media/data
-	DefaultUser string
+	RemotesPath    string // ~/.md_remotes
+	MDriveCache    string // /mdrive/.cache
+	MountRoot      string // /media/data
+	MDriveDataRoot string // MDRIVE_DATA_ROOT (project data dir)
+	DefaultUser    string
 }
 
 // runFunc runs one local command and returns its output (a thin wrapper over
@@ -198,14 +200,29 @@ func (c Confirm) Ask() bool {
 	return c.Response != "n" && c.Response != "N"
 }
 
-// Clean frees low space on the cache before an install if needed
-// (sys::clean :572-582). It prompts only when free space < 5GB.
+// Clean is a read-only disk-space probe (user-approved replacement for the
+// destructive sys::clean). It checks the three primary data mounts — /, the
+// mdrive project dir, and /media/data/data — and warns when a mount has ≤10%
+// space remaining (>=90% used), since a nearly-full disk breaks OTA/installs.
+// It never deletes anything.
 func (v *VMC) Clean(ctx context.Context) error {
-	// This requires the svc layer's disk_free_gb probe on the local cache. The
-	// Bash version reads the free GB and prompts Y/n then clears the data
-	// subdir. For the Go migration the data-clear is a risk step; we keep it
-	// but only act when free space is genuinely low.
-	_ = ctx
+	dirs := []string{"/", v.Cfg.MDriveDataRoot, "/media/data/data"}
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		out, _, _, err := v.Runner(ctx, "df", "-P", dir)
+		if err != nil {
+			continue // unreadable mount — skip, don't false-warn
+		}
+		used, ok := health.RowUsedPct(out)
+		if !ok {
+			continue
+		}
+		if used >= 90 {
+			v.Log.Warn("磁盘空间告警: %s 已使用 %d%%, 剩余空间不足 10%%, 可能影响 OTA/安装", dir, used)
+		}
+	}
 	return nil
 }
 

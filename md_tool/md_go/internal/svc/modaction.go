@@ -15,6 +15,7 @@ func (s *Svc) RunModuleAction(ctx context.Context, soc, mod, action string) erro
 	if sh == nil {
 		return fmt.Errorf("[%s] 无法建立连接", soc)
 	}
+	defer sh.Close()
 	s.log.Info("正在对 [%s] %s 执行 %s...", soc, mod, action)
 
 	cmd := fmt.Sprintf("sudo supervisorctl %s %s", action, mod)
@@ -76,9 +77,20 @@ func (s *Svc) ModCtl(ctx context.Context, action, socArg string, mods []string) 
 		}
 	}
 	if fail > 0 {
-		return fmt.Errorf("%d 个模块操作失败", fail)
+		// Bash svc::mod_ctl returns the failure count N as the exit code
+		// (md.sh:849-850), so a wrapper script can distinguish partial failure.
+		return &ModuleBatchError{Count: fail}
 	}
 	return nil
+}
+
+// ModuleBatchError reports how many modules failed in a batch action. The CLI
+// uses Count as the process exit code (mirroring md.sh), so a script can
+// distinguish "all ok" (0) from "N failed" (N).
+type ModuleBatchError struct{ Count int }
+
+func (e *ModuleBatchError) Error() string {
+	return fmt.Sprintf("%d 个模块操作失败", e.Count)
 }
 
 // HandleSelectedRow parses one ANSI-stripped selected row and dispatches the

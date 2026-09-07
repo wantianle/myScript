@@ -109,6 +109,7 @@ func (s *Svc) FetchModules(ctx context.Context) ([]ModuleRow, error) {
 			continue
 		}
 		out, err := sh.Exec(ctx, "sudo supervisorctl status 2>/dev/null")
+		sh.Close()
 		if err != nil {
 			continue
 		}
