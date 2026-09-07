@@ -41,7 +41,9 @@
 - 能在当前机器运行 `./md --version`。
 - `make cross` 产出 `dist/md_linux_amd64` 和 `dist/md_linux_arm64`。
 
-## 阶段 1：tag 核心逻辑
+## 阶段 1：tag 核心逻辑（已废弃）
+
+> **DEPRECATED**：tag 层已在 Bash 版 c0faa60 整体删除（软链/completions/`/usr/local/bin/tag` symlink）。本阶段目标已取消，对应的 Go 侧 `internal/cli/tag.go` 与 `internal/app/session.go` 也一并删除（见设计审查 P0）。首个业务迁移改为 P1'：vmc 输出解析器 + 版本对比（internal/vmc），已由 G1 落地。
 
 目标：把 tag 的 JSON、列表、record 定位从 Bash/Python 迁移到 Go。
 
