@@ -228,6 +228,60 @@ func (s *Svc) Check(ctx context.Context, soc string) error {
 	return nil
 }
 
+// ServiceState is one soc's structured service status (for `md status --json`).
+type ServiceState struct {
+	SOC   string `json:"soc"`
+	State string `json:"state"` // "Running" / "Stopped or Failed" / "Unreachable"
+}
+
+// CheckStates returns the structured service state for every target soc. It
+// resolves "both" into soc1+soc2 (any failure ⇒ non-zero), fixing the old
+// Check-both quirk that swallowed the soc1 result (P4/#2). Unlike Check it never
+// logs per-soc status to stderr — it returns data so the CLI can render text or
+// JSON. On an unreachable soc the entry reports "Unreachable".
+func (s *Svc) CheckStates(ctx context.Context, soc string) ([]ServiceState, error) {
+	var targets []string
+	switch soc {
+	case "soc1", "1":
+		targets = []string{"soc1"}
+	case "soc2", "2":
+		targets = []string{"soc2"}
+	default:
+		targets = []string{"soc1", "soc2"}
+	}
+
+	states := make([]ServiceState, 0, len(targets))
+	var anyFail bool
+	for _, t := range targets {
+		st := s.oneState(ctx, t)
+		if st.State != "Running" {
+			anyFail = true
+		}
+		states = append(states, st)
+	}
+	if anyFail {
+		return states, fmt.Errorf("存在未运行的服务")
+	}
+	return states, nil
+}
+
+// oneState probes a single soc's mdrive.service state without logging.
+func (s *Svc) oneState(ctx context.Context, soc string) ServiceState {
+	sh := s.shellOr(soc, ctx)
+	if sh == nil {
+		return ServiceState{SOC: soc, State: "Unreachable"}
+	}
+	defer sh.Close()
+	out, err := sh.Exec(ctx, "systemctl is-active --quiet mdrive.service")
+	if err != nil {
+		return ServiceState{SOC: soc, State: "Unreachable"}
+	}
+	if out.Code != 0 {
+		return ServiceState{SOC: soc, State: "Stopped or Failed"}
+	}
+	return ServiceState{SOC: soc, State: "Running"}
+}
+
 // Recorder controls the soc2 Recorder (md.sh svc::recorder :736-782). action
 // defaults to "on". Only soc2 is targeted.
 func (s *Svc) Recorder(ctx context.Context, action string) error {

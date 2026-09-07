@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -66,6 +67,27 @@ func flagYes(cmd *cobra.Command) bool {
 		return false
 	}
 	return v
+}
+
+// flagJSON reports whether the global --json flag is set (machine-readable
+// output). Persistent, so read via the subcommand's merged flag set.
+func flagJSON(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	v, err := cmd.Flags().GetBool("json")
+	if err != nil {
+		return false
+	}
+	return v
+}
+
+// writeJSON marshals v to stdout as indented JSON (P4 --json output). Errors are
+// returned so the caller can exit non-zero.
+func writeJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }
 
 // stdoutfd returns the stdout file descriptor for terminal checking.

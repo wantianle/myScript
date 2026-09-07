@@ -44,9 +44,10 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 	// non-error log lines so `md check --quiet` or `md status --quiet` leaves a
 	// stable stderr of only ERRORs next to the stdout payload. --yes skips an
 	// interactive confirm on upgrade/install/rollback (scripted, non-TTY use).
-	var quiet, yes bool
+	var quiet, yes, jsonOut bool
 	root.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress non-error log output (INFO/WARN)")
 	root.PersistentFlags().BoolVar(&yes, "yes", false, "assume yes for the upgrade/install/rollback confirm")
+	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "emit machine-readable JSON instead of human text")
 	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if quiet {
 			log.SetQuiet(true)
@@ -107,7 +108,29 @@ func statusCmd(s *svc.Svc) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return s.Check(cmd.Context(), soc)
+			// Structured path: `md status --json` (and the text path) both use
+			// CheckStates so "both" aggregates soc1+soc2 with a real non-zero on
+			// any failure, fixing the old check that swallowed the soc1 result.
+			states, err := s.CheckStates(cmd.Context(), soc)
+			if err != nil {
+				// CheckStates returns states + a non-nil error when any soc is
+				// down; still render the states but surface the error to exit non-zero.
+				if flagJSON(cmd) {
+					_ = writeJSON(states)
+				} else {
+					for _, st := range states {
+						fmt.Fprintf(os.Stderr, "[%s]服务状态: %s\n", st.SOC, st.State)
+					}
+				}
+				return err
+			}
+			if flagJSON(cmd) {
+				return writeJSON(states)
+			}
+			for _, st := range states {
+				fmt.Fprintln(os.Stderr, "["+st.SOC+"]服务状态: "+st.State)
+			}
+			return nil
 		},
 	}
 }
