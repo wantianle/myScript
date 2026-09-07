@@ -273,7 +273,7 @@ func moduleCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
 		Use:     "m [list|<start|stop|restart> <1|2> <mod...>]",
 		Aliases: []string{"module", "mod"},
-		Short:   "Module operations (menu for TTY, list/action for scripted use)",
+		Short:   "Module operations (menu in a TTY, plain list otherwise; <cmd> <soc> <module...> acts)",
 		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// `md m list`/`ls`/`l` — scripted, plain-text module listing to stdout
