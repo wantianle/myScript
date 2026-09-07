@@ -96,11 +96,13 @@ type remoteShell struct {
 	client *sshx.Client
 }
 
-// NewRemote dials an sshx.Client to cfg.SOC2IP and returns a Shell for it. The
-// sshx ClientConfig defaults (User from $USER, KeyPath ~/.ssh/id_ed25519,
-// HostKeyCallback InsecureIgnoreHostKey) align with md.sh SSH_OPTS.
-func NewRemote(ctx context.Context, cfg config.Config) (Shell, error) {
-	client, err := sshx.Dial(ctx, sshx.ClientConfig{Host: cfg.SOC2IP})
+// NewRemote dials an sshx.Client to host and returns a Shell for it. host is
+// the resolved endpoint host (soc2's IP when run from soc1, soc1's IP when run
+// from soc2, from the platform.Topology). The sshx ClientConfig defaults (User
+// from $USER, KeyPath ~/.ssh/id_ed25519, HostKeyCallback InsecureIgnoreHostKey)
+// align with md.sh SSH_OPTS.
+func NewRemote(ctx context.Context, cfg config.Config, host string) (Shell, error) {
+	client, err := sshx.Dial(ctx, sshx.ClientConfig{Host: host})
 	if err != nil {
 		return nil, err
 	}

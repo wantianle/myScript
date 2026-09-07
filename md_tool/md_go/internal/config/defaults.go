@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	DefaultSOC1IP              = "192.168.10.2"
 	DefaultSOC2IP              = "192.168.10.3"
 	DefaultServerIP            = "ad.minieye.tech"
 	DefaultMountRoot           = "/media/data"
@@ -17,7 +18,19 @@ const (
 	DefaultMaxRecordLagSeconds = 60
 )
 
+// SOCID is the logical identity of the current host (md.sh's "which soi am I").
+// It mirrors the mgbe3_0-IP membership gauge in startup_orin.sh.
+type SOCID string
+
+const (
+	SOC1 SOCID = "soc1"
+	SOC2 SOCID = "soc2"
+	// SOCExternal is a host that is neither soc (a PC / x86 container / CI).
+	SOCExternal SOCID = "external"
+)
+
 type Config struct {
+	SOC1IP              string
 	SOC2IP              string
 	ServerIP            string
 	MountRoot           string
@@ -27,10 +40,13 @@ type Config struct {
 	MDriveDataRoot      string
 	MDriveCache         string
 	MaxRecordLagSeconds int
+	// SOCID is the current host identity. Empty means "detect from network".
+	SOCID SOCID
 }
 
 func Default() Config {
 	return Config{
+		SOC1IP:              DefaultSOC1IP,
 		SOC2IP:              DefaultSOC2IP,
 		ServerIP:            DefaultServerIP,
 		MountRoot:           DefaultMountRoot,
@@ -45,6 +61,7 @@ func Default() Config {
 
 func FromEnv() Config {
 	cfg := Default()
+	cfg.SOC1IP = envOrDefault("MDRIVE_SOC1_IP", cfg.SOC1IP)
 	cfg.SOC2IP = envOrDefault("MDRIVE_SOC2_IP", cfg.SOC2IP)
 	cfg.ServerIP = envOrDefault("MDRIVE_SERVER_IP", cfg.ServerIP)
 	cfg.MountRoot = envOrDefault("MDRIVE_MOUNT_ROOT", cfg.MountRoot)
@@ -53,6 +70,7 @@ func FromEnv() Config {
 	cfg.MDriveExportRoot = envOrDefault("MDRIVE_EXPORT_ROOT", cfg.MDriveExportRoot)
 	cfg.MDriveDataRoot = envOrDefault("MDRIVE_DATA_ROOT", cfg.MDriveDataRoot)
 	cfg.MDriveCache = envOrDefault("MDRIVE_CACHE", cfg.MDriveCache)
+	cfg.SOCID = SOCID(envOrDefault("MDRIVE_SOC_ID", string(cfg.SOCID)))
 
 	if raw := os.Getenv("MDRIVE_MAX_RECORD_LAG_SECONDS"); raw != "" {
 		if value, err := strconv.Atoi(raw); err == nil && value > 0 {

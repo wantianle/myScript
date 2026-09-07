@@ -27,6 +27,7 @@ import (
 
 	"mdrive/md/internal/config"
 	"mdrive/md/internal/logx"
+	"mdrive/md/internal/platform"
 )
 
 // ResolveSOCArg normalizes the user-supplied soc argument (md.sh
@@ -83,19 +84,23 @@ type Svc struct {
 	shell func(soc string, ctx context.Context) (Shell, error)
 }
 
-// New builds a Svc. The shell factory maps "soc1" to a local Shell and
-// "soc2" to a remote (ssh) Shell built from cfg.SOC2IP. A nil or
-// non-"soc1"/"soc2" soc yields a NewLocal shell (the Bash tool's default
-// implicit target).
+// New builds a Svc. The shell factory resolves each logical soc target through
+// platform.Topology, which uses the current host's identity (mgbe3_0 address
+// membership via MDRIVE_SOC_ID / MDRIVE_SOC*_IP) to decide local vs ssh. This
+// is what lets the tool run on soc1, on soc2, or from an external host (P2) —
+// a soc never ssh-es back to itself (md start on soc2 operates soc2 locally).
 func New(cfg config.Config, log *logx.Logger) *Svc {
+	self := platform.DetectIdentity(context.Background(), cfg)
+	tp := platform.NewTopology(cfg, self)
 	return &Svc{
 		cfg: cfg,
 		log: log,
 		shell: func(soc string, ctx context.Context) (Shell, error) {
-			if soc == "soc2" {
-				return NewRemote(ctx, cfg)
+			ep := tp.EndpointFor(soc)
+			if ep.Kind == platform.Local {
+				return NewLocal(), nil
 			}
-			return NewLocal(), nil
+			return NewRemote(ctx, cfg, ep.Host)
 		},
 	}
 }
