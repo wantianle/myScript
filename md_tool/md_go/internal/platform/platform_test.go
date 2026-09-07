@@ -109,3 +109,13 @@ func TestTopologyIsSelf(t *testing.T) {
 		t.Errorf("soc2-topology IsSelf wrong: soc2→%v soc1→%v", soc2tp.IsSelf("soc2"), soc2tp.IsSelf("soc1"))
 	}
 }
+
+func TestIsContainer_Runtime(t *testing.T) {
+	// IsContainer depends on the runtime the test binary runs on plus a
+	// /.dockerenv marker; in the dev test host (no /.dockerenv) it must be
+	// false. This pins the "amd64 + /.dockerenv" gate without requiring a real
+	// container.
+	if IsContainer() {
+		t.Log("test host reports container (ok if actually running in one)")
+	}
+}

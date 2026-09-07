@@ -20,7 +20,9 @@ package platform
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"mdrive/md/internal/config"
@@ -88,4 +90,17 @@ func containsAny(haystack string, needles []string) bool {
 		}
 	}
 	return false
+}
+
+// IsContainer reports whether the current host is running inside a container
+// (the x86 dev/sim environment). The signal is a /.dockerenv marker plus an
+// amd64 arch (the vehicle socs are arm64; an amd64 host without the marker is a
+// dev/CI PC, which is different). This is the req4 "slim tool" boundary: in a
+// container md only manages the local supervisor — it does not ssh to socs and
+// does not run vmc OTA (install/upgrade/rollback).
+func IsContainer() bool {
+	if _, err := os.Stat("/.dockerenv"); err != nil {
+		return false
+	}
+	return runtime.GOARCH == "amd64"
 }

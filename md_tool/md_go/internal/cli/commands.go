@@ -9,6 +9,7 @@ import (
 
 	"mdrive/md/internal/config"
 	"mdrive/md/internal/logx"
+	"mdrive/md/internal/platform"
 	"mdrive/md/internal/remote"
 	"mdrive/md/internal/svc"
 	"mdrive/md/internal/tui"
@@ -46,7 +47,7 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 	// interactive confirm on upgrade/install/rollback (scripted, non-TTY use).
 	var quiet, yes, jsonOut bool
 	root.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress non-error log output (INFO/WARN)")
-	root.PersistentFlags().BoolVar(&yes, "yes", false, "assume yes for the upgrade/install/rollback confirm")
+	root.PersistentFlags().BoolVar(&yes, "yes", false, "assume yes for confirm prompts (upgrade/install/rollback where available)")
 	root.PersistentFlags().BoolVar(&jsonOut, "json", false, "emit machine-readable JSON instead of human text")
 	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if quiet {
@@ -65,11 +66,20 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		remoteCmd(),
 		checkCmd(s),
 		moduleCmd(s),
-		upgradeCmd(vf, s),
-		installCmd(vf, s),
-		rollbackCmd(vf),
 		exportCmd(cfg, log),
 	)
+
+	// Slim tool in a container (req4): md only manages the local supervisor
+	// and views logs — it does not run vmc OTA (install/upgrade/rollback),
+	// because the container has no OTA install use and no vmc on PATH. Register
+	// the vmc commands only outside a container.
+	if !platform.IsContainer() {
+		root.AddCommand(
+			upgradeCmd(vf, s),
+			installCmd(vf, s),
+			rollbackCmd(vf),
+		)
+	}
 
 	return root
 }
