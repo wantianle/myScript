@@ -166,7 +166,12 @@ sys::_install_local_sudoers() {
 }
 
 sys::_install_remote_sudoers() {
-    local peer_ip=${1:-$SOC2_IP}
+    # P5 symmetrical rework passes ("<soc>", "<peer_ip>"); the ssh target must
+    # be the peer's IP, never the soc hostname (ssh resolves hostnames via DNS,
+    # not via ~/.ssh/config Host aliases when the alias isn't in the local
+    # config). $1 (soc name) is only a display label; $2 is the IP. Single-arg
+    # callers still work via the $1-is-IP fallback.
+    local peer_ip="${2:-${1:-$SOC2_IP}}"
     local encoded remote_cmd soc2_pass
     encoded=$(sys::_sudoers_content | base64 | tr -d '\n') || return 1
 
