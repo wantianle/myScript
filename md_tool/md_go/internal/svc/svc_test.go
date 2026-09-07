@@ -16,28 +16,31 @@ func bufferLog() (*logx.Logger, *bytes.Buffer) {
 	return logx.NewWithWriter(buf), buf
 }
 
-func TestResolveSOCArg(t *testing.T) {
+func TestResolveSOC(t *testing.T) {
 	tests := []struct {
 		in   string
+		def  string
+		req  bool
 		want string
 		ok   bool
 	}{
-		{"", "both", true},
-		{"soc1", "soc1", true},
-		{"1", "soc1", true},
-		{"soc2", "soc2", true},
-		{"2", "soc2", true},
-		{"both", "", false},
-		{"soc3", "", false},
-		{"abc", "", false},
+		{"", "both", false, "both", true},
+		{"", "soc1", false, "soc1", true},
+		{"", "", true, "", false}, // module op: empty + required errors
+		{"soc1", "both", false, "soc1", true},
+		{"1", "both", false, "soc1", true},
+		{"soc2", "both", false, "soc2", true},
+		{"2", "both", false, "soc2", true},
+		{"soc3", "both", false, "", false},
+		{"abc", "both", false, "", false},
 	}
 	for _, tt := range tests {
-		got, err := ResolveSOCArg(tt.in)
+		got, err := ResolveSOC(tt.in, tt.def, tt.req)
 		if tt.ok != (err == nil) {
-			t.Errorf("ResolveSOCArg(%q) err = %v, want ok=%v", tt.in, err, tt.ok)
+			t.Errorf("ResolveSOC(%q, %q, %v) err = %v, want ok=%v", tt.in, tt.def, tt.req, err, tt.ok)
 		}
 		if tt.ok && got != tt.want {
-			t.Errorf("ResolveSOCArg(%q) = %q, want %q", tt.in, got, tt.want)
+			t.Errorf("ResolveSOC(%q, %q, %v) = %q, want %q", tt.in, tt.def, tt.req, got, tt.want)
 		}
 	}
 }

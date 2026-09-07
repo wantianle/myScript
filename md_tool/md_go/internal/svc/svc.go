@@ -33,21 +33,28 @@ import (
 	"mdrive/md/internal/platform"
 )
 
-// ResolveSOCArg normalizes the user-supplied soc argument (md.sh
-// svc::_resolve_soc_arg :705-716). It returns "soc1", "soc2" or "both"; an
-// unusable value returns an error (the Bash version prints log_err to stderr
-// and returns 1).
-func ResolveSOCArg(arg string) (string, error) {
+// ResolveSOC normalizes a user-supplied soc argument (md.sh
+// svc::_resolve_soc_arg :705-716). It maps 1/soc1 → soc1 and 2/soc2 → soc2.
+// The empty string yields def (each command passes its own default — both for
+// service control, soc1 for log/channel) unless required is true, in which case
+// it errors. An unusable value always errors (the Bash version prints log_err
+// to stderr and returns 1); this replaces the old ResolveSOCArg/normalizeSOC/
+// resolveModuleSOC trio, which disagreed on the empty-arg default and let an
+// invalid arg silently become soc1 (normalizeSOC/channelCmd).
+func ResolveSOC(arg, def string, required bool) (string, error) {
 	switch arg {
 	case "", "soc1", "1":
 		if arg == "" {
-			return "both", nil
+			if required {
+				return "", fmt.Errorf("必须指定 SOC (1=soc1, 2=soc2)")
+			}
+			return def, nil
 		}
 		return "soc1", nil
 	case "soc2", "2":
 		return "soc2", nil
 	default:
-		return "", fmt.Errorf("无效 SOC 参数: %s（仅支持 1/soc1/2/soc2，缺省=双端）", arg)
+		return "", fmt.Errorf("无效 SOC 参数: %s（仅支持 1/soc1/2/soc2）", arg)
 	}
 }
 
@@ -417,7 +424,6 @@ func (s *Svc) Log(ctx context.Context, soc string, w io.Writer) error {
 // MD_CHANNEL_TOOL env var forces the choice (dtop|cyber_monitor) and bypasses
 // the probe; args are appended verbatim to the viewer command (P3).
 func (s *Svc) Channel(ctx context.Context, soc string, args []string) error {
-	soc = normalizeSOC(soc)
 	sh := s.shellOr(soc, ctx)
 	if sh == nil {
 		return fmt.Errorf("无法建立 %s 连接", soc)
@@ -459,16 +465,6 @@ func (s *Svc) resolveChannelTool(ctx context.Context, sh Shell, soc string) stri
 		return "cyber_monitor"
 	}
 	return "dtop"
-}
-
-// normalizeSOC maps 1/2/soc1/soc2 to the canonical soc name (default soc1).
-func normalizeSOC(soc string) string {
-	switch soc {
-	case "soc2", "2":
-		return "soc2"
-	default:
-		return "soc1"
-	}
 }
 
 // interactiveSoc2Prefix renders the env + source prefix for the soc2 channel

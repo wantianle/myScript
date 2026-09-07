@@ -65,7 +65,7 @@ func (s *Svc) ModCtl(ctx context.Context, action, socArg string, mods []string) 
 	default:
 		return fmt.Errorf("无效操作: %s (仅支持 start/stop/restart)", action)
 	}
-	soc, err := resolveModuleSOC(socArg)
+	soc, err := ResolveSOC(socArg, "", true)
 	if err != nil {
 		return err
 	}
@@ -119,17 +119,5 @@ func (s *Svc) HandleSelectedRow(ctx context.Context, rawLine, action string, ope
 		return s.RunModuleAction(ctx, soc, mod, action)
 	default:
 		return fmt.Errorf("未知动作: %s", action)
-	}
-}
-
-// resolveModuleSOC maps socArg (soc1|1|soc2|2) to a module target (md.sh:838-842).
-func resolveModuleSOC(socArg string) (string, error) {
-	switch socArg {
-	case "soc1", "1":
-		return "soc1", nil
-	case "soc2", "2":
-		return "soc2", nil
-	default:
-		return "", fmt.Errorf("无效 SOC: %s (1=soc1, 2=soc2)", socArg)
 	}
 }

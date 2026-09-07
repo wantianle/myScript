@@ -88,13 +88,13 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 	return root
 }
 
-// socArg parses an optional soc argument (default both) via svc.ResolveSOCArg.
+// socArg parses an optional soc argument (default both) via svc.ResolveSOC.
 func socArg(args []string) (string, error) {
 	arg := ""
 	if len(args) > 0 {
 		arg = args[0]
 	}
-	return svc.ResolveSOCArg(arg)
+	return svc.ResolveSOC(arg, "both", false)
 }
 
 func manageCmd(s *svc.Svc, action string) *cobra.Command {
@@ -155,11 +155,13 @@ func logCmd(s *svc.Svc) *cobra.Command {
 		Short: "Follow mdrive.service journal (default soc1)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			soc := "soc1"
-			if len(args) > 0 && (args[0] == "soc2" || args[0] == "2") {
-				soc = "soc2"
-			} else if len(args) > 0 && !(args[0] == "soc1" || args[0] == "1") {
-				return errBadSOC(args[0])
+			socArg := ""
+			if len(args) > 0 {
+				socArg = args[0]
+			}
+			soc, err := svc.ResolveSOC(socArg, "soc1", false)
+			if err != nil {
+				return err
 			}
 			// journal payload to stdout so `md log 2 | grep ...` works (P1, #1).
 			return s.Log(cmd.Context(), soc, os.Stdout)
@@ -176,11 +178,14 @@ func channelCmd(s *svc.Svc) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			soc := "soc1"
 			rest := args
-			if len(rest) > 0 && (rest[0] == "soc1" || rest[0] == "1") {
-				rest = rest[1:]
-			} else if len(rest) > 0 && (rest[0] == "soc2" || rest[0] == "2") {
-				soc = "soc2"
-				rest = rest[1:]
+			// The first arg is the viewer's when it is not a SOC token; only a
+			// literal 1/soc1/2/soc2 is consumed as the soc and stripped. Any
+			// other leading token stays in rest for the viewer (md c --topic x).
+			if len(rest) > 0 {
+				if resolved, err := svc.ResolveSOC(rest[0], "", false); err == nil {
+					soc = resolved
+					rest = rest[1:]
+				}
 			}
 			return s.Channel(cmd.Context(), soc, rest)
 		},

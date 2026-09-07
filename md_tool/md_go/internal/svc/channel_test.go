@@ -45,14 +45,18 @@ func TestResolveChannelToolEnvOverride(t *testing.T) {
 	}
 }
 
-func TestNormalizeSOC(t *testing.T) {
+func TestResolveSOCChannel(t *testing.T) {
 	cases := map[string]string{
 		"": "soc1", "soc1": "soc1", "1": "soc1",
 		"soc2": "soc2", "2": "soc2",
 	}
 	for in, want := range cases {
-		if got := normalizeSOC(in); got != want {
-			t.Errorf("normalizeSOC(%q) = %q, want %q", in, got, want)
+		got, err := ResolveSOC(in, "soc1", false)
+		if err != nil {
+			t.Errorf("ResolveSOC(%q) err = %v", in, err)
+		}
+		if got != want {
+			t.Errorf("ResolveSOC(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
