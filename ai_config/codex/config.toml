@@ -11,6 +11,7 @@ windows_wsl_setup_acknowledged = true
 model_context_window = 1000000
 model_auto_compact_token_limit = 900000
 
+model_catalog_json = "/home/mini/.codex/models.json"
 [model_providers.OpenAI]
 name = "OpenAI"
 base_url = "https://sub2api.minieye.tech"

@@ -9,9 +9,9 @@
     "size": "medium",
     "speed": 1
   },
-  "preset": "deepseek",
+  "preset": "lite",
   "presets": {
-    "openai": {
+    "pro": {
       "designer": {
         "mcps": [],
         "model": "minieye/gpt-5.6-terra",
@@ -67,7 +67,7 @@
         "variant": "xhigh"
       }
     },
-    "deepseek": {
+    "lite": {
       "designer": {
         "mcps": [],
         "model": "minieye/deepseek-v4-flash-vision-exp",
@@ -123,7 +123,7 @@
         "variant": "max"
       }
     },
-    "lite": {
+    "mix": {
       "designer": {
         "mcps": [],
         "model": "minieye/qwen3.8-flash",

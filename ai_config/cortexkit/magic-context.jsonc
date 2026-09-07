@@ -2,11 +2,11 @@
   "allow_home_project": true,
   "execute_threshold_percentage": 50,
   "historian": {
-    "opencode": {"model": "minieye/deepseek-v4-flash", "variant": "max"},
-    "pi": {"model": "minieye/deepseek-v4-flash", "thinking_level": "max"}
+    "opencode": {"model":"minieye/deepseek-v4-flash","variant": "max"},
+    "pi": {"model":"minieye/deepseek-v4-flash","thinking_level": "max"}
   },
   "dreamer": {
-    "opencode": {"model": "minieye/deepseek-v4-flash", "variant": "max"},
-    "pi": {"model": "minieye/deepseek-v4-flash", "thinking_level": "max"}
+    "opencode": {"model":"minieye/deepseek-v4-flash","variant": "max"},
+    "pi": {"model":"minieye/deepseek-v4-flash","thinking_level": "max"}
   }
 }

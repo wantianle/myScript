@@ -15,5 +15,30 @@
     "ENABLE_TOOL_SEARCH": "true"
   },
   "includeCoAuthoredBy": false,
-  "model": "claude-sonnet-4-5-20250929"
+  "model": "claude-sonnet-4-5-20250929",
+  "modelPicker": {
+    "options": [
+      {
+        "model": "qwen3.8-flash",
+        "label": "Qwen3.8 Flash",
+        "description": "Qwen3.8 Flash via Anthropic-compatible gateway"
+      },
+      {
+        "model": "deepseek-v4-flash",
+        "label": "DeepSeek V4 Flash",
+        "description": "DeepSeek V4 Flash via Anthropic-compatible gateway"
+      },
+      {
+        "model": "deepseek-v4-pro",
+        "label": "DeepSeek V4 Pro",
+        "description": "DeepSeek V4 Pro via Anthropic-compatible gateway"
+      },
+      {
+        "model": "deepseek-v4-flash-vision-exp",
+        "label": "DeepSeek V4 Flash Vision",
+        "description": "DeepSeek V4 Flash experimental vision model via Anthropic-compatible gateway"
+      }
+    ],
+    "replaceBuiltInOptions": false
+  }
 }

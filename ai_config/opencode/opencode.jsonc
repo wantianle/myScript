@@ -86,10 +86,6 @@
           "cost":   { "input": 0.50, "output": 3.00 },
           "limit":  { "context":  1050000,   "output": 128000 }
         },
-        "gpt-image-2": {
-          "name": "gpt-image-2",
-          "cost":   { "input": 2.00, "output": 7.50 }
-        },
         "qwen3.8-flash": {
           "name": "qwen3.8-flash",
           "cost":   { "input": 0.15, "output": 0.47 },
