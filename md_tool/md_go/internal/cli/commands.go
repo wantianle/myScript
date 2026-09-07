@@ -59,8 +59,6 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		manageCmd(s, "start"),
 		manageCmd(s, "stop"),
 		manageCmd(s, "restart"),
-		statusCmd(s),
-		logCmd(s),
 		channelCmd(s),
 		recordCmd(s),
 		remoteCmd(),
@@ -69,12 +67,15 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		exportCmd(cfg, log),
 	)
 
-	// Slim tool in a container (req4): md only manages the local supervisor
-	// and views logs — it does not run vmc OTA (install/upgrade/rollback),
-	// because the container has no OTA install use and no vmc on PATH. Register
-	// the vmc commands only outside a container.
+	// Commands whose authority is host systemd/journald (status/log) or the vmc
+	// OTA channel (install/upgrade/rollback) are only meaningful on a vehicle
+	// soc. In a container (req4 slim tool) there is no systemd-as-PID1 and no
+	// journald, and no OTA install use, so these are not registered — the
+	// container keeps only the supervisor/service management surface.
 	if !platform.IsContainer() {
 		root.AddCommand(
+			statusCmd(s),
+			logCmd(s),
 			upgradeCmd(vf, s),
 			installCmd(vf, s),
 			rollbackCmd(vf),
