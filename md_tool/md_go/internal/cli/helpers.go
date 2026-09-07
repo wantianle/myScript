@@ -52,6 +52,21 @@ func argOr(args []string, i int, fallback string) string {
 // stdoutP writes to stdout.
 func stdoutP(s string) (int, error) { return fmt.Fprint(os.Stdout, s) }
 
+// stdoutfd returns the stdout file descriptor for terminal checking.
+func stdoutfd() uintptr { return os.Stdout.Fd() }
+
+// isTerminal reports whether stdout is attached to a character device (a real
+// terminal). A non-TTY stdout means the caller is piping/redirecting, so a
+// full-screen TUI must degrade to plain text output rather than emit escape
+// sequences (P1 non-TTY guard).
+func isTerminal(fd uintptr) bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0 && fi.Mode()&os.ModeNamedPipe == 0
+}
+
 // readAllStdin reads everything from stdin into a string (the `md install`
 // version-lines input).
 func readAllStdin() (string, error) {

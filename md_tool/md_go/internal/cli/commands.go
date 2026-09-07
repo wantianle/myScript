@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -38,6 +39,16 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+	}
+	// Global flags for scripted use (P1 pipe streaming). --quiet suppresses
+	// non-error log lines so `md check --quiet` or `md status --quiet` leaves a
+	// stable stderr of only ERRORs next to the stdout payload.
+	var quiet bool
+	root.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress non-error log output (INFO/WARN)")
+	root.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if quiet {
+			log.SetQuiet(true)
+		}
 	}
 
 	root.AddCommand(
@@ -111,7 +122,8 @@ func logCmd(s *svc.Svc) *cobra.Command {
 			} else if len(args) > 0 && !(args[0] == "soc1" || args[0] == "1") {
 				return errBadSOC(args[0])
 			}
-			return s.Log(cmd.Context(), soc, osStderr())
+			// journal payload to stdout so `md log 2 | grep ...` works (P1, #1).
+			return s.Log(cmd.Context(), soc, os.Stdout)
 		},
 	}
 }
@@ -172,10 +184,11 @@ func remoteCmd() *cobra.Command {
 				return e
 			}
 			label := args[1] + " " + args[2] + " " + plat
+			// Human status to stderr so stdout stays machine-parseable (P1).
 			if added {
-				_, _ = stdoutP("已添加: " + label + "\n")
+				fmt.Fprintln(os.Stderr, "已添加: "+label)
 			} else {
-				_, _ = stdoutP("配置 [" + label + "] 已存在\n")
+				fmt.Fprintln(os.Stderr, "配置 ["+label+"] 已存在")
 			}
 			return nil
 		case args[0] == "del" && len(args) == 2:
@@ -184,7 +197,7 @@ func remoteCmd() *cobra.Command {
 				return e
 			}
 			if removed {
-				_, _ = stdoutP("分支 [" + args[1] + "] 远程配置已删除\n")
+				fmt.Fprintln(os.Stderr, "分支 ["+args[1]+"] 远程配置已删除")
 			}
 			return nil
 		default:
@@ -218,16 +231,27 @@ func checkCmd(s *svc.Svc) *cobra.Command {
 // <mod...>` it runs a headless batch action (G4-a ModCtl).
 func moduleCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
-		Use:     "m [<start|stop|restart> <1|2> <mod...>]",
+		Use:     "m [list|<start|stop|restart> <1|2> <mod...>]",
 		Aliases: []string{"module", "mod"},
-		Short:   "Module operations (menu with no args, batch action with args)",
+		Short:   "Module operations (menu for TTY, list/action for scripted use)",
 		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// `md m list`/`ls`/`l` — scripted, plain-text module listing to stdout
+			// (pipe-friendly; the menu path is TTY-only).
+			if len(args) == 1 && (args[0] == "list" || args[0] == "ls" || args[0] == "l") {
+				return moduleList(cmd.Context(), s)
+			}
 			if len(args) == 0 {
+				// Bubble Tea menu requires a real terminal; a non-TTY stdout would
+				// emit alt-screen escape bytes into the pipe. Degrade to the plain
+				// listing instead (P1 non-TTY guard).
+				if !isTerminal(stdoutfd()) {
+					return moduleList(cmd.Context(), s)
+				}
 				return tui.RunModuleMenu(cmd.Context(), s)
 			}
 			if len(args) < 3 {
-				return fmt.Errorf("用法: md m <start|stop|restart> <1(soc1)|2(soc2)> <模块名...>")
+				return fmt.Errorf("用法: md m <start|stop|restart> <1(soc1)|2(soc2)> <模块名...>，或 md m list")
 			}
 			if err := s.ModCtl(cmd.Context(), args[0], args[1], args[2:]); err != nil {
 				// The batch failure count is the process exit code (md.sh:849-850).
@@ -240,6 +264,23 @@ func moduleCmd(s *svc.Svc) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// moduleList prints the combined module status as plain text to stdout
+// (pipe-friendly, P1). It mirrors the TUI rows but without ANSI colors, so
+// `md m list | grep -i camera` works.
+func moduleList(ctx context.Context, s *svc.Svc) error {
+	rows, err := s.FetchModules(ctx)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		line := svc.StripANSI(r.Render(""))
+		if _, werr := stdoutP(line + "\n"); werr != nil {
+			return werr
+		}
+	}
+	return nil
 }
 
 // defaultUser mirrors md.sh's `id -un` fallback (the vmc install user).

@@ -24,8 +24,13 @@ const (
 
 // Logger writes md.sh-style prefixed messages.
 type Logger struct {
-	w io.Writer
+	w     io.Writer
+	quiet bool // suppress Info/Warn (P1 --quiet)
 }
+
+// SetQuiet suppresses non-error log lines (INFO/WARN) so scripts get a stable
+// stderr of only ERRORs alongside the stdout payload.
+func (l *Logger) SetQuiet(q bool) { l.quiet = q }
 
 // New returns a Logger writing to stderr (md.sh logs to stdout because the
 // whole tool's messages go there; the Go tool keeps stdout for command
@@ -40,13 +45,23 @@ func NewWithWriter(w io.Writer) *Logger {
 }
 
 // Info prints the [INFO] line (md.sh log_info).
-func (l *Logger) Info(format string, a ...any) { l.print(colBlue, "INFO", format, a...) }
+func (l *Logger) Info(format string, a ...any) {
+	if l.quiet {
+		return
+	}
+	l.print(colBlue, "INFO", format, a...)
+}
 
 // Ok prints the [OK] line (md.sh log_ok).
 func (l *Logger) Ok(format string, a ...any) { l.print(colGreen, "OK", format, a...) }
 
 // Warn prints the [WARNING] line (md.sh log_warn).
-func (l *Logger) Warn(format string, a ...any) { l.print(colYellow, "WARNING", format, a...) }
+func (l *Logger) Warn(format string, a ...any) {
+	if l.quiet {
+		return
+	}
+	l.print(colYellow, "WARNING", format, a...)
+}
 
 // Err prints the [ERROR] line (md.sh log_err).
 func (l *Logger) Err(format string, a ...any) { l.print(colRed, "ERROR", format, a...) }
