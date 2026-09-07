@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"strings"
 
 	"mdrive/md/internal/config"
@@ -31,7 +32,7 @@ func newServiceRoot(cfg config.Config, programName, version string) *cobra.Comma
 		MDriveCache:    cfg.MDriveCache,
 		MountRoot:      cfg.MountRoot,
 		MDriveDataRoot: cfg.MDriveDataRoot,
-		DefaultUser:    defaultUser(cfg),
+		DefaultUser:    defaultUser(),
 	}, log, s)
 
 	root := &cobra.Command{
@@ -325,12 +326,16 @@ func moduleList(ctx context.Context, s *svc.Svc) error {
 	return nil
 }
 
-// defaultUser mirrors md.sh's `id -un` fallback (the vmc install user).
-func defaultUser(cfg config.Config) string {
+// defaultUser mirrors md.sh's `id -un` fallback (the vmc install user). It
+// prefers the effective ssh user ($USER via user.Current), matching sshx, and
+// falls back to md.sh's nvidia default which is the vehicle's vmc install user.
+func defaultUser() string {
 	if u := os.Getenv("USER"); u != "" {
 		return u
 	}
-	// md.sh's nvidia default.
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
 	return "nvidia"
 }
 

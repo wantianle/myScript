@@ -113,11 +113,11 @@ func TestRenderCandidatesSortsDescending(t *testing.T) {
 	}
 }
 
-func TestPromptAccept(t *testing.T) {
-	if !promptAccept("") || !promptAccept("y") || !promptAccept("Y") {
+func TestConfirmAsk(t *testing.T) {
+	if !(Confirm{Response: ""}).Ask() || !(Confirm{Response: "y"}).Ask() || !(Confirm{Response: "Y"}).Ask() {
 		t.Error("y/empty should accept")
 	}
-	if promptAccept("n") || promptAccept("N") {
+	if (Confirm{Response: "n"}).Ask() || (Confirm{Response: "N"}).Ask() {
 		t.Error("n/N should reject")
 	}
 }

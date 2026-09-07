@@ -9,10 +9,6 @@ import (
 	"mdrive/md/internal/vmc"
 )
 
-// Upgrader is the interactive response reader abstraction for the confirm
-// prompts (md.sh's `read -r ans`). The CLI wires a real stdin-backed reader.
-type Prompt func(prompt string) (string, error)
-
 // Upgradable is one `pkg:lat_ver:branch:plat:cur_ver` item produced by
 // check_updates (md.sh:1342).
 type Upgradable struct {
@@ -74,7 +70,7 @@ type UpgradePort struct {
 // Upgrade runs the full upgrade flow (vmc::upgrade :1415-1502).
 func (v *VMC) Upgrade(ctx context.Context, port UpgradePort) error {
 	if port.PreCheckPassed {
-		if !promptAccept(port.Confirm) {
+		if !(Confirm{Response: port.Confirm}).Ask() {
 			v.Log.Err("已取消升级")
 			return nil
 		}
@@ -163,7 +159,7 @@ func (v *VMC) Upgrade(ctx context.Context, port UpgradePort) error {
 // targets are extracted the same way md.sh's _extract does.
 func (v *VMC) Install(ctx context.Context, inputText string, port UpgradePort) error {
 	if port.PreCheckPassed {
-		if !promptAccept(port.Confirm) {
+		if !(Confirm{Response: port.Confirm}).Ask() {
 			v.Log.Warn("已取消升级")
 			return nil
 		}
@@ -361,11 +357,6 @@ func (v *VMC) optionsFor(items []Upgradable, pkg string) []Upgradable {
 		}
 	}
 	return out
-}
-
-// promptAccept returns true for y/"" (md.sh `read -r -p`), false for n/N etc.
-func promptAccept(response string) bool {
-	return response != "n" && response != "N"
 }
 
 func unwrap(s string) string {
