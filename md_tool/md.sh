@@ -20,6 +20,7 @@ MOUNT_ROOT="/media/data"
 CONF_DIR_SOC1="/mdrive/mdrive_conf/supervisor/soc1/conf"
 CONF_DIR_SOC2="/mdrive/mdrive_conf/supervisor/soc2/conf"
 # 网络配置
+SOC1_IP="192.168.10.2"
 SOC2_IP="192.168.10.3"
 SSH_OPTS=(
     -o ConnectTimeout=2
@@ -136,6 +137,19 @@ nvidia ALL=(root) NOPASSWD: MDRIVE_SERVICE, MDRIVE_LOG, MDRIVE_SUPERVISOR, MDRIV
 EOF
 }
 
+# 探测本机 soc 身份（mgbe3_0 地址成员，与 startup_orin.sh 判定一致）。
+# soc1={172.168.16.101,192.168.1.100}，soc2={172.168.16.103,192.168.1.101}；
+# 非成员/不可判定返回空串（如外部 PC / 容器）。
+sys::_self_soc() {
+    local a
+    a=$(ip -4 addr show mgbe3_0 2>/dev/null)
+    if echo "$a" | grep -q -E "172\.168\.16\.101|192\.168\.1\.100"; then
+        printf "soc1"
+    elif echo "$a" | grep -q -E "172\.168\.16\.103|192\.168\.1\.101"; then
+        printf "soc2"
+    fi
+}
+
 sys::_install_local_sudoers() {
     local tmp status
     tmp=$(mktemp) || return 1
@@ -152,6 +166,7 @@ sys::_install_local_sudoers() {
 }
 
 sys::_install_remote_sudoers() {
+    local peer_ip=${1:-$SOC2_IP}
     local encoded remote_cmd soc2_pass
     encoded=$(sys::_sudoers_content | base64 | tr -d '\n') || return 1
 
@@ -180,11 +195,39 @@ EOF
 )
     fi
 
-    ssh "${SSH_OPTS[@]}" -t "$USER@$SOC2_IP" "$remote_cmd"
+    ssh "${SSH_OPTS[@]}" -t "$USER@$peer_ip" "$remote_cmd"
+}
+
+# 解析一个逻辑 soc 目标的执行地址：本机是 soc1 则 soc2 走 $SOC2_IP；本机是 soc2
+# 则 soc1 走 $SOC1_IP；目标==本机返回空（表示本地执行，不 ssh 回自己）。
+# 输出为 IP 或空串；外部/未知本机身份时非本机 soc 走其对端 IP（安全默认）。
+sys::_target_ip() {
+    local target=$1 self
+    self=$(sys::_self_soc)
+    case "$self" in
+        "soc1")
+            if [[ "$target" == "soc2" ]]; then printf "$SOC2_IP"; fi ;;
+        "soc2")
+            if [[ "$target" == "soc1" ]]; then printf "$SOC1_IP"; fi ;;
+        *)
+            if [[ "$target" == "soc1" ]]; then printf "$SOC1_IP"; else printf "$SOC2_IP"; fi ;;
+    esac
 }
 
 sys::nopasswd(){
-    # 免密ssh
+    # 免密ssh —— 不设主：本机是 soc1 则对端 soc2，本机是 soc2 则对端 soc1。
+    local self peer peer_ip
+    self=$(sys::_self_soc)
+    if [[ -z "$self" ]]; then
+        log_err "无法确定本机 soc 身份（mgbe3_0 非 soc1/soc2 地址），md init 必须在 soc1 或 soc2 上运行"
+        return 1
+    fi
+    if [[ "$self" == "soc1" ]]; then
+        peer="soc2"; peer_ip="$SOC2_IP"
+    else
+        peer="soc1"; peer_ip="$SOC1_IP"
+    fi
+
     mkdir -p "$(dirname "$KEY_PATH")"
     chmod 700 "$(dirname "$KEY_PATH")"
     if [ ! -f "$KEY_PATH" ]; then
@@ -199,10 +242,10 @@ sys::nopasswd(){
     # 修复 ~/.ssh 下所有文件权限（sudo bash -c 下可能 root 所有）
     chown -R "$USER:$USER" "$(dirname "$KEY_PATH")" 2>/dev/null || true
 
-    if ssh_err=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$USER@$SOC2_IP" exit 2>&1); then
-        log_ok "soc2 SSH 免密已配置"
+    if ssh_err=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$USER@$peer_ip" exit 2>&1); then
+        log_ok "$peer SSH 免密已配置"
     else
-        echo "推送公钥到soc2：$USER@$SOC2_IP..."
+        echo "推送公钥到$peer：$USER@$peer_ip..."
         if [[ -n "${MDRIVE_SOC2_PASS_FILE:-}" && -f "$MDRIVE_SOC2_PASS_FILE" ]]; then
             # 非交互式：通过 SSH_ASKPASS 自动填写密码
             local _askpass
@@ -211,36 +254,37 @@ sys::nopasswd(){
             chmod +x "$_askpass"
             DISPLAY=dummy SSH_ASKPASS="$_askpass" ssh-copy-id \
                 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-                -i "${KEY_PATH}.pub" "$USER@$SOC2_IP" </dev/null || {
+                -i "${KEY_PATH}.pub" "$USER@$peer_ip" </dev/null || {
                 rm -f "$_askpass"
-                log_err "推送公钥到 soc2 失败，请检查密码或网络"
-                log_err "提示: 请手工执行 ssh-copy-id $USER@$SOC2_IP 确认 soc2 可达且密码正确后重跑 md init"
+                log_err "推送公钥到 $peer 失败，请检查密码或网络"
+                log_err "提示: 请手工执行 ssh-copy-id $USER@$peer_ip 确认 $peer 可达且密码正确后重跑 md init"
                 return 1
             }
             rm -f "$_askpass"
         else
-            if ! ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "${KEY_PATH}.pub" "$USER@$SOC2_IP"; then
-                log_err "推送公钥到 soc2 失败，请检查 soc1 -> soc2 网络和 nvidia 用户密码"
-                log_err "提示: 请手工执行 ssh-copy-id $USER@$SOC2_IP 确认 soc2 可达且密码正确后重跑 md init"
+            if ! ssh-copy-id -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "${KEY_PATH}.pub" "$USER@$peer_ip"; then
+                log_err "推送公钥到 $peer 失败，请检查 $self -> $peer 网络和 nvidia 用户密码"
+                log_err "提示: 请手工执行 ssh-copy-id $USER@$peer_ip 确认 $peer 可达且密码正确后重跑 md init"
                 return 1
             fi
         fi
-        if ! ssh_error=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$USER@$SOC2_IP" exit 2>&1); then
+        if ! ssh_error=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes "$USER@$peer_ip" exit 2>&1); then
             echo "$ssh_error" >&2
-            log_err "soc2 SSH 免密验证失败"
+            log_err "$peer SSH 免密验证失败"
             return 1
         fi
-        log_ok "soc2 SSH 免密配置完成"
+        log_ok "$peer SSH 免密配置完成"
     fi
 
     touch "$CONFIG_PATH"
     chmod 600 "$CONFIG_PATH"
-    if ! grep -q "Host soc2" "$CONFIG_PATH"; then
-        echo "配置 soc2 快捷登录：ssh soc2"
+    # 配置对端快捷登录别名（双端：soc1 配 Host soc2，soc2 配 Host soc1）
+    if ! grep -q "Host $peer" "$CONFIG_PATH"; then
+        echo "配置 $peer 快捷登录：ssh $peer"
         cat << EOF >> "$CONFIG_PATH"
-# Orin SOC2 快捷登录
-Host soc2
-    HostName $SOC2_IP
+# Orin $peer 快捷登录
+Host $peer
+    HostName $peer_ip
     User $USER
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
@@ -248,20 +292,20 @@ Host soc2
 EOF
     fi
 
-    # 受限免密 sudo。sudoers 自身安装仍需要一次 sudo 授权。
-    echo "配置 soc1 受限免密 sudo..."
+    # 受限免密 sudo。当前行配置本机，对端通过 ssh 配置。
+    echo "配置 $self 受限免密 sudo..."
     if sys::_install_local_sudoers; then
-        log_ok "soc1 受限 sudo 免密配置完成"
+        log_ok "$self 受限 sudo 免密配置完成"
     else
-        log_err "soc1 受限 sudo 免密配置失败"
+        log_err "$self 受限 sudo 免密配置失败"
         log_err "提示: 手动执行 sudo visudo -f $SUDO_PATH 检查语法后重跑 md init"
         return 1
     fi
-    echo "配置 soc2 受限免密 sudo..."
-    if sys::_install_remote_sudoers; then
-        log_ok "soc2 sudo 免密配置完成"
+    echo "配置 $peer 受限免密 sudo..."
+    if sys::_install_remote_sudoers "$peer" "$peer_ip"; then
+        log_ok "$peer sudo 免密配置完成"
     else
-        log_err "soc2 sudo 免密配置失败"
+        log_err "$peer sudo 免密配置失败"
         log_err "提示: 手动执行 sudo visudo -f $SUDO_PATH 检查语法后重跑 md init"
         return 1
     fi
@@ -637,66 +681,60 @@ sys::export() {
 
 #region -------------------  svc 服务层 ------------------
 
-# 查看服务运行标识
+# 查看服务运行标识——不设主：目标==本机走本地，对端走 ssh。
 svc::check() {
-    case "$1" in
-        "soc1")
-            if systemctl is-active --quiet mdrive.service; then
-                echo -e "[soc1]服务状态: ${GREEN}Running${NC}"
-            else
-                echo -e "[soc1]服务状态: ${RED}Stopped or Failed${NC}"
-            fi
-            ;;
-        "soc2")
-            ssh "${SSH_OPTS[@]}" "$SOC2_IP" "systemctl is-active --quiet mdrive.service"
-            local status=$?
-            if [[ $status -eq 0 ]]; then
-                echo -e "[soc2]服务状态: ${GREEN}Running${NC}"
-            elif [[ $status -ne 255 ]]; then
-                echo -e "[soc2]服务状态: ${RED}Stopped or Failed${NC}"
-            fi
-            ;;
-    esac
+    local target=$1 tgt_ip status
+    tgt_ip=$(sys::_target_ip "$target")
+    if [[ -z "$tgt_ip" ]]; then
+        if systemctl is-active --quiet mdrive.service; then
+            echo -e "[$target]服务状态: ${GREEN}Running${NC}"
+        else
+            echo -e "[$target]服务状态: ${RED}Stopped or Failed${NC}"
+        fi
+    else
+        ssh "${SSH_OPTS[@]}" "$tgt_ip" "systemctl is-active --quiet mdrive.service"
+        status=$?
+        if [[ $status -eq 0 ]]; then
+            echo -e "[$target]服务状态: ${GREEN}Running${NC}"
+        elif [[ $status -ne 255 ]]; then
+            echo -e "[$target]服务状态: ${RED}Stopped or Failed${NC}"
+        fi
+    fi
 }
 
 
-# 管理服务
+# 管理服务——不设主：目标==本机走本地，对端走 ssh（sys::_target_ip 返回空表示本地）。
 svc::manage(){
-    local action=$1
-    case "$2" in
-        "soc1")
-            log_info "$action soc1 mdrive service..."
-            if [[ "$action" == "stop" ]]; then
-                log_info "停止 mdrive 服务（数据盘 chown 耗时可能导致 30-60s 等待）..."
+    local action=$1 target=$2 tgt_ip
+    tgt_ip=$(sys::_target_ip "$target")
+    log_info "$action $target mdrive service..."
+    if [[ "$action" == "stop" ]]; then
+        log_info "停止 mdrive 服务（数据盘 chown 耗时可能导致 30-60s 等待）..."
+    fi
+    if [[ -z "$tgt_ip" ]]; then
+        # 本机执行
+        sudo systemctl $action mdrive.service
+        if [[ "$action" == "stop" ]]; then
+            # 停止确认轮询（最多约 12 秒），一旦非 active 即视为已停
+            for ((i=0; i<12; i++)); do
+                systemctl is-active --quiet mdrive.service || break
+                sleep 1
+            done
+            if systemctl is-active --quiet mdrive.service; then
+                log_warn "[$target] mdrive.service 停止超时，可能仍在退出中（数据盘 chown 耗时较长），继续前请确认"
             fi
-            sudo systemctl $action mdrive.service
-            if [[ "$action" == "stop" ]]; then
-                # 停止确认轮询（最多约 12 秒），一旦非 active 即视为已停
-                for ((i=0; i<12; i++)); do
-                    systemctl is-active --quiet mdrive.service || break
-                    sleep 1
-                done
-                if systemctl is-active --quiet mdrive.service; then
-                    log_warn "[soc1] mdrive.service 停止超时，可能仍在退出中（数据盘 chown 耗时较长），继续前请确认"
-                fi
+        fi
+    else
+        # 对端（ssh）
+        ssh "${SSH_OPTS[@]}" "$tgt_ip" "timeout 15 sudo systemctl $action mdrive.service"
+        if [[ "$action" == "stop" ]]; then
+            # 远端停止确认轮询（最多约 12 秒），ssh 返回 0 表示仍 active
+            if ssh "${SSH_OPTS[@]}" "$tgt_ip" 'for i in $(seq 1 12); do systemctl is-active --quiet mdrive.service || exit 1; sleep 1; done'; then
+                log_warn "[$target] mdrive.service 停止超时，可能仍在退出中（数据盘 chown 耗时较长），继续前请确认"
             fi
-            svc::check soc1
-            ;;
-        "soc2")
-            log_info "$action soc2 mdrive service..."
-            if [[ "$action" == "stop" ]]; then
-                log_info "停止 mdrive 服务（数据盘 chown 耗时可能导致 30-60s 等待）..."
-            fi
-            ssh "${SSH_OPTS[@]}" "$SOC2_IP" "timeout 15 sudo systemctl $action mdrive.service"
-            if [[ "$action" == "stop" ]]; then
-                # 远端停止确认轮询（最多约 12 秒），ssh 返回 0 表示仍 active
-                if ssh "${SSH_OPTS[@]}" "$SOC2_IP" 'for i in $(seq 1 12); do systemctl is-active --quiet mdrive.service || exit 1; sleep 1; done'; then
-                    log_warn "[soc2] mdrive.service 停止超时，可能仍在退出中（数据盘 chown 耗时较长），继续前请确认"
-                fi
-            fi
-            svc::check soc2
-            ;;
-    esac
+        fi
+    fi
+    svc::check "$target"
     return 0
 }
 
@@ -715,27 +753,30 @@ svc::_resolve_soc_arg() {
     esac
 }
 
-# 查看日志
+# 查看日志——不设主：目标==本机走本地，对端走 ssh。
 svc::log(){
-    case "$1" in
-        "soc1"|"1"|"")
-            sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys|mdrive_driver_camera"
-            ;;
-        "soc2"|"2")
-            ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys|mdrive_driver_camera"'
-            ;;
+    local target=$1 tgt_ip
+    case "$target" in
+        "soc1"|"1"|"") target="soc1" ;;
+        "soc2"|"2") target="soc2" ;;
         *)
-            log_err "无效 SOC 参数: $1（仅支持 1/soc1/2/soc2，缺省=soc1）"
+            log_err "无效 SOC 参数: $target（仅支持 1/soc1/2/soc2，缺省=soc1）"
             return 1
             ;;
     esac
+    tgt_ip=$(sys::_target_ip "$target")
+    if [[ -z "$tgt_ip" ]]; then
+        sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys|mdrive_driver_camera"
+    else
+        ssh "${SSH_OPTS[@]}" -t "$tgt_ip" 'sudo journalctl -eu mdrive.service --since "5 min ago" -f --no-pager | grep --line-buffered -v -E "ptp4l|phc2sys|mdrive_driver_camera"'
+    fi
 }
 
 
-# recorder
+# recorder——不设主：soc2 目标，本机是 soc2 走本地，否则 ssh 对端。
 svc::recorder(){
     local action=${1:-on}
-    local supervisor_action action_text avail disk_ready=false
+    local supervisor_action action_text avail disk_ready=false tgt_ip
 
     case "$action" in
         "on")
@@ -752,20 +793,35 @@ svc::recorder(){
             ;;
     esac
 
-    if ssh "${SSH_OPTS[@]}" "$SOC2_IP" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
-        echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
-        disk_ready=true
-        avail=$(ssh "${SSH_OPTS[@]}" "$SOC2_IP" "df -BG $MOUNT_ROOT 2>/dev/null | awk 'NR==2 {print \$4}' | tr -d 'G'")
-        if [[ "$avail" =~ ^[0-9]+$ ]]; then
-            if [[ "$avail" -lt 200 ]]; then
-                log_warn "soc2 数据盘剩余空间不足 200GB (当前: ${avail}GB)！"
-            fi
+    tgt_ip=$(sys::_target_ip "soc2")
+
+    if [[ -z "$tgt_ip" ]]; then
+        # 本机就是 soc2：本地执行
+        if timeout 2 mountpoint -q "$MOUNT_ROOT"; then
+            echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
+            disk_ready=true
+            avail=$(df -BG "$MOUNT_ROOT" 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G')
         else
-            log_warn "无法读取 soc2 数据盘剩余空间: $MOUNT_ROOT"
+            log_err "soc2 硬盘未挂载或无法访问: $MOUNT_ROOT"
+            log_err "提示: 运行 md check，按提示修复硬盘后再 md record on"
         fi
     else
-        log_err "soc2 硬盘未挂载或无法访问: $MOUNT_ROOT"
-        log_err "提示: 运行 md check，按提示修复硬盘后再 md record on"
+        # 对端 soc2（从 soc1/外部 ssh）
+        if ssh "${SSH_OPTS[@]}" "$tgt_ip" "timeout 2 mountpoint -q $MOUNT_ROOT"; then
+            echo -e "[soc2]硬盘: ${GREEN}Mounted${NC}"
+            disk_ready=true
+            avail=$(ssh "${SSH_OPTS[@]}" "$tgt_ip" "df -BG $MOUNT_ROOT 2>/dev/null | awk 'NR==2 {print \$4}' | tr -d 'G'")
+        else
+            log_err "soc2 硬盘未挂载或无法访问: $MOUNT_ROOT"
+            log_err "提示: 运行 md check，按提示修复硬盘后再 md record on"
+        fi
+    fi
+    if [[ "$avail" =~ ^[0-9]+$ ]]; then
+        if [[ "$avail" -lt 200 ]]; then
+            log_warn "soc2 数据盘剩余空间不足 200GB (当前: ${avail}GB)！"
+        fi
+    else
+        log_warn "无法读取 soc2 数据盘剩余空间: $MOUNT_ROOT"
     fi
 
     if [[ "$action" == "on" && "$disk_ready" != "true" ]]; then
@@ -773,38 +829,51 @@ svc::recorder(){
         return 1
     fi
 
-    if ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $supervisor_action Recorder 2>/dev/null"; then
-        log_ok "soc2 Recorder 已${action_text}"
+    if [[ -z "$tgt_ip" ]]; then
+        if sudo supervisorctl $supervisor_action Recorder 2>/dev/null; then
+            log_ok "soc2 Recorder 已${action_text}"
+        else
+            log_err "soc2 Recorder ${action_text}失败"
+            return 1
+        fi
     else
-        log_err "soc2 Recorder ${action_text}失败"
-        return 1
+        if ssh "${SSH_OPTS[@]}" "$tgt_ip" "sudo supervisorctl $supervisor_action Recorder 2>/dev/null"; then
+            log_ok "soc2 Recorder 已${action_text}"
+        else
+            log_err "soc2 Recorder ${action_text}失败"
+            return 1
+        fi
     fi
 }
 
 
 svc::channel(){
-    case "$1" in
-        "soc1"|"1"|"")
-            dtop
-            ;;
-        "soc2"|"2")
-            ssh "${SSH_OPTS[@]}" -t "$SOC2_IP" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && export GLOG_log_dir='${GLOG_log_dir:-/mnt/ufs_data/project/data/log}' && dtop"
-            ;;
+    local target=$1 tgt_ip
+    case "$target" in
+        "soc1"|"1"|"") target="soc1" ;;
+        "soc2"|"2") target="soc2" ;;
         *)
-            log_err "无效 SOC 参数: $1（仅支持 1/soc1/2/soc2，缺省=soc1）"
+            log_err "无效 SOC 参数: $target（仅支持 1/soc1/2/soc2，缺省=soc1）"
             return 1
             ;;
     esac
+    tgt_ip=$(sys::_target_ip "$target")
+    if [[ -z "$tgt_ip" ]]; then
+        dtop
+    else
+        ssh "${SSH_OPTS[@]}" -t "$tgt_ip" "export MDRIVE_ROOT_DIR='/mdrive' && export MDRIVE_DEP_DIR='/mdrive/mdrive_dep' && source $VMC_SOFTWARE/mdrive/setup.sh && export GLOG_log_dir='${GLOG_log_dir:-/mnt/ufs_data/project/data/log}' && dtop"
+    fi
 }
 
-# 执行模块启停操作，返回真实退出码
+# 执行模块启停操作，返回真实退出码——不设主：目标==本机走本地，否则 ssh 对端。
 svc::_run_module_action() {
-    local soc=$1 mod=$2 action=$3 rc out
+    local soc=$1 mod=$2 action=$3 rc out tgt_ip
     echo -e "正在对 [$soc] $mod 执行 $action..."
-    if [[ "$soc" == "soc1" ]]; then
+    tgt_ip=$(sys::_target_ip "$soc")
+    if [[ -z "$tgt_ip" ]]; then
         out=$(sudo supervisorctl "$action" "$mod" 2>&1); rc=$?
     else
-        out=$(ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl $action $mod" 2>&1 </dev/null); rc=$?
+        out=$(ssh "${SSH_OPTS[@]}" "$tgt_ip" "sudo supervisorctl $action $mod" 2>&1 </dev/null); rc=$?
     fi
     sleep 1
     if (( rc == 0 )); then
@@ -962,13 +1031,26 @@ log_get_path() {
 }
 
 
-# 获取并格式化双端状态
+# 获取并格式化双端状态——不设主：各自"本机 local / 对端 ssh"。
 fetch_combined() {
     md::_ensure_ssh_opts
 
     local s1 s2
-    s1=$(sudo supervisorctl status 2>/dev/null | awk '{print "soc1 " $0}')
-    s2=$(ssh "${SSH_OPTS[@]}" "$SOC2_IP" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc2 " $0}')
+    local ip1 ip2
+    ip1=$(sys::_target_ip "soc1")
+    ip2=$(sys::_target_ip "soc2")
+
+    if [[ -z "$ip1" ]]; then
+        s1=$(sudo supervisorctl status 2>/dev/null | awk '{print "soc1 " $0}')
+    else
+        s1=$(ssh "${SSH_OPTS[@]}" "$ip1" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc1 " $0}')
+    fi
+    if [[ -z "$ip2" ]]; then
+        s2=$(sudo supervisorctl status 2>/dev/null | awk '{print "soc2 " $0}')
+    else
+        s2=$(ssh "${SSH_OPTS[@]}" "$ip2" "sudo supervisorctl status" 2>/dev/null | awk '{print "soc2 " $0}')
+    fi
+
     printf "%s\n" "$s1" "$s2" | while read -r line; do
         local clean_line soc mod state tail
         clean_line=$(echo "$line" | tr -s ' ')
@@ -1846,8 +1928,17 @@ flow::pre() {
         disk::usage "External ($DISK_LABEL)" $MOUNT_ROOT
     else
         log_warn "是否进行修复？('y'或回车继续，其他键退出)"
-        read -r ans
-        [[ "$ans" == "y" || "$ans" == "" ]] && disk::fix $res || check_pass=false
+        if [[ -t 0 ]]; then
+            # 交互终端：read 读到空(回车)或 y 才继续修复；其它键退出。
+            read -r ans
+            [[ "$ans" == "y" || "$ans" == "" ]] && disk::fix $res || check_pass=false
+        else
+            # 非交互(管道/CI)：read 会在 EOF 立即返回空，而 [[ "" == "" ]] 会误当成
+            # "回车继续"从而静默触发破坏性 disk::fix(停双端服务+修复)。脚本化调用
+            # 必须安全——这里拒绝触发，标记环境异常，绝不静默停服。
+            log_err "非交互环境无法确认修复，跳过 disk 修复 (硬盘仍异常)"
+            check_pass=false
+        fi
     fi
     echo "--------------------------------------------"
     svc::check soc1
