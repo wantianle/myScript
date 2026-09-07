@@ -92,19 +92,27 @@ type Svc struct {
 // membership via MDRIVE_SOC_ID / MDRIVE_SOC*_IP) to decide local vs ssh. This
 // is what lets the tool run on soc1, on soc2, or from an external host (P2) —
 // a soc never ssh-es back to itself (md start on soc2 operates soc2 locally).
+//
+// In a container (req4 slim tool) there is one flat supervisor and no soc
+// split, so every soc target resolves to the local shell — md manages the
+// container's own supervisor, not a remote soc.
 func New(cfg config.Config, log *logx.Logger) *Svc {
-	self := platform.DetectIdentity(context.Background(), cfg)
-	tp := platform.NewTopology(cfg, self)
+	shell := func(soc string, ctx context.Context) (Shell, error) {
+		if platform.IsContainer() {
+			return NewLocal(), nil
+		}
+		self := platform.DetectIdentity(context.Background(), cfg)
+		tp := platform.NewTopology(cfg, self)
+		ep := tp.EndpointFor(soc)
+		if ep.Kind == platform.Local {
+			return NewLocal(), nil
+		}
+		return NewRemote(ctx, cfg, ep.Host)
+	}
 	return &Svc{
-		cfg: cfg,
-		log: log,
-		shell: func(soc string, ctx context.Context) (Shell, error) {
-			ep := tp.EndpointFor(soc)
-			if ep.Kind == platform.Local {
-				return NewLocal(), nil
-			}
-			return NewRemote(ctx, cfg, ep.Host)
-		},
+		cfg:   cfg,
+		log:   log,
+		shell: shell,
 	}
 }
 

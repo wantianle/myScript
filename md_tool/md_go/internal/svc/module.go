@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"mdrive/md/internal/platform"
 )
 
 // ModuleRow is one module's status line as surfaced by `md m`. It mirrors the
@@ -97,11 +99,28 @@ const (
 	yellow = "\033[1;33m"
 )
 
-// FetchModules returns the combined module status for both socs (md.sh
-// fetch_combined:966-986). Each soc's `sudo supervisorctl status` is gathered
-// and prefixed with its soc name. A transport failure on a soc is skipped; the
-// function errors only when neither soc yielded a usable listing.
+// FetchModules returns the combined module status (md.sh fetch_combined:966-986).
+// Each soc's `sudo supervisorctl status` is gathered and prefixed with its soc
+// name. A transport failure on a soc is skipped; the function errors only when
+// neither soc yielded a usable listing.
+//
+// In a container (req4 slim tool) there is a single flat supervisor and no soc
+// split, so it queries the local supervisor once and prefixes rows with
+// "local" rather than iterating soc1/soc2 (which share the same supervisor).
 func (s *Svc) FetchModules(ctx context.Context) ([]ModuleRow, error) {
+	if platform.IsContainer() {
+		sh := s.shellOr("local", ctx)
+		if sh == nil {
+			return nil, fmt.Errorf("无法获取模块状态（容器 supervisor 不可达）")
+		}
+		out, err := sh.Exec(ctx, "sudo supervisorctl status 2>/dev/null")
+		sh.Close()
+		if err != nil {
+			return nil, fmt.Errorf("无法获取模块状态: %w", err)
+		}
+		return ParseSupervisorStatus("local", out.Stdout), nil
+	}
+
 	var rows []ModuleRow
 	for _, soc := range []string{"soc1", "soc2"} {
 		sh := s.shellOr(soc, ctx)
