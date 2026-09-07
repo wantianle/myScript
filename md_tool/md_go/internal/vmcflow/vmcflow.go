@@ -227,63 +227,17 @@ func (v *VMC) Clean(ctx context.Context) error {
 }
 
 // remoteLines returns the parsed ~/.md_remotes rows (name branch platform).
-func (v *VMC) remoteLines(ctx context.Context) ([]RemoteRow, error) {
+func (v *VMC) remoteLines(ctx context.Context) ([]remote.Entry, error) {
 	lines, err := remote.List(v.Cfg.RemotesPath)
 	if err != nil {
 		return nil, err
 	}
-	var rows []RemoteRow
+	var rows []remote.Entry
 	for _, l := range lines {
 		if l == "" {
 			continue
 		}
-		rows = append(rows, splitRemote(l))
+		rows = append(rows, remote.ParseLine(l))
 	}
 	return rows, nil
-}
-
-// RemoteRow is one parsed remote config line.
-type RemoteRow struct {
-	Name     string
-	Branch   string
-	Platform string
-}
-
-func splitRemote(line string) RemoteRow {
-	// matches `awk '{print $1, $2, $3}'` over a `name branch platform` line.
-	name := firstField(line)
-	rest := restAfter(line)
-	branch := firstField(rest)
-	platform := restAfter(rest)
-	return RemoteRow{Name: name, Branch: branch, Platform: platform}
-}
-
-func firstField(s string) string {
-	var out string
-	for _, r := range s {
-		if r == ' ' || r == '\t' {
-			break
-		}
-		out += string(r)
-	}
-	return out
-}
-
-func restAfter(s string) string {
-	idx := -1
-	for i, r := range s {
-		if r == ' ' || r == '\t' {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		return ""
-	}
-	// strip leading whitespace
-	out := s[idx:]
-	for len(out) > 0 && (out[0] == ' ' || out[0] == '\t') {
-		out = out[1:]
-	}
-	return out
 }

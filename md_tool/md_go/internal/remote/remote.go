@@ -25,6 +25,24 @@ type Entry struct {
 	Platform string
 }
 
+// ParseLine splits a `name branch platform` row into an Entry. It mirrors
+// Bash's `awk '{print $1, $2, $3}'` (md.sh vmc::rollback :1246), treating any
+// run of spaces/tabs as a separator and tolerating a missing platform.
+func ParseLine(line string) Entry {
+	fields := strings.Fields(line)
+	e := Entry{}
+	if len(fields) > 0 {
+		e.Name = fields[0]
+	}
+	if len(fields) > 1 {
+		e.Branch = fields[1]
+	}
+	if len(fields) > 2 {
+		e.Platform = fields[2]
+	}
+	return e
+}
+
 // String renders the row exactly as md.sh appends it: `name branch platform`
 // with a trailing space when platform is empty (md.sh:1249-1252).
 func (e Entry) String() string {

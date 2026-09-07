@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"mdrive/md/internal/logx"
+	"mdrive/md/internal/remote"
 	"mdrive/md/internal/vmc"
 )
 
@@ -41,18 +42,18 @@ func writeTempRemotes(t *testing.T, content string) string {
 	return path
 }
 
-func TestSplitRemote(t *testing.T) {
+func TestRemoteParseLine(t *testing.T) {
 	tests := []struct {
 		line string
-		want RemoteRow
+		want remote.Entry
 	}{
-		{"dev main orin", RemoteRow{Name: "dev", Branch: "main", Platform: "orin"}},
-		{"beta - ", RemoteRow{Name: "beta", Branch: "-", Platform: ""}},
-		{"gamma stable", RemoteRow{Name: "gamma", Branch: "stable", Platform: ""}},
+		{"dev main orin", remote.Entry{Name: "dev", Branch: "main", Platform: "orin"}},
+		{"beta - ", remote.Entry{Name: "beta", Branch: "-", Platform: ""}},
+		{"gamma stable", remote.Entry{Name: "gamma", Branch: "stable", Platform: ""}},
 	}
 	for _, tt := range tests {
-		if got := splitRemote(tt.line); got != tt.want {
-			t.Errorf("splitRemote(%q) = %+v, want %+v", tt.line, got, tt.want)
+		if got := remote.ParseLine(tt.line); got != tt.want {
+			t.Errorf("ParseLine(%q) = %+v, want %+v", tt.line, got, tt.want)
 		}
 	}
 }
