@@ -220,7 +220,7 @@ func TestChannelSoc2BuildsEnvPrefix(t *testing.T) {
 	svc := NewWithShell(config.Default(), log, func(soc string, ctx context.Context) (Shell, error) {
 		return fs, nil
 	})
-	if err := svc.Channel(context.Background(), "soc2"); err != nil {
+	if err := svc.Channel(context.Background(), "soc2", nil); err != nil {
 		t.Fatalf("Channel(soc2) err = %v", err)
 	}
 	if len(fs.interactive) != 1 {
@@ -238,7 +238,8 @@ func TestChannelBadSoc(t *testing.T) {
 	svc := NewWithShell(config.Default(), log, func(soc string, ctx context.Context) (Shell, error) {
 		return &fakeShell{}, nil
 	})
-	if err := svc.Channel(context.Background(), "soc3"); err == nil {
-		t.Fatal("Channel with invalid soc should error")
+	// An unknown soc is normalized to soc1 (default), so Channel must not error.
+	if err := svc.Channel(context.Background(), "soc3", nil); err != nil {
+		t.Fatalf("Channel with defaulted soc1 should not error: %v", err)
 	}
 }

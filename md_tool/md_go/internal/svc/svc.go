@@ -24,6 +24,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"mdrive/md/internal/config"
 	"mdrive/md/internal/logx"
@@ -346,26 +349,74 @@ func (s *Svc) Log(ctx context.Context, soc string, w io.Writer) error {
 	}
 }
 
-// Channel launches dtop — on soc1 locally, on soc2 over ssh with the
-// environment prefix (md.sh svc::channel :785-798).
-func (s *Svc) Channel(ctx context.Context, soc string) error {
-	if soc == "" || soc == "soc1" || soc == "1" {
-		sh := s.shellOr("soc1", ctx)
-		if sh == nil {
-			return fmt.Errorf("无法启动本地 dtop")
-		}
-		defer sh.Close()
-		return sh.Interactive(ctx, "dtop")
+// Channel launches the DDS channel viewer — on soc1 locally, on soc2 over ssh
+// with the environment prefix (md.sh svc::channel :785-798). The viewer is
+// dtop, falling back to cyber_monitor when dtop is absent on the target. An
+// MD_CHANNEL_TOOL env var forces the choice (dtop|cyber_monitor) and bypasses
+// the probe; args are appended verbatim to the viewer command (P3).
+func (s *Svc) Channel(ctx context.Context, soc string, args []string) error {
+	soc = normalizeSOC(soc)
+	sh := s.shellOr(soc, ctx)
+	if sh == nil {
+		return fmt.Errorf("无法建立 %s 连接", soc)
 	}
-	if soc == "soc2" || soc == "2" {
-		sh := s.shellOr("soc2", ctx)
-		if sh == nil {
-			return fmt.Errorf("无法建立 soc2 连接")
-		}
-		defer sh.Close()
-		return sh.Interactive(ctx, interactiveSoc2())
+	defer sh.Close()
+
+	tool := s.resolveChannelTool(ctx, sh, soc)
+
+	// soc1 needs no env prefix; soc2 chains the mdrive env (setup.sh + GLOG).
+	var cmd string
+	if soc == "soc2" {
+		cmd = interactiveSoc2Prefix(tool, args)
+	} else {
+		cmd = tool + " " + strings.Join(args, " ")
 	}
-	return fmt.Errorf("无效 SOC 参数: %s（仅支持 1/soc1/2/soc2，缺省=soc1）", soc)
+	return sh.Interactive(ctx, strings.TrimSpace(cmd))
+}
+
+// resolveChannelTool picks the viewer for the target: an MD_CHANNEL_TOOL env
+// override wins; otherwise probe the target shell for dtop, then cyber_monitor.
+func (s *Svc) resolveChannelTool(ctx context.Context, sh Shell, soc string) string {
+	if forced := os.Getenv("MD_CHANNEL_TOOL"); forced == "dtop" || forced == "cyber_monitor" {
+		return forced
+	}
+	out, err := sh.Exec(ctx, "command -v dtop || command -v cyber_monitor")
+	if err != nil {
+		s.log.Warn("未找到 dtop/cyber_monitor，尝试 dtop")
+		return "dtop"
+	}
+	cand := strings.TrimSpace(out.Stdout)
+	if cand == "" {
+		s.log.Warn("%s 未找到 dtop/cyber_monitor，尝试 dtop", soc)
+		return "dtop"
+	}
+	// The resolved path's basename (dtop or cyber_monitor); any other means we
+	// treat as "dtop" to avoid an unknown-tool launch.
+	base := filepath.Base(cand)
+	if base == "cyber_monitor" {
+		return "cyber_monitor"
+	}
+	return "dtop"
+}
+
+// normalizeSOC maps 1/2/soc1/soc2 to the canonical soc name (default soc1).
+func normalizeSOC(soc string) string {
+	switch soc {
+	case "soc2", "2":
+		return "soc2"
+	default:
+		return "soc1"
+	}
+}
+
+// interactiveSoc2Prefix renders the env + source prefix for the soc2 channel
+// launch, ending in the chosen viewer tool (md.sh:791). GLOG_log_dir and
+// VMC_SOFTWARE are expanded locally; the tool+args are appended verbatim.
+func interactiveSoc2Prefix(tool string, args []string) string {
+	cmd := "export MDRIVE_ROOT_DIR=/mdrive && export MDRIVE_DEP_DIR=/mdrive/mdrive_dep " +
+		"&& source $VMC_SOFTWARE/mdrive/setup.sh " +
+		"&& export GLOG_log_dir=${GLOG_log_dir:-/mnt/ufs_data/project/data/log} && "
+	return cmd + tool + " " + strings.Join(args, " ")
 }
 
 // shellOr returns the Shell for a soc, or nil when the factory failed. The
@@ -377,14 +428,4 @@ func (s *Svc) shellOr(soc string, ctx context.Context) Shell {
 		return nil
 	}
 	return sh
-}
-
-// interactiveSoc2 renders the env + source + dtop prefix md.sh:soc2:791.
-// GLOG_log_dir and VMC_SOFTWARE are expanded locally (see sshx
-// InteractiveRequest semantics); the dtop command is the Shell's Interactive
-// input, so this helper just returns the command string without quoting.
-func interactiveSoc2() string {
-	return "export MDRIVE_ROOT_DIR=/mdrive && export MDRIVE_DEP_DIR=/mdrive/mdrive_dep " +
-		"&& source $VMC_SOFTWARE/mdrive/setup.sh " +
-		"&& export GLOG_log_dir=${GLOG_log_dir:-/mnt/ufs_data/project/data/log} && dtop"
 }

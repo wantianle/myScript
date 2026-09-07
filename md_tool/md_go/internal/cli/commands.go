@@ -132,16 +132,20 @@ func logCmd(s *svc.Svc) *cobra.Command {
 
 func channelCmd(s *svc.Svc) *cobra.Command {
 	return &cobra.Command{
-		Use:     "channel [1|2]",
+		Use:     "channel [1|2] [-- <args...>]",
 		Aliases: []string{"c"},
-		Short:   "Launch dtop channel viewer (default soc1)",
-		Args:    cobra.MaximumNArgs(1),
+		Short:   "Launch DDS channel viewer (dtop→cyber_monitor fallback, default soc1)",
+		Args:    cobra.ArbitraryArgs, // tail args after `--` are passed to the viewer
 		RunE: func(cmd *cobra.Command, args []string) error {
 			soc := "soc1"
-			if len(args) > 0 {
-				soc = args[0]
+			rest := args
+			if len(rest) > 0 && (rest[0] == "soc1" || rest[0] == "1") {
+				rest = rest[1:]
+			} else if len(rest) > 0 && (rest[0] == "soc2" || rest[0] == "2") {
+				soc = "soc2"
+				rest = rest[1:]
 			}
-			return s.Channel(cmd.Context(), soc)
+			return s.Channel(cmd.Context(), soc, rest)
 		},
 	}
 }
