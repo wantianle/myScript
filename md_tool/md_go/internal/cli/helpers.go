@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"mdrive/md/internal/remote"
+	"mdrive/md/internal/tui"
 
 	"github.com/spf13/cobra"
 )
@@ -103,6 +105,24 @@ func isTerminal(fd uintptr) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0 && fi.Mode()&os.ModeNamedPipe == 0
+}
+
+// exportPicker returns the `SelectFiles` callback for `md e`. In a TTY it opens
+// the Bubble Tea export picker (md.sh's fzf multi-select, sys::export :605-620)
+// and returns what the operator picked (nil on Esc/q cancel). In a non-TTY it
+// returns nil so export.Export falls back to selecting everything — there is no
+// terminal to pick on, matching `md m`'s TTY/menu vs list split.
+func exportPicker(ctx context.Context) func([]string) []string {
+	return func(items []string) []string {
+		if !isTerminal(stdoutfd()) {
+			return nil
+		}
+		selected, err := tui.RunExportPicker(ctx, items)
+		if err != nil {
+			return nil
+		}
+		return selected
+	}
 }
 
 // readAllStdin reads everything from stdin into a string (the `md install`

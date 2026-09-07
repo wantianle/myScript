@@ -72,6 +72,10 @@ func exportCmd(cfg config.Config, log *logx.Logger) *cobra.Command {
 				Tgt:       tgt,
 				User:      user,
 				Transport: tr,
+				// Interactive (TTY) → open the export picker (md.sh's fzf
+				// multi-select); scripted (non-TTY) → nil so Export selects
+				// everything, mirroring `md m`'s TTY/menu vs list split.
+				SelectFiles: exportPicker(cmd.Context()),
 				Log: func(level, msg string) {
 					switch level {
 					case "err":
