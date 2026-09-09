@@ -1,3 +1,6 @@
 **/__pycache__/
 **/.venv/
 .slim/lean-flow/
+
+# deepwork
+.slim/deepwork/
