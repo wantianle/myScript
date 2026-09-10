@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-# mprobe — 公司网关全模型探测（延迟 / 速度 / 流畅度 / 可靠性）
-# 覆盖两个 key 的全部可路由模型，逐模型流式采样，评估:
+# mprobe — 公司网关模型探测（延迟 / 速度 / 流畅度 / 可靠性 / 思考强度）
+# 覆盖 minieye key 的可路由模型（自动排除包装/路由/停用模型），逐模型流式采样:
 #   TTFT(首字延迟) / 总耗时 / 输出速度(~tok/s) / 流内最大停顿 / 成功率
+#   并逐档测试 reasoning_effort 接受情况: none / low / medium / high / max / xhigh
 #
 # 用法:
-#   mprobe                      # 全部 key × 全部模型，每模型 2 次采样
+#   mprobe                      # 全部模型，每模型 2 次采样
 #   mprobe --n 3                # 每模型 3 次采样（可靠性更准）
-#   mprobe --key minieye        # 只测 minieye key
 #   mprobe --models deepseek,gpt-5.6   # 只测名称含关键词的模型（逗号分隔，任一匹配）
-#   mprobe --list               # 只列出各 key 可路由的模型
+#   mprobe --no-efforts         # 跳过思考强度探测（更快）
+#   mprobe --list               # 只列出将探测的模型
 import argparse
+import concurrent.futures
 import json
 import os
 import re
@@ -21,9 +23,21 @@ import urllib.request
 
 BASE = "https://sub2api.minieye.tech/v1"
 OC_CONFIG = os.path.expanduser("~/.config/opencode/opencode.jsonc")
-CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 PROMPT = "从1数到30，每行一个数字，不要解释。"
 MAX_TOKENS = 1200
+EFFORTS = ["none", "low", "medium", "high", "max", "xhigh"]
+# 排除模型: 包装/路由类(Auto / codex-auto-review / gpt-reserve)、
+# 专用型(gpt-5.4-mini / gpt-5.3-codex-spark)、
+# 重复别名(deepseek-flash 与 deepseek-v4-flash-vision-exp 均路由到 deepseek-v4-flash 同一后端)
+SKIP_MODELS = {
+    "Auto",
+    "codex-auto-review",
+    "gpt-reserve",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex-spark",
+    "deepseek-flash",
+    "deepseek-v4-flash-vision-exp",
+}
 
 
 # ── 工具函数 ──────────────────────────────────────
@@ -73,37 +87,20 @@ def strip_jsonc(s):
     return "".join(out)
 
 
-def load_keys():
-    """从 opencode.jsonc 与 claude settings 读取两个 key。"""
-    keys = {}
+def load_key():
+    """从 opencode.jsonc 读取 minieye key。"""
     try:
         cfg = json.loads(strip_jsonc(open(OC_CONFIG, encoding="utf-8").read()))
-        prov = cfg.get("provider", {})
-        mk = ((prov.get("minieye") or {}).get("options") or {}).get("apiKey")
+        mk = ((cfg.get("provider", {}).get("minieye") or {}).get("options") or {}).get("apiKey")
         if mk:
-            keys["minieye"] = mk
+            return mk
     except Exception as e:
         print(f"! 读取 {OC_CONFIG} 失败: {e}", file=sys.stderr)
-    try:
-        cs = json.load(open(CLAUDE_SETTINGS, encoding="utf-8"))
-        ck = (cs.get("env") or {}).get("ANTHROPIC_AUTH_TOKEN")
-        if ck:
-            keys["claude"] = ck
-    except Exception as e:
-        print(f"! 读取 {CLAUDE_SETTINGS} 失败: {e}", file=sys.stderr)
-    if "claude" not in keys:
-        try:
-            cfg = json.loads(strip_jsonc(open(OC_CONFIG, encoding="utf-8").read()))
-            ck = ((cfg.get("provider", {}).get("minieye-claude") or {}).get("options") or {}).get("apiKey")
-            if ck:
-                keys["claude"] = ck
-        except Exception:
-            pass
-    if "minieye" not in keys:
-        m = re.search(r'"apiKey"\s*:\s*"(sk-[^"]+)"', open(OC_CONFIG, encoding="utf-8").read())
-        if m:
-            keys["minieye"] = m.group(1)
-    return keys
+    m = re.search(r'"apiKey"\s*:\s*"(sk-[^"]+)"', open(OC_CONFIG, encoding="utf-8").read())
+    if m:
+        return m.group(1)
+    print("没有找到 minieye apiKey")
+    sys.exit(2)
 
 
 def fetch_models(key):
@@ -114,7 +111,7 @@ def fetch_models(key):
     return [m.get("id") or m.get("name") for m in items if isinstance(m, dict)]
 
 
-# ── 单次探测 ──────────────────────────────────────
+# ── 单次延迟探测 ──────────────────────────────────
 
 def probe(key, model, timeout):
     payload = {"model": model, "messages": [{"role": "user", "content": PROMPT}],
@@ -188,6 +185,69 @@ def probe(key, model, timeout):
             "toks": toks, "err": err, "events": events}
 
 
+# ── 思考强度探测 ──────────────────────────────────
+
+def probe_effort(key, model, level, timeout):
+    """发一个极小请求测试 reasoning_effort=level 是否被网关接受。返回 (ok, err)。"""
+    payload = {"model": model, "messages": [{"role": "user", "content": "1+1=?"}],
+               "max_tokens": 64, "stream": False, "reasoning_effort": level}
+    req = urllib.request.Request(
+        BASE + "/chat/completions", data=json.dumps(payload).encode(),
+        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+    try:
+        r = urllib.request.urlopen(req, timeout=timeout)
+        j = json.loads(r.read().decode("utf-8", "ignore"))
+        if isinstance(j, dict) and j.get("error"):
+            return False, str(j["error"])[:120].replace("\n", " ")
+        return True, ""
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", "ignore")[:160].replace("\n", " ")
+        except Exception:
+            body = ""
+        return False, f"HTTP {e.code} {body}"
+    except Exception as e:
+        return False, type(e).__name__ + ": " + str(e)[:120]
+
+
+def probe_efforts(key, model, timeout):
+    """并发测试全部档位（失败项自动重试两轮），返回被接受的档位列表（按 EFFORTS 顺序）。"""
+    accepted = set()
+    pending = list(EFFORTS)
+    for _ in range(4):
+        if not pending:
+            break
+        got = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(pending)) as ex:
+            futs = {ex.submit(probe_effort, key, model, lv, timeout): lv for lv in pending}
+            for fut in concurrent.futures.as_completed(futs):
+                lv = futs[fut]
+                try:
+                    ok, _ = fut.result()
+                except Exception:
+                    ok = False
+                got[lv] = ok
+        for lv in list(pending):
+            if got.get(lv):
+                accepted.add(lv)
+        pending = [lv for lv in pending if not got.get(lv)]
+        if pending:
+            time.sleep(0.8)
+    return [lv for lv in EFFORTS if lv in accepted]
+
+
+def effort_str(levels):
+    if levels is None:
+        return "—"
+    if not levels:
+        return "无"
+    if len(levels) == len(EFFORTS):
+        return "全部"
+    return "/".join(levels)
+
+
+# ── 汇总与输出 ────────────────────────────────────
+
 def summarize(samples):
     ok = [s for s in samples if s["ok"]]
     n = len(samples)
@@ -207,7 +267,6 @@ def summarize(samples):
         "gap": max(gaps) if gaps else None,
         "tps": sum(tps) / len(tps) if tps else None,
     }
-    # 评级
     t = r["ttft"]
     r["v_speed"] = "—" if t is None else ("快" if t <= 1.0 else ("中" if t <= 3.0 else "慢"))
     g = r["gap"]
@@ -217,29 +276,29 @@ def summarize(samples):
     return r
 
 
-# ── 输出 ──────────────────────────────────────────
-
 def f_s(v):
     return "—" if v is None else f"{v:.2f}"
 
 
 def print_table(results):
-    rows = [(k, m, summarize(ss)) for k, m, ss in results]
+    rows = [(m, summarize(ss), ef) for m, ss, ef in results]
     if not rows:
         return
-    wm = max(dwidth(m) for _, m, _ in rows)
-    wm = max(wm, 24)
-    hdr = (pad("key", 8) + " " + pad("模型", wm) + " " + rpad("n", 3) + " "
+    wm = max(max(dwidth(m) for m, _, _ in rows), 24)
+    we = max(max(dwidth(effort_str(ef)) for _, _, ef in rows), dwidth("思考档位"))
+    hdr = (pad("模型", wm) + " " + rpad("n", 3) + " "
            + rpad("ok%", 5) + " " + rpad("TTFT(s)", 8) + " " + rpad("总耗时(s)", 9) + " "
            + rpad("~tok/s", 7) + " " + rpad("停顿(s)", 8) + "  "
+           + pad("思考档位", we) + "  "
            + pad("速度", 6) + pad("流畅", 6) + pad("可靠", 6))
     print(hdr)
     print("─" * dwidth(hdr))
-    for k, m, r in rows:
-        line = (pad(k, 8) + " " + pad(m, wm) + " " + rpad(str(r["n"]), 3) + " "
+    for m, r, ef in rows:
+        line = (pad(m, wm) + " " + rpad(str(r["n"]), 3) + " "
                 + rpad(f"{r['ok_rate']*100:.0f}%", 5) + " " + rpad(f_s(r["ttft"]), 8) + " "
                 + rpad(f_s(r["total"]), 9) + " " + rpad("—" if r["tps"] is None else f"{r['tps']:.1f}", 7) + " "
                 + rpad(f_s(r["gap"]), 8) + "  "
+                + pad(effort_str(ef), we) + "  "
                 + pad(r["v_speed"], 6) + pad(r["v_flow"], 6) + pad(r["v_rel"], 6))
         print(line)
 
@@ -248,6 +307,8 @@ def print_legend():
     print()
     print("说明: TTFT=首字延迟; 总耗时=整次请求; ~tok/s=输出速度(含思考, 近似); "
           "停顿=流式响应两段数据间最大间隔(流畅度); ok%=采样成功率(可靠性)")
+    print("思考档位: 逐档测试 reasoning_effort=none/low/medium/high/max/xhigh 的网关接受情况 "
+          "(\"全部\"=6档全通, \"无\"=全拒); 接受仅表示网关未报错, 偶发上游抖动可能导致个别档位波动, 可重跑确认")
     print("评级: 速度 快≤1s/中≤3s/慢>3s | 流畅 好≤2s/中≤6s/差>6s | 可靠 好=100%/中≥50%/差<50%")
 
 
@@ -255,73 +316,67 @@ def print_legend():
 
 def main():
     ap = argparse.ArgumentParser(
-        description="公司网关全模型探测（延迟/速度/流畅度/可靠性）",
+        description="公司网关模型探测（延迟/速度/流畅度/可靠性/思考强度）",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--n", type=int, default=2, help="每个模型采样次数（默认 2）")
     ap.add_argument("--timeout", type=float, default=60, help="单次请求超时秒数（默认 60）")
-    ap.add_argument("--key", default="all", help="只测指定 key: minieye / claude / all（默认 all）")
     ap.add_argument("--models", default="", help="模型名关键词过滤，逗号分隔，任一匹配")
-    ap.add_argument("--list", action="store_true", help="只列出各 key 可路由的模型")
+    ap.add_argument("--no-efforts", action="store_true", help="跳过思考强度探测（更快）")
+    ap.add_argument("--list", action="store_true", help="只列出将探测的模型")
     args = ap.parse_args()
 
-    keys = load_keys()
-    sel = [k for k in ("minieye", "claude") if k in keys]
-    if args.key != "all":
-        sel = [k for k in sel if k == args.key]
-    if not sel:
-        print("没有可用 key（检查 opencode.jsonc / claude settings）")
+    key = load_key()
+    try:
+        all_models = fetch_models(key)
+    except Exception as e:
+        print(f"! 获取模型列表失败: {e}")
         sys.exit(2)
 
+    skipped = [m for m in all_models if m in SKIP_MODELS]
+    models = [m for m in all_models if m not in SKIP_MODELS]
     filters = [s.strip() for s in args.models.split(",") if s.strip()]
-    plans = []
-    for k in sel:
-        try:
-            models = fetch_models(keys[k])
-        except Exception as e:
-            print(f"! [{k}] 获取模型列表失败: {e}")
-            continue
-        if filters:
-            models = [m for m in models if any(f in m for f in filters)]
-        plans.append((k, models))
+    if filters:
+        models = [m for m in models if any(f in m for f in filters)]
 
     if args.list:
-        for k, ms in plans:
-            print(f"[{k}] {len(ms)} 个模型")
-            for m in ms:
-                print("  " + m)
+        print(f"[minieye] 将探测 {len(models)} 个模型（跳过 {len(skipped)} 个）")
+        for m in models:
+            print("  " + m)
+        if skipped:
+            print("已跳过: " + ", ".join(skipped))
         return
 
-    total = sum(len(ms) for _, ms in plans)
-    print(f"mprobe — {time.strftime('%Y-%m-%d %H:%M:%S')}  "
-          f"采样 n={args.n}  超时 {args.timeout:g}s  组合 {total}")
+    print(f"mprobe — {time.strftime('%Y-%m-%d %H:%M:%S')}  采样 n={args.n}  超时 {args.timeout:g}s  "
+          f"模型 {len(models)}" + (f"（跳过 {len(skipped)} 个）" if skipped else ""))
     print()
     results = []
-    idx = 0
-    for k, models in plans:
-        for m in models:
-            idx += 1
-            samples = []
-            for _ in range(args.n):
-                samples.append(probe(keys[k], m, args.timeout))
-                time.sleep(0.3)
-            results.append((k, m, samples))
-            r = summarize(samples)
-            flag = "OK" if r["ok_rate"] >= 1.0 else ("PART" if r["ok_rate"] > 0 else "FAIL")
-            err = next((s["err"] for s in samples if s["err"]), "")
-            print(f"[{idx:>3}/{total}] {k}/{m}  ok={r['ok_rate']*100:.0f}%  "
-                  f"ttft={f_s(r['ttft'])}  停顿={f_s(r['gap'])}  {flag}  {err[:70]}", flush=True)
+    for idx, m in enumerate(models, 1):
+        samples = []
+        for _ in range(args.n):
+            samples.append(probe(key, m, args.timeout))
+            time.sleep(0.3)
+        efforts = None
+        if not args.no_efforts:
+            efforts = probe_efforts(key, m, args.timeout)
+        results.append((m, samples, efforts))
+        r = summarize(samples)
+        flag = "OK" if r["ok_rate"] >= 1.0 else ("PART" if r["ok_rate"] > 0 else "FAIL")
+        err = next((s["err"] for s in samples if s["err"]), "")
+        ef = ("  思考=" + effort_str(efforts)) if efforts is not None else ""
+        print(f"[{idx:>3}/{len(models)}] {m}  ok={r['ok_rate']*100:.0f}%  "
+              f"ttft={f_s(r['ttft'])}  停顿={f_s(r['gap'])}{ef}  {flag}  {err[:70]}", flush=True)
     print()
     print_table(results)
     print_legend()
 
-    fails = [(k, m, s["err"]) for k, m, ss in results for s in ss if not s["ok"]]
+    fails = [(m, s["err"]) for m, ss, _ in results for s in ss if not s["ok"]]
     print()
     if fails:
         print(f"异常明细（{len(fails)} 条）:")
-        for k, m, err in fails[:40]:
-            print(f"  [{k}] {m}: {err}")
+        for m, err in fails[:40]:
+            print(f"  {m}: {err}")
     else:
-        print(f"全部正常：{total} 个组合 × {args.n} 次采样无失败。")
+        print(f"全部正常：{len(models)} 个模型 × {args.n} 次采样无失败。")
 
 
 if __name__ == "__main__":
