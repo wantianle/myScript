@@ -43,16 +43,11 @@
       "models": {
         "deepseek-v4-flash": {
           "name": "deepseek-v4-flash",
-          "cost":   { "input": 0.44, "output": 1.32 },
-          "limit":  { "context": 1000000, "output": 384000 }
-        },
-        "deepseek-v4-flash-vision-exp": {
-          "name": "deepseek-v4-flash-vision-exp",
           "attachment": true,
           "modalities": { "input": ["text", "image"], "output": ["text"] },
           "tool_call": true,
           "reasoning": true,
-          "cost":   { "input": 0.44, "output": 1.32 },
+          "cost":   { "input": 0.30, "output": 1.20 },
           "limit":  { "context": 1000000, "output": 384000 }
         },
         "glm-5.3-flash": {
@@ -100,16 +95,11 @@
       "models": {
         "deepseek-v4-flash": {
           "name": "deepseek-v4-flash",
-          "cost":   { "input": 0.44, "output": 1.32 },
-          "limit":  { "context": 1000000, "output": 384000 }
-        },
-        "deepseek-v4-flash-vision-exp": {
-          "name": "deepseek-v4-flash-vision-exp",
           "attachment": true,
           "modalities": { "input": ["text", "image"], "output": ["text"] },
           "tool_call": true,
           "reasoning": true,
-          "cost":   { "input": 0.44, "output": 1.32 },
+          "cost":   { "input": 0.30, "output": 1.20 },
           "limit":  { "context": 1000000, "output": 384000 }
         },
         "glm-5.3-flash": {

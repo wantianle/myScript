@@ -32,11 +32,6 @@
         "model": "deepseek-v4-pro",
         "label": "DeepSeek V4 Pro",
         "description": "DeepSeek V4 Pro via Anthropic-compatible gateway"
-      },
-      {
-        "model": "deepseek-v4-flash-vision-exp",
-        "label": "DeepSeek V4 Flash Vision",
-        "description": "DeepSeek V4 Flash experimental vision model via Anthropic-compatible gateway"
       }
     ],
     "replaceBuiltInOptions": false

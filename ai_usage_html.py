@@ -89,8 +89,7 @@ def _parse_iso_date(date_str: str) -> str:
 # DeepSeek = 官方峰价；qwen = 中国 CNY 换算 USD；glm = 官方列表价。
 RAW_MODEL_PRICING = {
     "deepseek-v4-pro": {"input": 1.32, "output": 3.96},
-    "deepseek-v4-flash": {"input": 0.44, "output": 1.32},
-    "deepseek-v4-flash-vision-exp": {"input": 0.44, "output": 1.32},
+    "deepseek-v4-flash": {"input": 0.30, "output": 1.20},
     "glm-5.3-flash": {"input": 0.15, "output": 0.50},
     "qwen3.8-flash": {"input": 0.11, "output": 0.38},
     "gpt-5.4": {"input": 0.50, "output": 3.00},
@@ -106,9 +105,10 @@ MODEL_PRICING = {
     for name, price in RAW_MODEL_PRICING.items()
 }
 
-# 别名：gpt-5.6(裸名) 即 gpt-5.6-sol。
+# 别名：gpt-5.6(裸名) 即 gpt-5.6-sol；旧 vision-exp 名统一按 v4-flash 计价。
 MODEL_ALIAS = {
     "gpt-5.6": "gpt-5.6-sol",
+    "deepseek-v4-flash-vision-exp": "deepseek-v4-flash",
 }
 
 PLAN_FALLBACK_MODEL = {

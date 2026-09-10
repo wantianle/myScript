@@ -70,7 +70,7 @@
     "lite": {
       "designer": {
         "mcps": [],
-        "model": "minieye/deepseek-v4-flash-vision-exp",
+        "model": "minieye/deepseek-v4-flash",
         "skills": [],
         "variant": "high"
       },
@@ -112,7 +112,7 @@
           "*",
           "!context7"
         ],
-        "model": "minieye/deepseek-v4-flash-vision-exp",
+        "model": "minieye/deepseek-v4-flash",
         "skills": [
           "deepwork",
           "worktrees",
