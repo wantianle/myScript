@@ -14,7 +14,7 @@
     "pro": {
       "designer": {
         "mcps": [],
-        "model": "minieye/gpt-5.6-terra",
+        "model": "minieye/gpt-5.6-sol",
         "skills": [],
         "variant": "high"
       },
@@ -28,7 +28,7 @@
       },
       "fixer": {
         "mcps": [],
-        "model": "minieye/gpt-5.6-terra",
+        "model": "minieye/gpt-5.6-sol",
         "skills": [
           "mdrive-container",
           "simplify"
